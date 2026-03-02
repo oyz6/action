@@ -26,14 +26,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: 安装系统依赖
+      - name: 安装系统依赖和字体
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb x11-utils xdotool scrot ffmpeg
-
-      - name: 安装字体
-        run: |
-          sudo apt-get install -y fonts-nanum fonts-noto-cjk
+          sudo apt-get install -y --no-install-recommends \
+            xvfb x11-utils xdotool scrot ffmpeg \
+            fonts-nanum fonts-noto-cjk
 
       - name: 安装 Chrome
         run: |
