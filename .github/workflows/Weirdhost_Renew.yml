@@ -54,7 +54,7 @@ jobs:
           WEIRDHOST_COOKIE_5: ${{ secrets.WEIRDHOST_COOKIE_5 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          REPO_TOKEN: ${{ secrets.WEIRDHOST_REPO_TOKEN }}
+          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           RENEW_THRESHOLD_DAYS: "5"
           FREE_RENEW_THRESHOLD_DAYS: "2"
@@ -105,8 +105,8 @@ jobs:
           WEIRDHOST_COOKIE_3: ${{ secrets.WEIRDHOST_COOKIE_3 }}
           WEIRDHOST_COOKIE_4: ${{ secrets.WEIRDHOST_COOKIE_4 }}
           WEIRDHOST_COOKIE_5: ${{ secrets.WEIRDHOST_COOKIE_5 }}
-          XRAY_CONFIG: ${{ secrets.XRAY_CONFIG }}
-          PROXY_NODE: ${{ secrets.WEIRDHOST_PROXY_NODE }}
+          SUB_URL: ${{ secrets.SUB_URL }}  # 可选，不设置用默认值
+          PROXY_NODE: ${{ secrets.PROXY_NODE }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
