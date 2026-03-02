@@ -97,6 +97,13 @@ jobs:
           xray version
           echo "Xray 安装完成"
 
+      - name: 安装 Playwright 浏览器
+        if: always() && steps.check_failed.outputs.has_failed == 'true'
+        run: |
+          echo "安装 Playwright Chromium..."
+          playwright install chromium --with-deps
+          echo "Playwright 浏览器安装完成"
+
       - name: 登录失败账号
         if: always() && steps.check_failed.outputs.has_failed == 'true'
         env:
@@ -105,14 +112,15 @@ jobs:
           WEIRDHOST_COOKIE_3: ${{ secrets.WEIRDHOST_COOKIE_3 }}
           WEIRDHOST_COOKIE_4: ${{ secrets.WEIRDHOST_COOKIE_4 }}
           WEIRDHOST_COOKIE_5: ${{ secrets.WEIRDHOST_COOKIE_5 }}
-          SUB_URL: ${{ secrets.SUB_URL }}  # 可选，不设置用默认值
+          SUB_URL: ${{ secrets.SUB_URL }}
           PROXY_NODE: ${{ secrets.PROXY_NODE }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python scripts/Weirdhost/weirdhost_login.py
+          cd scripts/Weirdhost
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python weirdhost_login.py
 
       # ========== 步骤3: 重新续期 + 发送通知 ==========
       - name: 重新登录失败账号续期（完成闭环）
@@ -141,6 +149,7 @@ jobs:
           path: |
             *.png
             scripts/Weirdhost/*.png
+            scripts/Weirdhost/screenshots/*.png
             debug_screenshots/*.png
           if-no-files-found: ignore
           retention-days: 3
