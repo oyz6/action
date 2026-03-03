@@ -1,88 +1,790 @@
-name: Billing Kerit 重启帐号版
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Billing Kerit 自动重启 —— 密码登录版
+  • 变量 BILLING_KERIT_ACCOUNTS（用 ---- 分隔）
+  • 支持 reCAPTCHA 音频破解
+  • 手动触发指定 account_name 只跑单账号，留空跑全部
+"""
 
-on:
-  workflow_dispatch:
-    inputs:
-      account_name:
-        description: '指定账号邮箱（留空运行全部）'
-        required: false
-        default: ''
-        type: string
+import os, sys, re, time, html, random, tempfile, asyncio, logging
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple
+from urllib.parse import unquote
 
-concurrency:
-  group: Billing_Kerit_Restart
-  cancel-in-progress: false
+try:
+    import requests as req
+    import aiohttp
+    from playwright.async_api import async_playwright, Page, BrowserContext
+except ImportError:
+    print("[ERROR] pip install playwright aiohttp requests SpeechRecognition pydub && playwright install chromium")
+    sys.exit(1)
 
-permissions:
-  contents: read
-  actions: write
+# ==================== 配置 ====================
 
-jobs:
-  restart:
-    name: 重启服务器
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+BASE_URL = "https://panel.kerit.cloud"
+LOGIN_URL = f"{BASE_URL}/auth/login"
+OUTPUT_DIR = Path("output/screenshots")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+CN_TZ = timezone(timedelta(hours=8))
+MAX_CAPTCHA_ATTEMPTS = 5
+PROXY = "http://127.0.0.1:7890"
 
-    steps:
-      - name: 拉取私有仓库
-        uses: actions/checkout@v4
-        with:
-          repository: oyz6/scripts
-          token: ${{ secrets.REPO_TOKEN }}
-          path: .
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
 
-      - name: 配置 Python 环境
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+# ==================== 工具 ====================
 
-      - name: 安装依赖
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg > /dev/null 2>&1
-          pip install -q playwright aiohttp requests SpeechRecognition pydub
-          playwright install chromium
-          playwright install-deps
+def cn_now() -> datetime:
+    return datetime.now(CN_TZ)
 
-      - name: 配置代理
-        env:
-          HY2_URL: ${{ secrets.HY2_URL }}
-        run: |
-          wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
-          chmod +x hysteria
-          URL="${HY2_URL#hysteria2://}"
-          PASSWORD="${URL%%@*}"
-          SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
-          SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
-          cat > hy2.yaml << EOF
-          server: ${SERVER}
-          auth: ${PASSWORD}
-          tls:
-            sni: ${SNI}
-            insecure: true
-          http:
-            listen: 127.0.0.1:7890
-          EOF
-          ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
-          sleep 3
+def cn_time_str(fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    return cn_now().strftime(fmt)
 
-      - name: 执行重启脚本
-        env:
-          BILLING_KERIT_ACCOUNTS: ${{ secrets.BILLING_KERIT_ACCOUNTS }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          ACCOUNT_NAME: ${{ github.event.inputs.account_name }}
-        run: |
-          python scripts/BillingKerit/Billing-Kerit_Restart.py
+def mask(s: str, show: int = 2) -> str:
+    if not s:
+        return "***"
+    return s[:show] + "****" if len(s) > show else s[0] + "***"
 
-      - name: 清理工作流记录
-        if: always()
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          delete_workflow_pattern: ${{ github.workflow }}
-          retain_days: 0
-          keep_minimum_runs: 3
+def mask_email(email: str) -> str:
+    if "@" not in str(email):
+        return mask(email)
+    local, domain = email.split("@", 1)
+    return f"{mask(local)}@{mask(domain)}"
+
+def shot_path(tag: str = "") -> str:
+    ts = cn_now().strftime("%H%M%S%f")[:9]
+    return str(OUTPUT_DIR / f"{ts}{'_' + tag if tag else ''}.png")
+
+# ==================== 账号解析 ====================
+
+def parse_accounts() -> List[Dict[str, str]]:
+    """
+    BILLING_KERIT_ACCOUNTS=email1----pass1----email2----pass2
+    → [{"email": "email1", "password": "pass1"}, ...]
+    """
+    raw = os.environ.get("BILLING_KERIT_ACCOUNTS", "").strip()
+    if not raw:
+        return []
+    parts = [p.strip() for p in raw.split("----") if p.strip()]
+    if len(parts) < 2 or len(parts) % 2 != 0:
+        logger.error("BILLING_KERIT_ACCOUNTS 格式错误，需成对 email----password")
+        return []
+    accounts = []
+    for i in range(0, len(parts), 2):
+        accounts.append({"email": parts[i], "password": parts[i + 1]})
+    return accounts
+
+# ==================== Telegram ====================
+
+class TelegramNotifier:
+    def __init__(self, token: Optional[str], chat_id: Optional[str]):
+        self.token, self.chat_id = token, chat_id
+        self.api = f"https://api.telegram.org/bot{token}" if token else None
+
+    async def send(self, ok: bool, title: str, details: str = "", image_path: str = None):
+        if not self.api or not self.chat_id:
+            return
+        icon = "✅" if ok else "❌"
+        text = f"{icon} {title}\n\n{details}\n时间：{cn_time_str()}\n\nBilling Kerit Auto Restart"
+        try:
+            async with aiohttp.ClientSession() as s:
+                if image_path and Path(image_path).exists():
+                    data = aiohttp.FormData()
+                    data.add_field("chat_id", self.chat_id)
+                    data.add_field("caption", text[:1024])
+                    data.add_field("photo", open(image_path, "rb"), filename="screenshot.png")
+                    await s.post(f"{self.api}/sendPhoto", data=data)
+                else:
+                    await s.post(f"{self.api}/sendMessage", json={"chat_id": self.chat_id, "text": text})
+        except Exception:
+            logger.warning("Telegram 通知发送失败")
+
+# ==================== reCAPTCHA 音频破解 (Playwright 异步版) ====================
+
+class RecaptchaSolver:
+    """Playwright 异步版 reCAPTCHA 音频验证码破解器"""
+
+    def __init__(self, page: Page, proxy_for_download: str = None):
+        self.page = page
+        self.proxy_for_download = proxy_for_download
+
+    # ---------- iframe 定位 ----------
+
+    async def _find_anchor_frame(self):
+        """查找 anchor iframe（复选框）"""
+        for f in self.page.frames:
+            if "recaptcha" in (f.url or "") and "anchor" in (f.url or ""):
+                return f
+        return None
+
+    async def _find_bframe(self):
+        """查找 bframe iframe（验证挑战）"""
+        for f in self.page.frames:
+            if "recaptcha" in (f.url or "") and "bframe" in (f.url or ""):
+                return f
+        return None
+
+    # ---------- 状态检测 ----------
+
+    async def has_recaptcha(self) -> bool:
+        for f in self.page.frames:
+            if "recaptcha" in (f.url or ""):
+                return True
+        for sel in [".g-recaptcha", "[data-sitekey]", "#recaptcha"]:
+            if await self.page.query_selector(sel):
+                return True
+        return False
+
+    async def _is_loaded(self) -> bool:
+        return (await self._find_anchor_frame()) is not None
+
+    async def wait_for_load(self, timeout: int = 15) -> bool:
+        logger.info("等待 reCAPTCHA 加载...")
+        for _ in range(timeout):
+            if await self._is_loaded():
+                logger.info("✅ reCAPTCHA 已加载")
+                return True
+            await asyncio.sleep(1)
+        logger.warning("reCAPTCHA 加载超时")
+        return False
+
+    async def _check_blocked(self) -> bool:
+        bf = await self._find_bframe()
+        if not bf:
+            return False
+        try:
+            el = await bf.query_selector(".rc-doscaptcha-header-text")
+            if el and await el.is_visible():
+                txt = (await el.text_content() or "").lower()
+                if "try again later" in txt:
+                    return True
+            err = await bf.query_selector(".rc-audiochallenge-error-message")
+            if err and await err.is_visible():
+                return True
+        except Exception:
+            pass
+        return False
+
+    async def _is_audio_mode(self) -> bool:
+        bf = await self._find_bframe()
+        if not bf:
+            return False
+        el = await bf.query_selector("#audio-response")
+        return el is not None and await el.is_visible()
+
+    # ---------- 操作 ----------
+
+    async def _click_checkbox(self) -> bool:
+        af = await self._find_anchor_frame()
+        if not af:
+            return False
+        try:
+            await af.click(".recaptcha-checkbox-border", timeout=5000)
+            logger.info("✅ 已点击复选框")
+            return True
+        except Exception:
+            try:
+                await af.click("#recaptcha-anchor", timeout=3000)
+                return True
+            except Exception:
+                return False
+
+    async def _switch_to_audio(self) -> bool:
+        await asyncio.sleep(2)
+        bf = await self._find_bframe()
+        if not bf:
+            return False
+        try:
+            btn = await bf.query_selector("#recaptcha-audio-button")
+            if btn and await btn.is_visible():
+                await btn.click()
+                logger.info("✅ 已切换到音频模式")
+                return True
+        except Exception:
+            pass
+        return False
+
+    async def _get_audio_url(self) -> Optional[str]:
+        bf = await self._find_bframe()
+        if not bf:
+            return None
+        url = None
+        try:
+            link = await bf.query_selector(".rc-audiochallenge-tdownload-link")
+            if link:
+                url = await link.get_attribute("href")
+            if not url:
+                audio = await bf.query_selector("#audio-source")
+                if audio:
+                    url = await audio.get_attribute("src")
+        except Exception:
+            pass
+        return html.unescape(url) if url else None
+
+    def _download_audio(self, url: str) -> Optional[str]:
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+                "Referer": "https://www.google.com/",
+            }
+            proxies = (
+                {"http": self.proxy_for_download, "https": self.proxy_for_download}
+                if self.proxy_for_download
+                else None
+            )
+            r = req.get(url, headers=headers, timeout=30, proxies=proxies)
+            r.raise_for_status()
+            logger.info(f"📥 下载音频: {len(r.content)} bytes")
+            path = tempfile.mktemp(suffix=".mp3")
+            with open(path, "wb") as f:
+                f.write(r.content)
+            return path
+        except Exception as e:
+            logger.error(f"下载音频失败: {e}")
+            return None
+
+    @staticmethod
+    def _recognize(mp3_path: str) -> Optional[str]:
+        try:
+            import speech_recognition as sr
+            from pydub import AudioSegment
+
+            wav = mp3_path.replace(".mp3", ".wav")
+            AudioSegment.from_mp3(mp3_path).export(wav, format="wav")
+            recognizer = sr.Recognizer()
+            with sr.AudioFile(wav) as src:
+                audio = recognizer.record(src)
+                text = recognizer.recognize_google(audio)
+            try:
+                os.remove(wav)
+            except OSError:
+                pass
+            return text
+        except Exception as e:
+            logger.error(f"音频识别失败: {e}")
+            return None
+
+    async def _fill_and_verify(self, text: str) -> bool:
+        bf = await self._find_bframe()
+        if not bf:
+            return False
+        try:
+            inp = await bf.query_selector("#audio-response")
+            if inp:
+                await inp.fill(text)
+                logger.info("✅ 已填写答案")
+        except Exception:
+            return False
+        await asyncio.sleep(random.uniform(0.5, 1))
+        try:
+            btn = await bf.query_selector("#recaptcha-verify-button")
+            if btn:
+                await btn.click()
+                logger.info("✅ 已点击验证")
+                return True
+        except Exception:
+            pass
+        return False
+
+    async def _reload(self):
+        bf = await self._find_bframe()
+        if not bf:
+            return
+        try:
+            btn = await bf.query_selector("#recaptcha-reload-button")
+            if btn:
+                await btn.click()
+                logger.info("🔄 重新加载验证码")
+        except Exception:
+            pass
+
+    # ---------- 主流程 ----------
+
+    async def solve(self) -> bool:
+        logger.info("🎧 启动 reCAPTCHA 音频破解...")
+
+        if not await self.wait_for_load(timeout=15):
+            logger.error("reCAPTCHA 未加载")
+            return False
+
+        for attempt in range(MAX_CAPTCHA_ATTEMPTS):
+            logger.info(f"--- 验证码尝试 {attempt + 1}/{MAX_CAPTCHA_ATTEMPTS} ---")
+
+            # 是否已跳转
+            if "/auth/login" not in self.page.url:
+                logger.info("✅ 验证已通过（URL 已跳转）")
+                return True
+
+            try:
+                await self.page.screenshot(path=shot_path(f"captcha_{attempt}"))
+            except Exception:
+                pass
+
+            if await self._check_blocked():
+                logger.error("⛔ IP 被封锁")
+                return False
+
+            # 首次点击复选框
+            if attempt == 0:
+                if not await self._click_checkbox():
+                    await asyncio.sleep(2)
+                    continue
+                await asyncio.sleep(3)
+                if "/auth/login" not in self.page.url:
+                    logger.info("✅ 直接通过!")
+                    return True
+
+            # 切换音频
+            if not await self._is_audio_mode():
+                if not await self._switch_to_audio():
+                    await asyncio.sleep(2)
+                    await self._click_checkbox()
+                    await asyncio.sleep(3)
+                    continue
+                await asyncio.sleep(random.uniform(2, 4))
+
+            if await self._check_blocked():
+                logger.error("⛔ 被封锁")
+                return False
+
+            audio_url = await self._get_audio_url()
+            if not audio_url:
+                await self._reload()
+                await asyncio.sleep(3)
+                continue
+
+            mp3 = self._download_audio(audio_url)
+            if not mp3:
+                await self._reload()
+                await asyncio.sleep(3)
+                continue
+
+            text = self._recognize(mp3)
+            try:
+                os.remove(mp3)
+            except OSError:
+                pass
+
+            if not text:
+                await self._reload()
+                await asyncio.sleep(3)
+                continue
+
+            logger.info(f"🗣️ 识别结果: [{text}]")
+
+            await self._fill_and_verify(text)
+            await asyncio.sleep(5)
+
+            if "/auth/login" not in self.page.url:
+                logger.info("✅ 验证通过!")
+                return True
+
+            logger.info("验证未通过，重试...")
+            await self._reload()
+            await asyncio.sleep(2)
+
+        logger.error("❌ 达到最大尝试次数")
+        return False
+
+# ==================== 登录 ====================
+
+async def login(page: Page, email: str, password: str) -> bool:
+    """
+    密码登录 panel.kerit.cloud，自动处理 reCAPTCHA。
+    """
+    logger.info(f"访问登录页: {LOGIN_URL}")
+    await page.goto(LOGIN_URL, wait_until="networkidle", timeout=30000)
+    await page.wait_for_timeout(2000)
+
+    # 如果已经登录了就跳过
+    if "/auth/login" not in page.url:
+        logger.info("已处于登录状态")
+        return True
+
+    # 填写用户名
+    username_input = await page.query_selector('input[name="username"]')
+    if not username_input:
+        logger.error("未找到用户名输入框")
+        return False
+    await username_input.fill(email)
+    logger.info(f"✅ 已填写用户名: {mask_email(email)}")
+
+    # 填写密码
+    password_input = await page.query_selector('input[name="password"]')
+    if not password_input:
+        logger.error("未找到密码输入框")
+        return False
+    await password_input.fill(password)
+    logger.info("✅ 已填写密码")
+
+    await page.wait_for_timeout(500)
+
+    # 点击登录
+    login_clicked = False
+    # 方式1: 找 Login 按钮
+    login_btn = await page.query_selector('button[type="submit"]')
+    if login_btn:
+        await login_btn.click()
+        login_clicked = True
+        logger.info("✅ 已点击 Login 按钮")
+    else:
+        # 方式2: 找 span 文字
+        spans = await page.query_selector_all("span")
+        for span in spans:
+            txt = (await span.text_content() or "").strip()
+            if txt.lower() == "login":
+                await span.click()
+                login_clicked = True
+                logger.info("✅ 已点击 Login (span)")
+                break
+
+    if not login_clicked:
+        logger.error("未找到登录按钮")
+        return False
+
+    await page.wait_for_timeout(3000)
+
+    # 检查是否触发 reCAPTCHA
+    solver = RecaptchaSolver(page, proxy_for_download=PROXY)
+    if await solver.has_recaptcha():
+        logger.info("🔒 检测到 reCAPTCHA，开始破解...")
+        if not await solver.solve():
+            logger.error("reCAPTCHA 破解失败")
+            return False
+        await page.wait_for_timeout(3000)
+
+    # 登录结果检查
+    for _ in range(10):
+        if "/auth/login" not in page.url:
+            logger.info("✅ 登录成功!")
+            return True
+        await page.wait_for_timeout(1000)
+
+    # 检查错误提示
+    try:
+        err = await page.query_selector(".input-help.error")
+        if err and await err.is_visible():
+            err_text = await err.text_content()
+            logger.error(f"登录失败: {err_text}")
+    except Exception:
+        pass
+
+    logger.error("登录超时")
+    return False
+
+# ==================== Kerit API ====================
+
+class KeritAPI:
+    """通过浏览器 Cookie 调用 Pterodactyl API"""
+
+    def __init__(self, context: BrowserContext):
+        self.context = context
+
+    async def _get_headers(self) -> Dict[str, str]:
+        cookies = await self.context.cookies()
+        cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in cookies if "kerit" in c.get("domain", ""))
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": BASE_URL,
+            "Origin": BASE_URL,
+            "Cookie": cookie_str,
+        }
+        for c in cookies:
+            if c["name"] == "XSRF-TOKEN":
+                headers["X-XSRF-TOKEN"] = unquote(c["value"])
+                break
+        return headers
+
+    async def get_servers(self) -> List[Dict[str, str]]:
+        """获取所有服务器列表"""
+        servers = []
+        try:
+            headers = await self._get_headers()
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{BASE_URL}/api/client", headers=headers) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        for item in data.get("data", []):
+                            attrs = item.get("attributes", {})
+                            servers.append({
+                                "id": attrs.get("identifier", ""),
+                                "name": attrs.get("name", "Unknown"),
+                            })
+        except Exception as e:
+            logger.warning(f"API 获取服务器列表失败: {e}")
+        return servers
+
+    async def get_status(self, server_id: str) -> Dict[str, Any]:
+        result = {"state": "unknown", "is_suspended": False}
+        try:
+            headers = await self._get_headers()
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{BASE_URL}/api/client/servers/{server_id}/resources", headers=headers) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        attrs = data.get("attributes", {})
+                        result["state"] = attrs.get("current_state", "unknown")
+                        result["is_suspended"] = attrs.get("is_suspended", False)
+        except Exception:
+            pass
+        return result
+
+    async def power_action(self, server_id: str, action: str) -> bool:
+        try:
+            headers = await self._get_headers()
+            headers["Content-Type"] = "application/json"
+            async with aiohttp.ClientSession() as s:
+                async with s.post(
+                    f"{BASE_URL}/api/client/servers/{server_id}/power",
+                    headers=headers,
+                    json={"signal": action},
+                ) as r:
+                    return r.status in [200, 204]
+        except Exception:
+            return False
+
+# ==================== 服务器处理 ====================
+
+async def process_server(page: Page, api: KeritAPI, server: Dict[str, str], idx: int) -> Dict[str, Any]:
+    sid, name = server["id"], server["name"]
+    result = {"id": sid, "name": name, "success": False, "message": "", "action": "none"}
+
+    logger.info(f"服务器 #{idx + 1}: {name} ({mask(sid)})")
+
+    status = await api.get_status(sid)
+    state = status["state"]
+    logger.info(f"  状态: {state}")
+
+    if status["is_suspended"]:
+        result["message"] = "⚠️ 已暂停"
+        return result
+
+    if state != "offline":
+        result["success"] = True
+        result["message"] = f"正常 ({state})"
+        result["action"] = "skip"
+        logger.info("  ✅ 无需操作")
+        return result
+
+    logger.info("  服务器离线，启动中...")
+    result["action"] = "start"
+
+    try:
+        await page.goto(f"{BASE_URL}/server/{sid}", wait_until="networkidle", timeout=30000)
+        await page.wait_for_timeout(2000)
+
+        # 点击 Start 按钮
+        clicked = False
+        for selector in ["#power-start", "button:has-text('Start')", "[data-action='start']"]:
+            try:
+                btn = await page.query_selector(selector)
+                if btn:
+                    await btn.click()
+                    clicked = True
+                    logger.info("  ✅ 点击 Start 成功")
+                    break
+            except Exception:
+                continue
+
+        if not clicked:
+            clicked = await page.evaluate(
+                """() => {
+                const btn = document.getElementById('power-start') ||
+                           [...document.querySelectorAll('button')].find(b => b.textContent.toLowerCase().includes('start'));
+                if (btn) { btn.click(); return true; }
+                return false;
+            }"""
+            )
+            if clicked:
+                logger.info("  ✅ JS 点击成功")
+
+        if not clicked:
+            if await api.power_action(sid, "start"):
+                clicked = True
+                logger.info("  ✅ API 启动命令已发送")
+
+        if clicked:
+            for i in range(6):
+                await asyncio.sleep(5)
+                new_state = (await api.get_status(sid))["state"]
+                logger.info(f"  ({(i + 1) * 5}s) 状态: {new_state}")
+                if new_state == "running":
+                    result["success"] = True
+                    result["message"] = "✅ 启动成功"
+                    return result
+                if new_state == "starting":
+                    result["success"] = True
+                    result["message"] = "启动中..."
+                    return result
+            result["message"] = f"启动超时 ({new_state})"
+        else:
+            result["message"] = "⚠️ 未找到启动按钮"
+    except Exception:
+        result["message"] = "⚠️ 操作异常"
+
+    return result
+
+# ==================== 处理单个账号 ====================
+
+async def process_account(account: Dict[str, str], idx: int) -> Dict[str, Any]:
+    email, password = account["email"], account["password"]
+    masked = mask_email(email)
+
+    result = {
+        "account": email,
+        "masked": masked,
+        "success": False,
+        "message": "",
+        "servers": [],
+        "screenshot": None,
+    }
+
+    logger.info(f"\n{'=' * 50}")
+    logger.info(f"账号 #{idx + 1}: {masked}")
+    logger.info(f"{'=' * 50}")
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox"],
+        )
+        context = await browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+        page = await context.new_page()
+
+        try:
+            # ---- 登录 ----
+            if not await login(page, email, password):
+                result["message"] = "登录失败"
+                result["screenshot"] = shot_path("login_fail")
+                await page.screenshot(path=result["screenshot"], full_page=True)
+                return result
+
+            await page.wait_for_timeout(2000)
+            result["screenshot"] = shot_path("after_login")
+            await page.screenshot(path=result["screenshot"], full_page=True)
+
+            # ---- 获取服务器 ----
+            api = KeritAPI(context)
+            servers = await api.get_servers()
+
+            # 备选：从页面 HTML 提取
+            if not servers:
+                content = await page.content()
+                for sid in set(re.findall(r'href="/server/([a-zA-Z0-9]+)"', content)):
+                    servers.append({"id": sid, "name": f"Server-{sid[:6]}"})
+
+            logger.info(f"找到 {len(servers)} 个服务器")
+            for s in servers:
+                logger.info(f"  - {s['name']} ({mask(s['id'])})")
+
+            if not servers:
+                result["message"] = "未找到服务器"
+                return result
+
+            # ---- 处理每个服务器 ----
+            for i, srv in enumerate(servers):
+                srv_result = await process_server(page, api, srv, i)
+                result["servers"].append(srv_result)
+                await asyncio.sleep(1)
+
+            result["screenshot"] = shot_path("final")
+            await page.screenshot(path=result["screenshot"], full_page=True)
+
+            ok_count = sum(1 for s in result["servers"] if s["success"])
+            result["success"] = ok_count > 0 or all(s["action"] == "skip" for s in result["servers"])
+            result["message"] = f"{ok_count}/{len(result['servers'])} 正常"
+
+        except Exception as e:
+            logger.error(f"处理异常: {e}")
+            result["message"] = "处理异常"
+            try:
+                result["screenshot"] = shot_path("error")
+                await page.screenshot(path=result["screenshot"], full_page=True)
+            except Exception:
+                pass
+        finally:
+            await browser.close()
+
+    return result
+
+# ==================== 主函数 ====================
+
+async def main():
+    logger.info(f"\n{'=' * 60}")
+    logger.info(f"  Billing Kerit 自动重启（密码登录版）")
+    logger.info(f"  {cn_time_str()}")
+    logger.info(f"{'=' * 60}")
+
+    accounts = parse_accounts()
+    if not accounts:
+        logger.error("无有效账号（需设置 BILLING_KERIT_ACCOUNTS 环境变量）")
+        sys.exit(1)
+
+    # 筛选指定账号
+    target = os.environ.get("ACCOUNT_NAME", "").strip()
+    if target:
+        accounts = [a for a in accounts if a["email"] == target]
+        if not accounts:
+            logger.error(f"未找到指定账号: {target}")
+            sys.exit(1)
+
+    logger.info(f"将处理 {len(accounts)} 个账号")
+
+    tg = TelegramNotifier(os.environ.get("TG_BOT_TOKEN"), os.environ.get("TG_CHAT_ID"))
+
+    results = []
+    for i, acc in enumerate(accounts):
+        try:
+            results.append(await process_account(acc, i))
+        except Exception as e:
+            logger.error(f"账号处理异常: {e}")
+            results.append(
+                {
+                    "account": acc["email"],
+                    "masked": mask_email(acc["email"]),
+                    "success": False,
+                    "message": "处理异常",
+                    "servers": [],
+                    "screenshot": None,
+                }
+            )
+        await asyncio.sleep(2)
+
+    # ---- 汇总 ----
+    logger.info(f"\n{'=' * 60}")
+    logger.info("  执行汇总")
+    logger.info(f"{'=' * 60}")
+
+    tg_lines, total_ok, total_srv, last_shot = [], 0, 0, None
+
+    for r in results:
+        icon = "✅" if r["success"] else "❌"
+        logger.info(f"{icon} {r['masked']}: {r['message']}")
+        tg_lines.append(f"{icon} {r['masked']}: {r['message']}")
+
+        if r.get("screenshot"):
+            last_shot = r["screenshot"]
+
+        for s in r.get("servers", []):
+            srv_icon = "✓" if s["success"] else "✗"
+            logger.info(f"  {srv_icon} {s['name']}: {s['message']}")
+            tg_lines.append(f"  {srv_icon} {s['name']}: {s['message']}")
+            total_srv += 1
+            total_ok += int(s["success"])
+
+    all_ok = all(r["success"] for r in results)
+    await tg.send(all_ok, "执行完成" if all_ok else "部分失败", "\n".join(tg_lines), last_shot)
+
+    logger.info(f"\n📊 服务器: {total_ok}/{total_srv} 正常")
+    sys.exit(0 if all_ok else 1)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
