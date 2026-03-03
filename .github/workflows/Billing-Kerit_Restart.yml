@@ -44,7 +44,7 @@ jobs:
 
       - name: 配置代理
         env:
-          HY2_URL: ${{ secrets.HY2_URL_JP }}
+          HY2_URL: ${{ secrets.HY2_URL }}
         run: |
           wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
