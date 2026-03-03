@@ -36,16 +36,35 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 安装系统依赖
+      - name: 安装依赖
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg > /dev/null 2>&1
-
-      - name: 安装 Python 依赖
-        run: |
-          pip install --upgrade pip
-          pip install playwright aiohttp pynacl requests SpeechRecognition pydub
+          pip install -q playwright aiohttp requests SpeechRecognition pydub
           playwright install chromium
+          playwright install-deps
+
+      - name: 配置代理
+        env:
+          HY2_URL: ${{ secrets.HY2_URL }}
+        run: |
+          wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
+          chmod +x hysteria
+          URL="${HY2_URL#hysteria2://}"
+          PASSWORD="${URL%%@*}"
+          SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
+          SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
+          cat > hy2.yaml << EOF
+          server: ${SERVER}
+          auth: ${PASSWORD}
+          tls:
+            sni: ${SNI}
+            insecure: true
+          http:
+            listen: 127.0.0.1:7890
+          EOF
+          ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
+          sleep 3
 
       - name: 执行重启脚本
         env:
@@ -56,7 +75,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           ACCOUNT_NAME: ${{ github.event.inputs.account_name }}
         run: |
-          python scripts/BillingKerit/BillingKerit_Restart.py
+          python scripts/BillingKerit/Billing-Kerit_Restart.py
 
       - name: 清理工作流记录
         if: always()
