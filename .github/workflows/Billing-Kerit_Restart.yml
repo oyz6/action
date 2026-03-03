@@ -1,8 +1,8 @@
 name: Billing Kerit 自动重启密码登录版
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'
+#  schedule:
+#    - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
       account_name:
