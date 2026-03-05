@@ -1,8 +1,8 @@
 name: Pella Free 指定账号执行
 
 on:
-  schedule:
-    - cron: '45 3 * * *'  # 每天北京时间 11:45 运行
+#  schedule:
+#    - cron: '45 3 * * *'  # 每天北京时间 11:45 运行
   workflow_dispatch:
     inputs:
       account_name:
