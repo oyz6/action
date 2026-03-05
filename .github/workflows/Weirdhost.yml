@@ -1,4 +1,4 @@
-name: Weirdhost test
+name: Weirdhost 密码登录版
 
 on:
   schedule:
