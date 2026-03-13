@@ -32,11 +32,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             xvfb xdotool x11-utils fluxbox unzip \
-            fonts-liberation libappindicator3-1 libasound2 \
+            fonts-liberation libappindicator3-1 \
             libatk-bridge2.0-0 libatk1.0-0 libcups2 \
             libdbus-1-3 libgdk-pixbuf2.0-0 libnspr4 \
             libnss3 libx11-xcb1 libxcomposite1 \
-            libxdamage1 libxrandr2 xauth
+            libxdamage1 libxrandr2 xauth \
+            libasound2t64 2>/dev/null \
+            || sudo apt-get install -y libasound2 2>/dev/null \
+            || true
       
       - name: 安装 Python 依赖
         run: |
