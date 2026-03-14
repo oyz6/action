@@ -1,0 +1,55 @@
+name: Koyeb 登录保活
+
+on:
+  schedule:
+    - cron: '0 4 * * 5'   # 北京时间每周五中午12:00（UTC 时间 04:00）
+  workflow_dispatch:
+
+jobs:
+  login_to_koyeb:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v2
+        with:
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+
+      - name: 安装依赖
+        run: |
+          npm init -y
+          npm install playwright axios form-data playwright-extra puppeteer-extra-plugin-stealth
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: 执行保活
+        env:
+          KOYEB_1: ${{ secrets.KOYEB_1 }}
+          KOYEB_2: ${{ secrets.KOYEB_2 }}
+          KOYEB_3: ${{ secrets.KOYEB_3 }}
+          KOYEB_4: ${{ secrets.KOYEB_4 }}
+          KOYEB_5: ${{ secrets.KOYEB_5 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          node scripts/Koyeb/Koyeb_alive.js
+
+      - name: 清理旧运行
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
