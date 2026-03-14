@@ -36,9 +36,8 @@ jobs:
       - name: 安装 Python dependencies
         run: |
           pip install --upgrade pip
-          pip install seleniumbase pyvirtualdisplay requests
+          pip install seleniumbase pyvirtualdisplay requests pyautogui
           seleniumbase install chromedriver
-          echo "ChromeDriver installed"
 
       - name: 执行保活
         env:
