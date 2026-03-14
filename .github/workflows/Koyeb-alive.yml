@@ -1,4 +1,3 @@
-# Koyeb_alive.yml
 name: Koyeb 登录保活
 
 on:
@@ -7,32 +6,39 @@ on:
   workflow_dispatch:
 
 jobs:
-  login_to_koyeb:
+  keep-alive:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
+    timeout-minutes: 15
 
     steps:
       - name: 拉取私有仓库
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: oyz6/scripts
           token: ${{ secrets.REPO_TOKEN }}
           path: .
 
-      - name: 设置 Node.js
-        uses: actions/setup-node@v2
+      - name: 设置 Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '18'
+          python-version: '3.11'
 
       - name: 安装依赖
         run: |
-          npm init -y
-          npm install playwright axios form-data playwright-extra puppeteer-extra-plugin-stealth
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          # 安装 Chrome
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo dpkg -i google-chrome.deb || sudo apt-get -f install -y -qq
+          rm -f google-chrome.deb
+          echo "Chrome: $(google-chrome --version)"
 
-      - name: 安装 Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: 安装 Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install seleniumbase pyvirtualdisplay requests
+          seleniumbase install chromedriver
+          echo "ChromeDriver installed"
 
       - name: 执行保活
         env:
@@ -43,8 +49,20 @@ jobs:
           KOYEB_5: ${{ secrets.KOYEB_5 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          DISPLAY: ':99'
         run: |
-          node scripts/Koyeb/Koyeb_alive.js
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 2
+          python scripts/Koyeb/Koyeb_alive.py
+
+      - name: 上传截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: koyeb-screenshots
+          path: scripts/Koyeb/screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: 清理旧运行
         uses: Mattraks/delete-workflow-runs@v2
