@@ -1,3 +1,4 @@
+# Koyeb_alive.yml
 name: Koyeb 登录保活
 
 on:
@@ -40,8 +41,8 @@ jobs:
           KOYEB_3: ${{ secrets.KOYEB_3 }}
           KOYEB_4: ${{ secrets.KOYEB_4 }}
           KOYEB_5: ${{ secrets.KOYEB_5 }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           node scripts/Koyeb/Koyeb_alive.js
 
