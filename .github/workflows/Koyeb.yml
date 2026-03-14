@@ -1,0 +1,143 @@
+name: Koyeb 保活
+
+on:
+  schedule:
+    - cron: '30 0 */6 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 执行保活
+        shell: bash
+        env:
+          TOKENS_LIST: ${{ secrets.KOYEB_TOKENS }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          # ==========================================
+          # 0. 检查 TOKENS_LIST 是否为空
+          # ==========================================
+          if [ -z "$TOKENS_LIST" ]; then
+            echo "❌ 错误: KOYEB_TOKENS 为空，请检查 Secrets 配置"
+            exit 1
+          fi
+
+          # ==========================================
+          # 1. 安装 Koyeb CLI
+          # ==========================================
+          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/koyeb/koyeb-cli/releases/latest | \
+            jq -r '.assets[] | select(.name | contains("linux_amd64")) | select(.name | contains("tar.gz")) | .browser_download_url' | head -n 1)
+
+          if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" == "null" ]; then
+            echo "❌ 无法获取下载链接"
+            exit 1
+          fi
+
+          mkdir -p $HOME/.koyeb/bin
+          wget -q -O koyeb.tar.gz "$DOWNLOAD_URL"
+          tar -xzf koyeb.tar.gz
+          # 查找解压后的 koyeb 二进制文件（兼容不同目录结构）
+          find . -type f -name "koyeb" -exec mv {} $HOME/.koyeb/bin/koyeb \;
+          chmod +x $HOME/.koyeb/bin/koyeb
+          KOYEB_BIN="$HOME/.koyeb/bin/koyeb"
+          echo "✅ CLI 版本: $("$KOYEB_BIN" version)"
+
+          # ==========================================
+          # 2. 检查 TG 配置
+          # ==========================================
+          TG_ENABLE="false"
+          if [[ -n "$TG_BOT_TOKEN" && -n "$TG_CHAT_ID" ]]; then
+            TG_ENABLE="true"
+          fi
+
+          # ==========================================
+          # 3. 签名
+          # ==========================================
+          SIGN="─── Koyeb Keep Alive ───"
+
+          # ==========================================
+          # 4. 逐个保活并发送通知
+          # ==========================================
+          ACCOUNT_INDEX=0
+
+          while IFS= read -r token || [ -n "$token" ]; do
+            if [ -z "$token" ]; then continue; fi
+
+            # 更安全的 Token 清洗：删除所有空白字符（Token 不应包含空格）
+            token="$(echo "$token" | tr -d '[:space:]')"
+            export KOYEB_TOKEN="$token"
+
+            ACCOUNT_INDEX=$((ACCOUNT_INDEX + 1))
+            DATE=$(TZ='Asia/Shanghai' date "+%Y-%m-%d %H:%M:%S")
+
+            echo "----------------------------------------"
+            echo "正在连接账号 #${ACCOUNT_INDEX}..."
+
+            set +e
+            OUTPUT=$("$KOYEB_BIN" organizations list --output json 2>&1)
+            EXIT_CODE=$?
+            set -e
+
+            if [ $EXIT_CODE -eq 0 ]; then
+              # 增强 JSON 解析容错，出错时默认为 "Unknown"
+              ORG_NAME=$(echo "$OUTPUT" | jq -r '[.. | objects | select(has("plan")) | .name] | first // "Unknown"' 2>/dev/null || echo "Unknown")
+              ORG_STATUS_RAW=$(echo "$OUTPUT" | jq -r '[.. | objects | select(has("plan")) | .status] | first // "Unknown"' 2>/dev/null || echo "Unknown")
+              EMAIL=$(echo "$OUTPUT" | jq -r '[.. | objects | select(has("email")) | .email] | first // "Unknown"' 2>/dev/null || echo "Unknown")
+
+              case "$ORG_STATUS_RAW" in
+                ACTIVE)    STATUS_CN="活跃" ;;
+                SUSPENDED) STATUS_CN="已暂停" ;;
+                DELETED)   STATUS_CN="已删除" ;;
+                *)         STATUS_CN="$ORG_STATUS_RAW" ;;
+              esac
+
+              LOCAL="${EMAIL%%@*}"
+              DOMAIN="${EMAIL##*@}"
+              MASKED="${LOCAL:0:3}***@${DOMAIN:0:2}***"
+              echo "✅ #${ACCOUNT_INDEX} | ${MASKED} | ${ORG_NAME} | ${STATUS_CN}"
+
+              MSG=$(printf '%s\n\n%s\n%s\n%s\n%s\n\n%s' \
+                "✅ 保活成功" \
+                "账号：${EMAIL}" \
+                "组织：${ORG_NAME}" \
+                "状态：${STATUS_CN}" \
+                "时间：${DATE}" \
+                "$SIGN")
+            else
+              echo "❌ #${ACCOUNT_INDEX} | 失败"
+
+              MSG=$(printf '%s\n\n%s\n%s\n%s\n\n%s' \
+                "❌ 保活失败" \
+                "账号：#${ACCOUNT_INDEX}" \
+                "原因：Token 无效或已过期" \
+                "时间：${DATE}" \
+                "$SIGN")
+            fi
+
+            if [ "$TG_ENABLE" == "true" ]; then
+              curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
+                -d chat_id="$TG_CHAT_ID" \
+                --data-urlencode "text=$MSG" > /dev/null 2>&1
+              echo "📨 TG 通知已发送"
+            fi
+
+            unset KOYEB_TOKEN
+            sleep 2
+          done <<< "$TOKENS_LIST"
+
+      - name: 清理工作流记录
+        if: always()
+        # 建议固定到具体版本，例如 v2.0.0，避免未来更新导致意外
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
