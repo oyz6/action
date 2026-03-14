@@ -1,3 +1,4 @@
+# KOYEB_TOKENS格式：每行包含一个 Koyeb API Token
 name: Koyeb 登录保活
 
 on:
