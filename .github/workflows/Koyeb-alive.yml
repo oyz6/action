@@ -31,7 +31,7 @@ jobs:
           npm init -y
           npm install playwright axios form-data playwright-extra puppeteer-extra-plugin-stealth
 
-      - name: Install Playwright Chromium
+      - name: 安装 Playwright Chromium
         run: npx playwright install --with-deps chromium
 
       - name: 执行保活
