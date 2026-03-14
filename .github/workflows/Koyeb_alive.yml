@@ -1,6 +1,6 @@
 # KOYEB_TOKENS格式：每行包含一个 Koyeb API Token
 # 个人访问令牌地址：https://app.koyeb.com/user/settings/api
-name: Koyeb 登录保活
+name: Koyeb 登录API保活
 
 on:
   schedule:
