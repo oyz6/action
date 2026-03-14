@@ -4,7 +4,7 @@ name: Koyeb 登录保活
 
 on:
   schedule:
-    - cron: '30 0 */6 * *'
+    - cron: '0 4 * * 5'   # 北京时间每周五中午12:00（UTC 时间 04:00）
   workflow_dispatch:
 
 permissions:
