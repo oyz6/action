@@ -1,45 +1,38 @@
-name: Koyeb 登录保活
+# .github/workflows/koyeb-alive.yml
+name: Koyeb Keep Alive
 
 on:
-  schedule:
-    - cron: '0 4 * * 5'   # 北京时间每周五中午12:00（UTC 时间 04:00）
   workflow_dispatch:
 
 jobs:
   keep-alive:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
-      - name: 拉取私有仓库
-        uses: actions/checkout@v4
-        with:
-          repository: oyz6/scripts
-          token: ${{ secrets.REPO_TOKEN }}
-          path: .
+      - uses: actions/checkout@v4
 
-      - name: 设置 Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 安装依赖
+      - name: Install system deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb
-          # 安装 Chrome
+          sudo apt-get install -y -qq xvfb scrot
           wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo dpkg -i google-chrome.deb || sudo apt-get -f install -y -qq
           rm -f google-chrome.deb
           echo "Chrome: $(google-chrome --version)"
 
-      - name: 安装 Python dependencies
+      - name: Install Python deps
         run: |
-          pip install --upgrade pip
+          pip install -U pip
           pip install seleniumbase pyvirtualdisplay requests pyautogui
           seleniumbase install chromedriver
+          sbase install uc_driver
 
-      - name: 执行保活
+      - name: Run
         env:
           KOYEB_1: ${{ secrets.KOYEB_1 }}
           KOYEB_2: ${{ secrets.KOYEB_2 }}
@@ -54,7 +47,7 @@ jobs:
           sleep 2
           python scripts/Koyeb/Koyeb_alive.py
 
-      - name: 上传截图
+      - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -62,12 +55,3 @@ jobs:
           path: scripts/Koyeb/screenshots/
           retention-days: 7
           if-no-files-found: ignore
-
-      - name: 清理旧运行
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          delete_workflow_pattern: ${{ github.workflow }}
-          retain_days: 0
-          keep_minimum_runs: 3
