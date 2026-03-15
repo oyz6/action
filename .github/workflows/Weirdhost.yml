@@ -47,7 +47,11 @@ jobs:
 
       - name: 运行续期脚本
         env:
-#          WEIRDHOST_COOKIE_1: ${{ secrets.WEIRDHOST_COOKIE_1 }}
+          WEIRDHOST_COOKIE_1: ${{ secrets.WEIRDHOST_COOKIE_1 }}
+          WEIRDHOST_COOKIE_2: ${{ secrets.WEIRDHOST_COOKIE_2 }}
+          WEIRDHOST_COOKIE_3: ${{ secrets.WEIRDHOST_COOKIE_3 }}
+          WEIRDHOST_COOKIE_4: ${{ secrets.WEIRDHOST_COOKIE_4 }}
+          WEIRDHOST_COOKIE_5: ${{ secrets.WEIRDHOST_COOKIE_5 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
