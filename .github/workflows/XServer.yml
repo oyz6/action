@@ -1,0 +1,39 @@
+name: XServer VPS 续期
+
+on:
+  schedule:
+    - cron: 0 7,15,23 * * *
+  push:
+  workflow_dispatch:
+
+jobs:
+  job:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
+      - uses: actions/checkout@v3
+      - run: sudo apt-get -qq update && sudo apt-get -yqq install --no-install-recommends ffmpeg fonts-noto-cjk
+      - run: yarn add puppeteer
+      - run: node scripts/XServer/main.mjs
+        env:
+          XSERVER_ACCOUNT: ${{ secrets.XSERVER_ACCOUNT }}
+          PROXY_SERVER: ${{ secrets.PROXY_SERVER }}
+      - uses: actions/upload-artifact@v4
+        with:
+          path: recording.webm
+
+      - name: 清理旧运行
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
