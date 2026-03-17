@@ -8,7 +8,7 @@ on:
 jobs:
   extend-server:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 拉取私有仓库
         uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
           npm install playwright
 
       - name: 安装浏览器
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chrome
 
       - name: 安装并启动代理
         env:
@@ -112,7 +112,7 @@ jobs:
               flow = params.get("flow", [""])[0]
               pbk = params.get("pbk", [""])[0]
               host = params.get("host", [sni])[0]
-              path = unquote(params.get("path", ["/"])[0])
+              path_val = unquote(params.get("path", ["/"])[0])
               print(f"[INFO] VLESS -> {mask(address)}:{port} (security: {security}, network: {network})")
               outbound = {
                   "protocol": "vless",
@@ -126,7 +126,7 @@ jobs:
               elif security == "tls":
                   outbound["streamSettings"]["tlsSettings"] = {"serverName": sni, "fingerprint": fp, "allowInsecure": False}
               if network == "ws":
-                  outbound["streamSettings"]["wsSettings"] = {"path": path, "headers": {"Host": host}}
+                  outbound["streamSettings"]["wsSettings"] = {"path": path_val, "headers": {"Host": host}}
               elif network == "grpc":
                   service_name = params.get("serviceName", [""])[0]
                   outbound["streamSettings"]["grpcSettings"] = {"serviceName": service_name}
@@ -150,7 +150,7 @@ jobs:
               tls = vm.get("tls", "")
               sni = vm.get("sni", "") or vm.get("host", address)
               host = vm.get("host", address)
-              path = vm.get("path", "/")
+              path_val = vm.get("path", "/")
               fp = vm.get("fp", "chrome")
               print(f"[INFO] VMess -> {mask(address)}:{port} (network: {network}, tls: {tls})")
               outbound = {
@@ -161,7 +161,7 @@ jobs:
               if tls == "tls":
                   outbound["streamSettings"]["tlsSettings"] = {"serverName": sni, "fingerprint": fp, "allowInsecure": False}
               if network == "ws":
-                  outbound["streamSettings"]["wsSettings"] = {"path": path, "headers": {"Host": host}}
+                  outbound["streamSettings"]["wsSettings"] = {"path": path_val, "headers": {"Host": host}}
               config["outbounds"].append(outbound)
 
           elif protocol == "trojan":
@@ -178,7 +178,7 @@ jobs:
               sni = params.get("sni", [address])[0]
               network = params.get("type", ["tcp"])[0]
               host = params.get("host", [sni])[0]
-              path = unquote(params.get("path", ["/"])[0])
+              path_val = unquote(params.get("path", ["/"])[0])
               fp = params.get("fp", ["chrome"])[0]
               print(f"[INFO] Trojan -> {mask(address)}:{port} (network: {network})")
               outbound = {
@@ -187,7 +187,7 @@ jobs:
                   "streamSettings": {"network": network, "security": "tls", "tlsSettings": {"serverName": sni, "fingerprint": fp, "allowInsecure": False}}
               }
               if network == "ws":
-                  outbound["streamSettings"]["wsSettings"] = {"path": path, "headers": {"Host": host}}
+                  outbound["streamSettings"]["wsSettings"] = {"path": path_val, "headers": {"Host": host}}
               config["outbounds"].append(outbound)
 
           elif protocol == "ss":
