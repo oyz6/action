@@ -302,8 +302,8 @@ jobs:
           retention-days: 1
           path: |
             recording.webm
+            debug_*.png
             error_debug.png
-            timeout_check.png
 
       - name: 清理历史运行记录
         uses: Mattraks/delete-workflow-runs@v2
