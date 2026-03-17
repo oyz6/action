@@ -3,7 +3,6 @@ name: XServer VPS 续期
 on:
   schedule:
     - cron: 0 7,15,23 * * *
-  push:
   workflow_dispatch:
 
 jobs:
@@ -16,9 +15,7 @@ jobs:
         with:
           repository: oyz6/scripts
           token: ${{ secrets.REPO_TOKEN }}
-          path: .
 
-      - uses: actions/checkout@v3
       - run: sudo apt-get -qq update && sudo apt-get -yqq install --no-install-recommends ffmpeg fonts-noto-cjk
       - run: yarn add puppeteer
       - run: node scripts/XServer/main.mjs
@@ -36,4 +33,4 @@ jobs:
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 3
+          keep_minimum_runs: 1
