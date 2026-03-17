@@ -1,3 +1,4 @@
+# .github/workflows/XServer.yml
 name: XServer VPS 续期
 
 on:
@@ -16,24 +17,28 @@ jobs:
         with:
           repository: oyz6/scripts
           token: ${{ secrets.REPO_TOKEN }}
-          path: .  # 拉到根目录
+          path: .
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
 
-      - name: Install System Dependencies
+      - name: 安装系统依赖项
         run: |
           sudo apt-get -qq update
           sudo apt-get -yqq install --no-install-recommends ffmpeg fonts-noto-cjk xvfb
           sudo npx playwright install-deps firefox
 
-      - name: Install Python Requirements
+      - name: 安装Python所需依赖项
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f scripts/XServer/requirements.txt ]; then
+            pip install -r scripts/XServer/requirements.txt
+          else
+            echo "[WARN] 未找到 scripts/XServer/requirements.txt，尝试安装默认依赖"
+            pip install camoufox[geoip] playwright requests
+          fi
           python -m camoufox fetch
 
       - name: 安装并启动代理
@@ -281,21 +286,30 @@ jobs:
           cat xray.log
           exit 1
 
-      - name: Run Renewal Script
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python scripts/XServer/main.py
+      - name: 运行续订脚本
         env:
           XSERVER_ACCOUNT: ${{ secrets.XSERVER_ACCOUNT }}
           PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python scripts/XServer/main.py
 
-      - name: Upload Debug Artifacts
+      - name: 上传调试文件
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: renewal-logs-${{ github.run_id }}
-          retention-days: 7
+          retention-days: 1
           path: |
             recording.webm
             error_debug.png
             timeout_check.png
+
+      - name: 清理历史运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 1
