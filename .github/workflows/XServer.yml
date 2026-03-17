@@ -1,5 +1,5 @@
 # .github/workflows/XServer.yml
-name: XServer VPS 续期
+name: XServer java 续期
 
 on:
   schedule:
