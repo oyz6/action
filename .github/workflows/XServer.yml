@@ -2,7 +2,7 @@ name: XServer 游戏机续期
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 4 * * 5'   # 北京时间每周五中午12:00（UTC 时间 04:00）
   workflow_dispatch:
 
 jobs:
