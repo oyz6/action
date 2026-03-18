@@ -20,7 +20,6 @@ jobs:
           echo "PRIVATE_REPO=$PRIVATE_REPO" >> $GITHUB_ENV
           echo "PRIVATE_REPO_TOKEN=$PRIVATE_REPO_TOKEN" >> $GITHUB_ENV
 
-    steps:
       - name: 拉取私有仓库
         uses: actions/checkout@v4
         with:
