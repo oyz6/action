@@ -69,15 +69,15 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python scripts/TaoIPTV/main.py
 
-      - name: 上传调试截图
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: debug-screenshots
-          path: |
-            *.png
-            error.html
-          retention-days: 3
+#      - name: 上传调试截图
+#        uses: actions/upload-artifact@v4
+#        if: always()
+#        with:
+#          name: debug-screenshots
+#          path: |
+#            *.png
+#            error.html
+#          retention-days: 3
 
       - name: 推送到私有仓库
         if: success()
