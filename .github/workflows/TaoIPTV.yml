@@ -20,12 +20,13 @@ jobs:
           echo "PRIVATE_REPO=$PRIVATE_REPO" >> $GITHUB_ENV
           echo "PRIVATE_REPO_TOKEN=$PRIVATE_REPO_TOKEN" >> $GITHUB_ENV
 
+    steps:
       - name: 拉取私有仓库
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.PRIVATE_REPO }}
-          token: ${{ env.PRIVATE_REPO_TOKEN }}
-          path: .  # 拉到根目录
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
 
       - name: 设置 Python
         uses: actions/setup-python@v5
