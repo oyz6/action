@@ -10,11 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: 解析 TV_ACCOUNTS
+        env:
+          TV_ACCOUNTS: ${{ secrets.TV_ACCOUNTS }}
+        run: |
+          # 从 JSON 中提取 PRIVATE_REPO 和 PRIVATE_REPO_TOKEN
+          PRIVATE_REPO=$(echo "$TV_ACCOUNTS" | python -c "import sys, json; data=json.load(sys.stdin); print(data.get('PRIVATE_REPO', ''))")
+          PRIVATE_REPO_TOKEN=$(echo "$TV_ACCOUNTS" | python -c "import sys, json; data=json.load(sys.stdin); print(data.get('PRIVATE_REPO_TOKEN', ''))")
+          echo "PRIVATE_REPO=$PRIVATE_REPO" >> $GITHUB_ENV
+          echo "PRIVATE_REPO_TOKEN=$PRIVATE_REPO_TOKEN" >> $GITHUB_ENV
+
       - name: 拉取私有仓库
         uses: actions/checkout@v4
         with:
-          repository: oyz6/scripts
-          token: ${{ secrets.REPO_TOKEN }}
+          repository: ${{ env.PRIVATE_REPO }}
+          token: ${{ env.PRIVATE_REPO_TOKEN }}
           path: .  # 拉到根目录
 
       - name: 设置 Python
@@ -28,13 +38,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb xdotool
           seleniumbase install chromedriver
-
-      - name: 恢复浏览器状态缓存
-        uses: actions/cache@v4
-        with:
-          path: taoiptv-state.json
-          key: taoiptv-state-${{ github.run_id }}
-          restore-keys: taoiptv-state-
 
       - name: 配置代理
         env:
@@ -77,8 +80,8 @@ jobs:
       - name: 推送到私有仓库
         if: success()
         env:
-          PRIVATE_REPO: ${{ secrets.PRIVATE_REPO }}
-          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          PRIVATE_REPO: ${{ env.PRIVATE_REPO }}
+          PRIVATE_REPO_TOKEN: ${{ env.PRIVATE_REPO_TOKEN }}
         run: |
           if [ -z "$PRIVATE_REPO" ] || [ -z "$PRIVATE_REPO_TOKEN" ]; then
             echo "未配置私有仓库，跳过"
