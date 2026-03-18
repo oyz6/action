@@ -55,11 +55,13 @@ jobs:
           tls:
             sni: ${SNI}
             insecure: true
-          http:
-            listen: 127.0.0.1:7890
+          socks5:
+            listen: 127.0.0.1:1080   # 改为 SOCKS5，端口 1080
           EOF
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
           sleep 3
+          # 可选：验证代理是否启动成功
+          ss -tlnp | grep 1080
 
       - name: 运行爬虫
         env:
