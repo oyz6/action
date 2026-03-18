@@ -8,7 +8,10 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+      actions: write
+      
     steps:
       - name: 解析 TV_ACCOUNTS
         env:
