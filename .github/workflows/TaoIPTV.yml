@@ -101,3 +101,12 @@ jobs:
           git add taoiptv.m3u
           git diff --cached --quiet || git commit -m "更新 taoiptv.m3u $(date '+%Y-%m-%d %H:%M')"
           git push
+          
+      - name: 清理历史运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 1
