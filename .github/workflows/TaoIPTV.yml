@@ -81,7 +81,7 @@ jobs:
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python scripts/taoiptv.py
+        run: python scripts/TaoIPTV/main.py
 
       - name: 上传调试截图
         uses: actions/upload-artifact@v4
