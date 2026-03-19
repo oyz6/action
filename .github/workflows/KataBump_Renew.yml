@@ -2,7 +2,7 @@ name: KataBump 自动续订多账号版
 
 on:
   schedule:
-    - cron: '11 4 * * *'  # 每天北京时间 12:11
+    - cron: '11 4 * * *'
   workflow_dispatch:
     inputs:
       force_renew:
@@ -77,7 +77,7 @@ jobs:
           HY2_URL: ${{ secrets.HY2_URL }}
         run: |
           if [ -z "$HY2_URL" ]; then
-            echo "⚠️ HY2_URL 未设置，跳过代理配置"
+            echo "[WARN] HY2_URL 未设置，跳过代理配置"
             exit 0
           fi
           
@@ -108,7 +108,7 @@ jobs:
             listen: 127.0.0.1:8080
           EOF
           
-          echo "✅ Hysteria2 配置完成"
+          echo "[INFO] Hysteria2 配置完成"
 
       - name: 启动代理
         run: |
@@ -117,12 +117,12 @@ jobs:
             sleep 3
             
             if curl -s --proxy http://127.0.0.1:8080 --max-time 10 https://httpbin.org/ip > /dev/null 2>&1; then
-              echo "✅ 代理已启动并可用"
+              echo "[INFO] 代理已启动并可用"
             else
-              echo "⚠️ 代理启动但可能不可用，继续执行..."
+              echo "[WARN] 代理启动但可能不可用，继续执行"
             fi
           else
-            echo "⚠️ 无代理配置，直接连接"
+            echo "[WARN] 无代理配置，直接连接"
           fi
 
       - name: 运行续订脚本
