@@ -2,7 +2,7 @@ name: KataBump 自动续订多账号版
 
 on:
   schedule:
-    - cron: '11 4 * * *'
+    - cron: '11 4 * * *'  # 每天北京时间 12:11
   workflow_dispatch:
     inputs:
       force_renew:
