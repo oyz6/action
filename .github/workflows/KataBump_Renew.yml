@@ -139,13 +139,13 @@ jobs:
           
           python scripts/KataBump/main.py
 
-      - name: 上传截图
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: screenshots-${{ github.run_number }}
-          path: "*.png"
-          retention-days: 7
+#      - name: 上传截图
+#        uses: actions/upload-artifact@v4
+#        if: always()
+#        with:
+#          name: screenshots-${{ github.run_number }}
+#          path: "*.png"
+#          retention-days: 7
 
       - name: 清理旧的工作流运行记录
         uses: Mattraks/delete-workflow-runs@v2
@@ -154,4 +154,4 @@ jobs:
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 3
+          keep_minimum_runs: 1
