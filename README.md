@@ -10,7 +10,7 @@
 - name: 拉取私有仓库
   uses: actions/checkout@v4
   with:
-    repository: oyz6/scripts
+    repository: 用户名/私有仓库名
     token: ${{ secrets.REPO_TOKEN }}
     path: .  # 拉到根目录
 ```
@@ -20,10 +20,10 @@
 ## 前提
 
 - Secrets 中已配置 `REPO_TOKEN`
-- 注意：> /dev/null 2>&1 会隐藏所有输出，调试时建议先去掉。
+- 注意：scripts/xxx/xxx.py > /dev/null 2>&1 会隐藏所有输出，调试时建议先去掉。
 - 私有仓库结构中存在对应脚本
 ```
-oyz6/scripts/
+用户名/私有仓库名/
 └── scripts/
     └── xxx/
         └── xxx.py
