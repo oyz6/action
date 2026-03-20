@@ -3,6 +3,7 @@ set -euo pipefail
 
 ########################################
 # AlwaysData 白虎面板安装脚本
+# bash <(curl -sL https://raw.githubusercontent.com/oyz6/action/main/sh/baihu-install.sh)
 ########################################
 
 BAIHU_USER=$(whoami)
