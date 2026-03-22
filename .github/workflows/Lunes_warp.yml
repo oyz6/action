@@ -38,18 +38,16 @@ jobs:
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
-          mode: proxy   # ★ 用 proxy 模式，提供 SOCKS5 端口
+          mode: client
 
       - name: 验证 WARP
         run: |
-          echo "当前 IP (直连):"
-          curl -s https://api.ipify.org || true
+          echo "🌍 当前 IP:"
+          curl -s https://api.ipify.org
           echo
-          echo "当前 IP (通过 WARP SOCKS5):"
-          curl -s --proxy socks5://127.0.0.1:40000 https://api.ipify.org || true
-          echo
-          echo "Cloudflare Trace (通过 WARP):"
-          curl -s --proxy socks5://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+          echo "🔍 Cloudflare Trace:"
+          curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+          echo "🔍 warp= 应该显示 on 或 plus"
 
       - name: 执行任务
         env:
@@ -61,7 +59,6 @@ jobs:
           LUNES_5: ${{ secrets.LUNES_5 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_SERVER: socks5://127.0.0.1:40000
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
           python scripts/Lunes/Lunes-warp.py
