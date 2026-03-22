@@ -1,17 +1,21 @@
+# .github/workflows/lightcdn-free-credit.yml
 name: LightCDN 自动领取免费额度
 
 on:
   schedule:
-    - cron: '20 3 * * *'   # 你可自行调整
+    - cron: '0 8 * * *'  # 每天 UTC 8:00 (北京时间 16:00)
   workflow_dispatch:
 
 env:
   TZ: Asia/Shanghai
 
 jobs:
-  claim:
+  claim-credit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
 
     steps:
       - name: 拉取私有仓库
@@ -21,12 +25,11 @@ jobs:
           token: ${{ secrets.REPO_TOKEN }}
           path: .  # 拉到根目录
 
-      # 启用 WARP 网络（参考你给的 Weirdhost 版本）
       - name: 启用 WARP 网络
         uses: fscarmen/warp-on-actions@v1.3
         with:
-          stack: dual
-          mode: client
+          stack: dual        # IPv4+IPv6
+          mode: client       # 客户端模式
 
       - name: 验证 WARP
         run: |
@@ -44,8 +47,7 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb x11-utils xdotool scrot ffmpeg
-          # Playwright 通常也需要依赖，但后面会 playwright install-deps
+          sudo apt-get install -y xvfb x11-utils
 
       - name: 安装 Python 依赖
         run: |
@@ -56,16 +58,25 @@ jobs:
 
       - name: 运行 LightCDN 领取脚本
         env:
-          LIGHTCDN_1: ${{ secrets.LIGHTCDN_1 }} # 格式：邮箱-----密码
+          # 账号变量，格式: 邮箱-----密码
+          LIGHTCDN_1: ${{ secrets.LIGHTCDN_1 }}
           LIGHTCDN_2: ${{ secrets.LIGHTCDN_2 }}
           LIGHTCDN_3: ${{ secrets.LIGHTCDN_3 }}
           LIGHTCDN_4: ${{ secrets.LIGHTCDN_4 }}
           LIGHTCDN_5: ${{ secrets.LIGHTCDN_5 }}
-
+          # Telegram 通知
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          python scripts/lightcdn/claim_free_credit.py
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python scripts/lightcdn_claim.py
+
+      - name: 上传失败截图
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-screenshots-${{ github.run_number }}
+          path: screenshots/
+          retention-days: 3
 
       - name: 清理旧的工作流运行记录
         uses: Mattraks/delete-workflow-runs@v2
