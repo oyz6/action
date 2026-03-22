@@ -63,6 +63,15 @@ jobs:
           python scripts/Lunes/Lunes-warp.py
           echo "完成"
 
+      - name: 上传截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: output/screenshots/*.png
+          retention-days: 5
+          if-no-files-found: ignore
+
       - name: 清理运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
