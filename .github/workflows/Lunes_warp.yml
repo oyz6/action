@@ -37,15 +37,15 @@ jobs:
       - name: 启用 WARP 网络
         uses: fscarmen/warp-on-actions@v1.3
         with:
-          stack: dual        # IPv4+IPv6
-          mode: client       # 客户端模式
+          stack: dual
+          mode: client
 
       - name: 验证 WARP
         run: |
-          echo "当前 IP:"
+          echo "🌍 当前 IP:"
           curl -s https://api.ipify.org
           echo
-          echo "Cloudflare Trace:"
+          echo "🔍 Cloudflare Trace:"
           curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
 
       - name: 执行任务
