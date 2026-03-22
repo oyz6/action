@@ -1,0 +1,74 @@
+name: Lunes Host 重启 warp版
+
+on:
+  workflow_dispatch:
+    inputs:
+      accounts:
+        description: '指定邮箱账号（留空运行全部，多个用逗号分隔）'
+        required: false
+        default: ''
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg > /dev/null 2>&1
+          pip install -q seleniumbase pyvirtualdisplay requests SpeechRecognition pydub PyNaCl
+
+      - name: 启用 WARP 网络
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual        # IPv4+IPv6
+          mode: client       # 客户端模式
+
+      - name: 验证 WARP
+        run: |
+          echo "🌍 当前 IP:"
+          curl -s https://api.ipify.org
+          echo
+          echo "🔍 Cloudflare Trace:"
+          curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+
+      - name: 执行任务
+        env:
+          LUNES_ACCOUNTS: ${{ github.event.inputs.accounts }}
+          LUNES_1: ${{ secrets.LUNES_1 }}
+          LUNES_2: ${{ secrets.LUNES_2 }}
+          LUNES_3: ${{ secrets.LUNES_3 }}
+          LUNES_4: ${{ secrets.LUNES_4 }}
+          LUNES_5: ${{ secrets.LUNES_5 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+        run: |
+          python scripts/Lunes/Lunes-warp.py
+          echo "完成"
+
+      - name: 清理运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
