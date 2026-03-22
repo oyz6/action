@@ -14,8 +14,12 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout
+      - name: 拉取私有仓库
         uses: actions/checkout@v4
+        with:
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .  # 拉到根目录
 
       # 启用 WARP 网络（参考你给的 Weirdhost 版本）
       - name: 启用 WARP 网络
