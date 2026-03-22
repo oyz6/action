@@ -1,0 +1,73 @@
+name: LightCDN - Auto Claim Free Credit (Python)
+
+on:
+  schedule:
+    - cron: '20 3 * * *'   # 你可自行调整
+  workflow_dispatch:
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  claim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 启用 WARP 网络（参考你给的 Weirdhost 版本）
+      - name: 启用 WARP 网络
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      - name: 验证 WARP
+        run: |
+          echo "🌍 当前 IP:"
+          curl -s https://api.ipify.org
+          echo
+          echo "🔍 Cloudflare Trace:"
+          curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11-utils xdotool scrot ffmpeg
+          # Playwright 通常也需要依赖，但后面会 playwright install-deps
+
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright aiohttp
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: 运行 LightCDN 领取脚本
+        env:
+          LIGHTCDN_1: ${{ secrets.LIGHTCDN_1 }} # 格式：邮箱-----密码
+          LIGHTCDN_2: ${{ secrets.LIGHTCDN_2 }}
+          LIGHTCDN_3: ${{ secrets.LIGHTCDN_3 }}
+          LIGHTCDN_4: ${{ secrets.LIGHTCDN_4 }}
+          LIGHTCDN_5: ${{ secrets.LIGHTCDN_5 }}
+
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          python scripts/lightcdn/claim_free_credit.py
+
+      - name: 清理旧的工作流运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
