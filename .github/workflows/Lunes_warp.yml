@@ -40,31 +40,41 @@ jobs:
           stack: dual
           mode: client
 
-      - name: 修复 DNS 并验证
+      - name: 修复 DNS
         run: |
-          echo "🔧 修复 DNS..."
+          echo "🔧 停用 systemd-resolved，直连 DNS..."
           
-          # 备份并写入可靠 DNS
-          sudo cp /etc/resolv.conf /etc/resolv.conf.bak || true
+          # 停掉 systemd-resolved
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo systemctl disable systemd-resolved 2>/dev/null || true
+          
+          # 删掉软链接，写真实文件
+          sudo rm -f /etc/resolv.conf
           echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
           
-          # 如果 systemd-resolved 在管，也写一份
-          if [ -d /run/systemd/resolve ]; then
-            echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /run/systemd/resolve/resolv.conf || true
-            sudo systemctl restart systemd-resolved 2>/dev/null || true
-          fi
+          # 防止被覆盖
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
           
-          # 验证 DNS
-          echo "🔍 DNS 解析测试:"
-          nslookup ctrl.lunes.host || echo "⚠️ nslookup 失败"
-          nslookup api.github.com || echo "⚠️ nslookup 失败"
+          # 等 DNS 生效
+          sleep 2
+          
+          echo "🔍 DNS 测试:"
+          echo "--- ctrl.lunes.host ---"
+          nslookup ctrl.lunes.host 1.1.1.1 || dig ctrl.lunes.host @1.1.1.1 +short || echo "⚠️ 解析失败"
+          echo "--- api.github.com ---"
+          nslookup api.github.com 1.1.1.1 || echo "⚠️ 解析失败"
+          echo "--- 系统级测试 ---"
+          getent hosts ctrl.lunes.host || echo "⚠️ getent 失败"
           
           echo ""
           echo "🌍 当前 IP:"
           curl -s --max-time 10 https://api.ipify.org && echo
-          
-          echo "🔍 Cloudflare Trace:"
+          echo "🔍 WARP Trace:"
           curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+          
+          echo ""
+          echo "📄 /etc/resolv.conf:"
+          cat /etc/resolv.conf
 
       - name: 执行任务
         env:
