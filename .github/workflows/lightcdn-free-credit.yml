@@ -1,4 +1,4 @@
-name: LightCDN - Auto Claim Free Credit (Python)
+name: LightCDN 自动领取免费额度
 
 on:
   schedule:
