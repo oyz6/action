@@ -38,16 +38,33 @@ jobs:
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
-          mode: proxy
+          mode: client
 
-      - name: 验证 WARP
+      - name: 修复 DNS 并验证
         run: |
-          echo "🌍 直连 IP:"
-          curl -s https://api.ipify.org && echo
-          echo "🌍 WARP 代理 IP:"
-          curl -s --proxy socks5://127.0.0.1:40000 https://api.ipify.org && echo
-          echo "🔍 WARP Trace:"
-          curl -s --proxy socks5://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+          echo "🔧 修复 DNS..."
+          
+          # 备份并写入可靠 DNS
+          sudo cp /etc/resolv.conf /etc/resolv.conf.bak || true
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
+          
+          # 如果 systemd-resolved 在管，也写一份
+          if [ -d /run/systemd/resolve ]; then
+            echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /run/systemd/resolve/resolv.conf || true
+            sudo systemctl restart systemd-resolved 2>/dev/null || true
+          fi
+          
+          # 验证 DNS
+          echo "🔍 DNS 解析测试:"
+          nslookup ctrl.lunes.host || echo "⚠️ nslookup 失败"
+          nslookup api.github.com || echo "⚠️ nslookup 失败"
+          
+          echo ""
+          echo "🌍 当前 IP:"
+          curl -s --max-time 10 https://api.ipify.org && echo
+          
+          echo "🔍 Cloudflare Trace:"
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
 
       - name: 执行任务
         env:
@@ -59,7 +76,6 @@ jobs:
           LUNES_5: ${{ secrets.LUNES_5 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_SERVER: socks5://127.0.0.1:40000
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
           python scripts/Lunes/Lunes-warp.py
