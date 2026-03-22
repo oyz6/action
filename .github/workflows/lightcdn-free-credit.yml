@@ -25,19 +25,19 @@ jobs:
           token: ${{ secrets.REPO_TOKEN }}
           path: .  # 拉到根目录
 
-      - name: 启用 WARP 网络
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual        # IPv4+IPv6
-          mode: client       # 客户端模式
+#      - name: 启用 WARP 网络
+#        uses: fscarmen/warp-on-actions@v1.3
+#        with:
+#          stack: dual        # IPv4+IPv6
+#          mode: client       # 客户端模式
 
-      - name: 验证 WARP
-        run: |
-          echo "🌍 当前 IP:"
-          curl -s https://api.ipify.org
-          echo
-          echo "🔍 Cloudflare Trace:"
-          curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+#      - name: 验证 WARP
+#        run: |
+#          echo "🌍 当前 IP:"
+#          curl -s https://api.ipify.org
+#          echo
+#          echo "🔍 Cloudflare Trace:"
+#          curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
 
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
@@ -69,14 +69,6 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python scripts/lightcdn/claim_free_credit.py
-
-      - name: 上传失败截图
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: failure-screenshots-${{ github.run_number }}
-          path: screenshots/
-          retention-days: 3
 
       - name: 清理旧的工作流运行记录
         uses: Mattraks/delete-workflow-runs@v2
