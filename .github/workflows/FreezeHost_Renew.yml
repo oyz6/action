@@ -17,7 +17,7 @@ jobs:
         with:
           repository: oyz6/scripts
           token: ${{ secrets.REPO_TOKEN }}
-          path: .  # 拉到根目录
+          path: .
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -63,7 +63,6 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python scripts/FreezeHost/renew.py
-
 
       - name: 上传截图
         if: always()
