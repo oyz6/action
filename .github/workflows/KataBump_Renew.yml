@@ -69,7 +69,7 @@ jobs:
 
       - name: 下载 Hysteria2
         run: |
-          wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
+          wget -q https://github.com/oyz6/action/releases/download/proxy/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
 
       - name: 配置 Hysteria2
