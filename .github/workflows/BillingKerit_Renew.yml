@@ -46,7 +46,7 @@ jobs:
             exit 0
           fi
           
-          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          wget -q https://github.com/oyz6/action/releases/download/proxy/Xray-linux-64.zip
           unzip -q Xray-linux-64.zip -d xray && chmod +x xray/xray
           
           python3 << 'PYEOF'
