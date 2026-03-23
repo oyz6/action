@@ -89,7 +89,7 @@ jobs:
             echo "✅ 官方下载成功"
           else
             echo "⚠️ 官方下载失败，尝试备用链接..."
-            wget -q "https://github.com/oyz6/action/releases/download/v25.1.30/Xray-linux-64.zip" -O /tmp/xray.zip || {
+            wget -q "https://github.com/oyz6/action/releases/download/proxy/Xray-linux-64.zip" -O /tmp/xray.zip || {
               echo "❌ 所有下载源均失败"
               exit 1
             }
