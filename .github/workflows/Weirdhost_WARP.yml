@@ -136,6 +136,7 @@ jobs:
           curl -s --max-time 10 https://api.ipify.org && echo
           echo "🔍 WARP Trace:"
           curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+          
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
