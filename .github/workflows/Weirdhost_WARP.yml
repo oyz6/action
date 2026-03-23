@@ -30,14 +30,112 @@ jobs:
           stack: dual        # IPv4+IPv6
           mode: client       # 客户端模式
 
-      - name: 验证 WARP
+      - name: 修复 DNS
         run: |
+          echo "🔧 停用 systemd-resolved，直连 DNS..."
+          
+          # 停掉 systemd-resolved
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo systemctl disable systemd-resolved 2>/dev/null || true
+          
+          # 删掉软链接，写真实文件
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
+          
+          # 防止被覆盖
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
+          
+          sleep 2
+          
+          echo "🔍 DNS 测试:"
+          nslookup ctrl.lunes.host 1.1.1.1 || echo "⚠️ nslookup 失败"
+          getent hosts ctrl.lunes.host || echo "⚠️ getent 失败"
+          
+          # === 关键：如果系统 DNS 仍然失败，用 DoH 写 /etc/hosts 兜底 ===
+          echo ""
+          echo "🔧 预解析关键域名写入 /etc/hosts..."
+          
+          resolve_and_add() {
+            local domain=$1
+            # 先测试系统能否解析
+            if getent hosts "$domain" > /dev/null 2>&1; then
+              echo "  ✅ $domain - 系统可解析"
+              return
+            fi
+            
+            # 系统不行，用 DoH
+            local ip=$(curl -s --max-time 8 \
+              "https://cloudflare-dns.com/dns-query?name=${domain}&type=A" \
+              -H "accept: application/dns-json" | \
+              python3 -c "
+          import sys,json
+          try:
+            d=json.load(sys.stdin)
+            for a in d.get('Answer',[]):
+              if a.get('type')==1:
+                print(a['data']); break
+          except: pass" 2>/dev/null)
+            
+            if [ -n "$ip" ]; then
+              echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
+              echo "  📝 $domain -> $ip (DoH 写入 hosts)"
+            else
+              # 再试 Google DoH
+              ip=$(curl -s --max-time 8 \
+                "https://dns.google/resolve?name=${domain}&type=A" | \
+                python3 -c "
+          import sys,json
+          try:
+            d=json.load(sys.stdin)
+            for a in d.get('Answer',[]):
+              if a.get('type')==1:
+                print(a['data']); break
+          except: pass" 2>/dev/null)
+              
+              if [ -n "$ip" ]; then
+                echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
+                echo "  📝 $domain -> $ip (Google DoH)"
+              else
+                echo "  ❌ $domain - 所有方式均失败"
+              fi
+            fi
+          }
+          
+          # 你的目标站点
+          resolve_and_add "ctrl.lunes.host"
+          resolve_and_add "hub.weirdhost.xyz"
+          
+          # reCAPTCHA 需要的 Google 域名
+          resolve_and_add "www.google.com"
+          resolve_and_add "www.gstatic.com"
+          resolve_and_add "www.recaptcha.net"
+          resolve_and_add "recaptcha.net"
+          resolve_and_add "apis.google.com"
+          resolve_and_add "accounts.google.com"
+          resolve_and_add "ssl.gstatic.com"
+          resolve_and_add "fonts.gstatic.com"
+          resolve_and_add "fonts.googleapis.com"
+          resolve_and_add "api.github.com"
+          
+          echo ""
+          echo "📄 /etc/resolv.conf:"
+          cat /etc/resolv.conf
+          
+          echo ""
+          echo "📄 /etc/hosts (新增):"
+          grep -v "^#\|^$\|localhost" /etc/hosts || true
+          
+          echo ""
+          echo "🔍 最终验证:"
+          getent hosts ctrl.lunes.host && echo "  ✅ ctrl.lunes.host OK" || echo "  ❌ ctrl.lunes.host FAIL"
+          getent hosts hub.weirdhost.xyz && echo "  ✅ hub.weirdhost.xyz OK" || echo "  ❌ hub.weirdhost.xyz FAIL"
+          getent hosts www.google.com && echo "  ✅ www.google.com OK" || echo "  ❌ www.google.com FAIL"
+          
+          echo ""
           echo "🌍 当前 IP:"
-          curl -s https://api.ipify.org
-          echo
-          echo "🔍 Cloudflare Trace:"
-          curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
-
+          curl -s --max-time 10 https://api.ipify.org && echo
+          echo "🔍 WARP Trace:"
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
