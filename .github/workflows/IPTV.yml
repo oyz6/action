@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  IPTV 爬虫:
+  scrape:
     runs-on: ubuntu-latest
     permissions:
       contents: write
