@@ -39,8 +39,7 @@ jobs:
           print(content)
           " > /tmp/logs.txt
 
-          echo "[INFO] logs.txt 内容："
-          cat /tmp/logs.txt
+          echo "[INFO] logs.txt 读取成功 ($(wc -l < /tmp/logs.txt) 行)"
 
           # 获取文件 SHA（后续更新用）
           LOG_SHA=$(cat /tmp/logs_response.json | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
@@ -48,12 +47,24 @@ jobs:
 
           # 判断哪些账号需要续期（到期日 <= 今天+7天 的才续期）
           python3 << 'PYEOF'
-          import os, sys
+          import os, sys, re
           from datetime import datetime, timedelta, timezone
 
           jst = timezone(timedelta(hours=9))
           now = datetime.now(jst)
           threshold = now + timedelta(days=7)
+
+          def mask_email(email):
+              parts = email.split('@')
+              if len(parts) != 2:
+                  return '***'
+              user = parts[0]
+              domain = parts[1]
+              if len(user) <= 2:
+                  masked = '*' * len(user)
+              else:
+                  masked = user[0] + '*' * (len(user) - 2) + user[-1]
+              return f"{masked}@{domain}"
 
           print(f"[INFO] 当前日本时间: {now.strftime('%Y-%m-%d %H:%M')}")
           print(f"[INFO] 续期阈值 (7天内到期): {threshold.strftime('%Y-%m-%d %H:%M')}")
@@ -70,16 +81,17 @@ jobs:
                       continue
                   email = parts[0].strip()
                   expire_str = parts[1].strip()
+                  masked = mask_email(email)
                   try:
                       expire_dt = datetime.strptime(expire_str, "%Y-%m-%d %H:%M").replace(tzinfo=jst)
                       days_left = (expire_dt - now).days
                       if expire_dt <= threshold:
-                          print(f"[INFO] {email}: 到期 {expire_str} (剩余 {days_left} 天) → 需要续期")
+                          print(f"[INFO] {masked}: 到期 {expire_str} (剩余 {days_left} 天) → 需要续期")
                           accounts_to_renew.append(email)
                       else:
-                          print(f"[INFO] {email}: 到期 {expire_str} (剩余 {days_left} 天) → 跳过")
+                          print(f"[INFO] {masked}: 到期 {expire_str} (剩余 {days_left} 天) → 跳过")
                   except ValueError as e:
-                      print(f"[WARN] {email}: 日期解析失败 ({expire_str})，加入续期列表")
+                      print(f"[WARN] {masked}: 日期解析失败，加入续期列表")
                       accounts_to_renew.append(email)
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
