@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ========== 第一步：通过API读取logs.txt判断是否需要续期 ==========
       - name: 检查是否需要续期
         id: check
         env:
@@ -45,29 +44,14 @@ jobs:
           LOG_SHA=$(cat /tmp/logs_response.json | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
           echo "log_sha=$LOG_SHA" >> $GITHUB_OUTPUT
 
-          # 判断哪些账号需要续期（到期日 <= 今天+7天 的才续期）
           python3 << 'PYEOF'
-          import os, sys, re
+          import os, sys
           from datetime import datetime, timedelta, timezone
 
           jst = timezone(timedelta(hours=9))
           now = datetime.now(jst)
-          threshold = now + timedelta(days=7)
-
-          def mask_email(email):
-              parts = email.split('@')
-              if len(parts) != 2:
-                  return '***'
-              user = parts[0]
-              domain = parts[1]
-              if len(user) <= 2:
-                  masked = '*' * len(user)
-              else:
-                  masked = user[0] + '*' * (len(user) - 2) + user[-1]
-              return f"{masked}@{domain}"
 
           print(f"[INFO] 当前日本时间: {now.strftime('%Y-%m-%d %H:%M')}")
-          print(f"[INFO] 续期阈值 (7天内到期): {threshold.strftime('%Y-%m-%d %H:%M')}")
 
           accounts_to_renew = []
 
@@ -80,18 +64,16 @@ jobs:
                   if len(parts) < 2:
                       continue
                   email = parts[0].strip()
-                  expire_str = parts[1].strip()
-                  masked = mask_email(email)
+                  next_run_str = parts[1].strip()
                   try:
-                      expire_dt = datetime.strptime(expire_str, "%Y-%m-%d %H:%M").replace(tzinfo=jst)
-                      days_left = (expire_dt - now).days
-                      if expire_dt <= threshold:
-                          print(f"[INFO] {masked}: 到期 {expire_str} (剩余 {days_left} 天) → 需要续期")
+                      next_run_dt = datetime.strptime(next_run_str, "%Y-%m-%d %H:%M").replace(tzinfo=jst)
+                      if now >= next_run_dt:
+                          print(f"[INFO] 账号需要续期 → 执行时间已到 ({next_run_str})")
                           accounts_to_renew.append(email)
                       else:
-                          print(f"[INFO] {masked}: 到期 {expire_str} (剩余 {days_left} 天) → 跳过")
-                  except ValueError as e:
-                      print(f"[WARN] {masked}: 日期解析失败，加入续期列表")
+                          print(f"[INFO] 账号跳过 → 下次执行时间 {next_run_str}")
+                  except ValueError:
+                      print(f"[WARN] 日期解析失败，加入续期列表")
                       accounts_to_renew.append(email)
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
