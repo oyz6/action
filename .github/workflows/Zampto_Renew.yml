@@ -7,7 +7,7 @@ on:
 
 jobs:
   renew:
-    runs-on: 执行续期
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: write
