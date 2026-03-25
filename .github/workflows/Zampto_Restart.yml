@@ -5,7 +5,7 @@ on:
 
 jobs:
   renew:
-    runs-on: ubuntu-latest
+    runs-on: 执行重启
     permissions:
       contents: read
       actions: write
@@ -351,7 +351,7 @@ jobs:
           cat xray.log
           exit 1
 
-      - name: 执行续期
+      - name: 执行重启
         env:
           ZAMPTO_ACCOUNT: ${{ secrets.ZAMPTO_ACCOUNT }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
