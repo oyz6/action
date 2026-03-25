@@ -1,4 +1,4 @@
-name: Panel Kerit 重启
+name: Kerit Cloud 重启
 
 on:
   workflow_dispatch:
