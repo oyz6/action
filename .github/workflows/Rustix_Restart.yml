@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       accounts:
-        description: '指定邮箱账号'
+        description: '指定邮箱账号（留空运行全部，多个用逗号分隔）'
         required: false
         default: ''
 
