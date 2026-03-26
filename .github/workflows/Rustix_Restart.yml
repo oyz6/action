@@ -30,7 +30,7 @@ jobs:
 
       - name: 配置 Hysteria2 代理
         env:
-          HY2_URL: ${{ secrets.HY2_URL_PL }}
+          HY2_URL: ${{ secrets.HY2_URL_US }}
         run: |
           echo "[INFO] 下载 Hysteria2..."
           wget -q https://github.com/apernet/hysteria/releases/download/app%2Fv2.6.1/hysteria-linux-amd64 -O hysteria
