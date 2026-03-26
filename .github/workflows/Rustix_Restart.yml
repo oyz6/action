@@ -26,18 +26,16 @@ jobs:
           python-version: '3.11'
 
       - name: 安装依赖
-        run: |
-          pip install -q seleniumbase pyvirtualdisplay requests
+        run: pip install -q seleniumbase pyvirtualdisplay requests
 
       - name: 配置 Hysteria2 代理
         env:
-          HY2_URL: ${{ secrets.HY2_URL_PL }}
+          HY2_URL: ${{ secrets.HY2_URL }}
         run: |
           echo "[INFO] 下载 Hysteria2..."
           wget -q https://github.com/apernet/hysteria/releases/download/app%2Fv2.6.1/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
           
-          echo "[INFO] 解析配置..."
           URL="${HY2_URL#hysteria2://}"
           PASSWORD="${URL%%@*}"
           SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
@@ -53,14 +51,10 @@ jobs:
             listen: 127.0.0.1:7890
           EOF
           
-          echo "[INFO] 启动代理..."
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
           sleep 3
           
           echo "[INFO] 验证代理..."
-          curl -s --proxy http://127.0.0.1:7890 --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=' || echo "[WARN] 代理验证失败"
-          
-          echo "[INFO] 验证目标站点..."
           curl -sI --proxy http://127.0.0.1:7890 --max-time 10 https://my.rustix.me | head -3
 
       - name: 执行重启脚本
@@ -70,8 +64,7 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           INPUT_ACCOUNTS: ${{ github.event.inputs.accounts || '' }}
           PROXY_SERVER: http://127.0.0.1:7890
-        run: |
-          python scripts/Rustix/rustix_restart.py
+        run: python scripts/Rustix/rustix_restart.py
 
       - name: 上传截图
         if: always()
