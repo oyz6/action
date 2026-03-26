@@ -1,4 +1,4 @@
-name: Rustix 自动登录脚本
+name: Rustix 自动重启
 on:
   workflow_dispatch:
     inputs:
