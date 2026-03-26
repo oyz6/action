@@ -12,16 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-    env:
-      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-      RUSTIX_1: ${{ secrets.RUSTIX_1 }}
-      RUSTIX_2: ${{ secrets.RUSTIX_2 }}
-      RUSTIX_3: ${{ secrets.RUSTIX_3 }}
-      RUSTIX_4: ${{ secrets.RUSTIX_4 }}
-      RUSTIX_5: ${{ secrets.RUSTIX_5 }}
-      INPUT_ACCOUNTS: ${{ github.event.inputs.accounts || '' }}
-
     steps:
       - name: 拉取私有仓库
         uses: actions/checkout@v4
@@ -63,9 +53,14 @@ jobs:
           echo "[INFO] 依赖安装完成"
 
       - name: 执行重启脚本
+        env:
+          RUSTIX: ${{ secrets.RUSTIX }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          INPUT_ACCOUNTS: ${{ github.event.inputs.accounts || '' }}
         run: |
-          echo "[INFO] 开始执行 Rustix Auto Restart..."
           python scripts/Rustix/rustix_restart.py
+          echo "完成"
 
       - name: 上传截图
         if: always()
