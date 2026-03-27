@@ -1,0 +1,147 @@
+name: 构建青龙面板 AMD64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Get latest version
+        id: version
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/whyour/qinglong/releases/latest | grep '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest version: $LATEST"
+      
+      - name: Check if release exists
+        id: check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/ql-v$VERSION || echo "")
+          if echo "$RELEASE" | grep -q '"id"'; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Extract from Docker image
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="ghcr.io/whyour/qinglong:${VERSION}-debian"
+          
+          echo "Pulling image: $IMAGE"
+          docker pull $IMAGE
+          
+          CONTAINER_ID=$(docker create $IMAGE)
+          mkdir -p ql
+          docker cp $CONTAINER_ID:/ql/. ql/
+          docker rm $CONTAINER_ID
+          
+          echo "=== Extracted files ==="
+          ls -la ql/
+      
+      - name: Setup Node.js
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Rebuild native modules
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          cd ql
+          if [ -f "package.json" ]; then
+            npm rebuild 2>/dev/null || true
+          fi
+      
+      - name: Clean up
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          cd ql
+          
+          rm -rf .git .github .vscode docker 2>/dev/null || true
+          rm -f *.md CHANGELOG* Dockerfile* docker-compose* 2>/dev/null || true
+          rm -f .dockerignore .editorconfig .gitignore 2>/dev/null || true
+          
+          if [ -d "node_modules" ]; then
+            find node_modules -name "*.md" -type f -delete 2>/dev/null || true
+            find node_modules -name "*.map" -type f -delete 2>/dev/null || true
+            find node_modules -name "LICENSE*" -type f -delete 2>/dev/null || true
+            find node_modules -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
+            find node_modules -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+            find node_modules -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true
+          fi
+          
+          echo "=== Final structure ==="
+          ls -la
+          du -sh .
+      
+      - name: Create app.js wrapper
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          cd ql
+          
+          cat > app.js << 'EOF'
+          const fs = require('fs');
+          const path = require('path');
+          
+          // 固定端口 8100
+          process.env.QL_PORT = '8100';
+          process.env.QL_DIR = process.env.QL_DIR || path.join(__dirname, 'data');
+          process.env.NODE_ENV = 'production';
+          
+          // 确保数据目录存在
+          const dataDir = process.env.QL_DIR;
+          if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+          }
+          
+          // 查找并启动主程序
+          const possiblePaths = [
+            './dist/app.js',
+            './build/app.js',
+            './static/build/app.js'
+          ];
+          
+          for (const p of possiblePaths) {
+            if (fs.existsSync(path.join(__dirname, p))) {
+              console.log('Starting QingLong on port 8100...');
+              require(p);
+              break;
+            }
+          }
+          EOF
+          
+          echo "=== app.js created ==="
+          cat app.js
+      
+      - name: Package
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          tar -czvf qinglong-v${VERSION}.tar.gz ql
+          ls -lh qinglong-*.tar.gz
+      
+      - name: Create Release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ql-v${{ steps.version.outputs.version }}
+          name: 青龙面板 v${{ steps.version.outputs.version }}
+          body: |
+            ## 青龙面板 v${{ steps.version.outputs.version }} 预构建版
+            
+            从 Docker 镜像提取，适用于 AlwaysData 等共享主机
+            
+            **端口: 8100**
+            
+            ### 📦 一键安装
+            
+            ```bash
+            bash <(curl -sL https://raw.githubusercontent.com/${{ github.repository }}/main/sh/qinglong-install.sh)
