@@ -152,7 +152,9 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           tar -czvf qinglong-v${VERSION}.tar.gz ql
-          ls -lh qinglong-*.tar.gz
+          ls -lh qinglong-v${VERSION}.tar.gz
+          echo "filepath=$(pwd)/qinglong-v${VERSION}.tar.gz" >> $GITHUB_OUTPUT
+        id: package
       
       - name: Create Release
         if: steps.check.outputs.exists == 'false'
