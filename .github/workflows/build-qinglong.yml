@@ -2,6 +2,13 @@ name: 构建青龙面板 AMD64
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: '青龙版本号 (留空自动获取)'
+        required: false
+        default: ''
+  schedule:
+    - cron: '0 0 * * 0'
 
 jobs:
   build:
@@ -11,22 +18,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Get latest version
+      - name: Get version
         id: version
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/whyour/qinglong/releases/latest | grep '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')
-          echo "version=$LATEST" >> $GITHUB_OUTPUT
-          echo "Latest version: $LATEST"
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # 从 Docker Hub 获取最新 debian 版本
+            VERSION=$(curl -sL "https://hub.docker.com/v2/repositories/whyour/qinglong/tags?page_size=100" | jq -r '.results[].name' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+-debian$' | sed 's/-debian$//' | sort -V | tail -1)
+            
+            if [ -z "$VERSION" ]; then
+              VERSION="2.20.2"
+              echo "Using fallback version"
+            fi
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
       
       - name: Check if release exists
         id: check
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          RELEASE=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/tags/ql-v$VERSION || echo "")
+          RELEASE=$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/ql-v$VERSION || echo "")
           if echo "$RELEASE" | grep -q '"id"'; then
             echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release ql-v$VERSION already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Will create release ql-v$VERSION"
           fi
       
       - name: Extract from Docker image
@@ -104,22 +124,28 @@ jobs:
           
           // 查找并启动主程序
           const possiblePaths = [
+            './static/build/app.js',
             './dist/app.js',
-            './build/app.js',
-            './static/build/app.js'
+            './build/app.js'
           ];
           
+          let started = false;
           for (const p of possiblePaths) {
             if (fs.existsSync(path.join(__dirname, p))) {
               console.log('Starting QingLong on port 8100...');
+              console.log('Entry:', p);
               require(p);
+              started = true;
               break;
             }
           }
-          EOF
           
-          echo "=== app.js created ==="
-          cat app.js
+          if (!started) {
+            console.error('Error: Cannot find app entry');
+            console.log('Available files:', fs.readdirSync(__dirname));
+            process.exit(1);
+          }
+          EOF
       
       - name: Package
         if: steps.check.outputs.exists == 'false'
@@ -137,7 +163,7 @@ jobs:
           body: |
             ## 青龙面板 v${{ steps.version.outputs.version }} 预构建版
             
-            从 Docker 镜像提取，适用于 AlwaysData 等共享主机
+            从 Docker 镜像 `ghcr.io/whyour/qinglong:${{ steps.version.outputs.version }}-debian` 提取
             
             **端口: 8100**
             
