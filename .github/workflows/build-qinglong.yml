@@ -112,9 +112,9 @@ jobs:
       
       - name: Upload Release
         if: steps.check.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ql-v${{ steps.version.outputs.version }}
+          tag: ql-v${{ steps.version.outputs.version }}
           name: 青龙面板 v${{ steps.version.outputs.version }}
           body: |
             ## 青龙面板 v${{ steps.version.outputs.version }} 预构建版
