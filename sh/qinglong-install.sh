@@ -51,7 +51,7 @@ cd "$QL_HOME"
 
 # 4. 下载
 log_info "下载青龙面板 v${VERSION}..."
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/ql-v${VERSION}/qinglong-v${VERSION}.tar.gz"
+DOWNLOAD_URL="https://github.com/${REPO}/releases/download/ql-v${VERSION}/qinglong-${VERSION}.tar.gz"
 if ! wget -q --show-progress -O qinglong.tar.gz "$DOWNLOAD_URL"; then
     log_err "下载失败"
     exit 1
