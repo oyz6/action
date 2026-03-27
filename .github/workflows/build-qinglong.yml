@@ -43,42 +43,26 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
       
-      - name: Extract from Docker image
+      - name: Build
         if: steps.check.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           IMAGE="ghcr.io/whyour/qinglong:${VERSION}-debian"
           
-          echo "Pulling image: $IMAGE"
+          # 拉取镜像
+          echo "=== Pulling $IMAGE ==="
           docker pull $IMAGE
           
+          # 提取文件
+          echo "=== Extracting files ==="
           CONTAINER_ID=$(docker create $IMAGE)
           mkdir -p qinglong
           docker cp $CONTAINER_ID:/ql/. qinglong/
           docker rm $CONTAINER_ID
           
-          echo "=== Extracted files ==="
-          ls -la qinglong/
-      
-      - name: Setup Node.js
-        if: steps.check.outputs.exists == 'false'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Rebuild native modules
-        if: steps.check.outputs.exists == 'false'
-        run: |
+          # 清理
+          echo "=== Cleaning up ==="
           cd qinglong
-          if [ -f "package.json" ]; then
-            npm rebuild 2>/dev/null || true
-          fi
-      
-      - name: Clean up
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          cd qinglong
-          
           rm -rf .git .github .vscode docker 2>/dev/null || true
           rm -f *.md CHANGELOG* Dockerfile* docker-compose* 2>/dev/null || true
           rm -f .dockerignore .editorconfig .gitignore 2>/dev/null || true
@@ -92,59 +76,43 @@ jobs:
             find node_modules -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true
           fi
           
-          echo "=== Final structure ==="
-          ls -la
-          du -sh .
-      
-      - name: Create app.js wrapper
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          cat > qinglong/app.js << 'EOF'
+          # 创建 app.js
+          echo "=== Creating app.js ==="
+          cat > app.js << 'APPEOF'
           const fs = require('fs');
           const path = require('path');
-          
           process.env.QL_PORT = '8100';
           process.env.QL_DIR = process.env.QL_DIR || path.join(__dirname, 'data');
           process.env.NODE_ENV = 'production';
-          
           const dataDir = process.env.QL_DIR;
-          if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir, { recursive: true });
-          }
-          
-          const possiblePaths = [
-            './static/build/app.js',
-            './dist/app.js',
-            './build/app.js'
-          ];
-          
-          let started = false;
-          for (const p of possiblePaths) {
+          if (!fs.existsSync(dataDir)) { fs.mkdirSync(dataDir, { recursive: true }); }
+          const entries = ['./static/build/app.js', './dist/app.js', './build/app.js'];
+          for (const p of entries) {
             if (fs.existsSync(path.join(__dirname, p))) {
-              console.log('Starting QingLong on port 8100...');
-              console.log('Entry:', p);
+              console.log('Starting QingLong on port 8100, entry:', p);
               require(p);
-              started = true;
               break;
             }
           }
+          APPEOF
           
-          if (!started) {
-            console.error('Error: Cannot find app entry');
-            console.log('Available files:', fs.readdirSync(__dirname));
-            process.exit(1);
-          }
-          EOF
+          cd ..
+          
+          # 打包
+          echo "=== Packaging ==="
+          FILENAME="qinglong-${VERSION}.tar.gz"
+          tar -czf "$FILENAME" qinglong
+          ls -lh "$FILENAME"
+          
+          # 验证文件存在
+          echo "=== Verify ==="
+          pwd
+          ls -la *.tar.gz
+          file "$FILENAME"
       
-      - name: Package
+      - name: Upload Release
         if: steps.check.outputs.exists == 'false'
-        run: |
-          tar -czvf qinglong-${{ steps.version.outputs.version }}.tar.gz qinglong
-          ls -lh qinglong-*.tar.gz
-      
-      - name: Create Release
-        if: steps.check.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ql-v${{ steps.version.outputs.version }}
           name: 青龙面板 v${{ steps.version.outputs.version }}
@@ -156,6 +124,5 @@ jobs:
             **端口: 8100**
             
             ### 📦 一键安装
-            
             ```bash
             bash <(curl -sL https://raw.githubusercontent.com/${{ github.repository }}/main/sh/qinglong-install.sh)
