@@ -1,4 +1,5 @@
-name: Rustix 自动重启
+name: Rustix 自动登录
+
 on:
   workflow_dispatch:
     inputs:
@@ -6,11 +7,15 @@ on:
         description: '指定邮箱账号（留空运行全部，多个用逗号分隔）'
         required: false
         default: ''
+  # schedule:
+  #   - cron: '0 2 * * *' # 如果需要定时运行，可以取消注释并修改时间 (UTC)
 
 jobs:
-  restart:
+  rustix_task:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write
 
     steps:
       - name: 拉取私有仓库
@@ -25,22 +30,20 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 安装依赖
-        run: pip install -q seleniumbase pyvirtualdisplay requests
-
-      - name: 配置 Hysteria2 代理
-        env:
-          HY2_URL: ${{ secrets.HY2_URL_US }}
+      - name: 安装精简依赖
         run: |
-          echo "[INFO] 下载 Hysteria2..."
-          wget -q https://github.com/apernet/hysteria/releases/download/app%2Fv2.6.1/hysteria-linux-amd64 -O hysteria
+          pip install -q seleniumbase pyvirtualdisplay requests PyNaCl
+
+      - name: 配置固定 IP 代理 (Hysteria2)
+        env:
+          HY2_URL: ${{ secrets.HY2_URL }}
+        run: |
+          wget -q https://github.com/oyz6/action/releases/download/proxy/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
-          
           URL="${HY2_URL#hysteria2://}"
           PASSWORD="${URL%%@*}"
           SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
           SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
-          
           cat > hy2.yaml << EOF
           server: ${SERVER}
           auth: ${PASSWORD}
@@ -50,30 +53,22 @@ jobs:
           http:
             listen: 127.0.0.1:7890
           EOF
-          
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
           sleep 3
-          
-          echo "[INFO] 验证代理..."
-          curl -sI --proxy http://127.0.0.1:7890 --max-time 10 https://my.rustix.me | head -3
 
-      - name: 执行重启脚本
+      - name: 执行 Rustix 任务
         env:
-          RUSTIX: ${{ secrets.RUSTIX }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          INPUT_ACCOUNTS: ${{ github.event.inputs.accounts || '' }}
+          RUSTIX_ACCOUNTS: ${{ github.event.inputs.accounts }}
+          RUSTIX_1: ${{ secrets.RUSTIX_1 }}
+          RUSTIX_2: ${{ secrets.RUSTIX_2 }}
+          RUSTIX_3: ${{ secrets.RUSTIX_3 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
-        run: python scripts/Rustix/rustix_restart.py
-
-      - name: 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots
-          path: output/screenshots/
-          retention-days: 3
-          if-no-files-found: ignore
+          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+        run: |
+          python scripts/Rustix.py
+          echo "完成"
 
       - name: 清理运行记录
         if: always()
