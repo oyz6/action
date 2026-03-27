@@ -24,15 +24,11 @@ jobs:
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            # 从 Docker Hub 获取最新 debian 版本
             VERSION=$(curl -sL "https://hub.docker.com/v2/repositories/whyour/qinglong/tags?page_size=100" | jq -r '.results[].name' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+-debian$' | sed 's/-debian$//' | sort -V | tail -1)
-            
             if [ -z "$VERSION" ]; then
               VERSION="2.20.2"
-              echo "Using fallback version"
             fi
           fi
-          
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
       
@@ -43,10 +39,8 @@ jobs:
           RELEASE=$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/ql-v$VERSION || echo "")
           if echo "$RELEASE" | grep -q '"id"'; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release ql-v$VERSION already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Will create release ql-v$VERSION"
           fi
       
       - name: Extract from Docker image
@@ -59,12 +53,12 @@ jobs:
           docker pull $IMAGE
           
           CONTAINER_ID=$(docker create $IMAGE)
-          mkdir -p ql
-          docker cp $CONTAINER_ID:/ql/. ql/
+          mkdir -p qinglong
+          docker cp $CONTAINER_ID:/ql/. qinglong/
           docker rm $CONTAINER_ID
           
           echo "=== Extracted files ==="
-          ls -la ql/
+          ls -la qinglong/
       
       - name: Setup Node.js
         if: steps.check.outputs.exists == 'false'
@@ -75,7 +69,7 @@ jobs:
       - name: Rebuild native modules
         if: steps.check.outputs.exists == 'false'
         run: |
-          cd ql
+          cd qinglong
           if [ -f "package.json" ]; then
             npm rebuild 2>/dev/null || true
           fi
@@ -83,7 +77,7 @@ jobs:
       - name: Clean up
         if: steps.check.outputs.exists == 'false'
         run: |
-          cd ql
+          cd qinglong
           
           rm -rf .git .github .vscode docker 2>/dev/null || true
           rm -f *.md CHANGELOG* Dockerfile* docker-compose* 2>/dev/null || true
@@ -105,24 +99,19 @@ jobs:
       - name: Create app.js wrapper
         if: steps.check.outputs.exists == 'false'
         run: |
-          cd ql
-          
-          cat > app.js << 'EOF'
+          cat > qinglong/app.js << 'EOF'
           const fs = require('fs');
           const path = require('path');
           
-          // 固定端口 8100
           process.env.QL_PORT = '8100';
           process.env.QL_DIR = process.env.QL_DIR || path.join(__dirname, 'data');
           process.env.NODE_ENV = 'production';
           
-          // 确保数据目录存在
           const dataDir = process.env.QL_DIR;
           if (!fs.existsSync(dataDir)) {
             fs.mkdirSync(dataDir, { recursive: true });
           }
           
-          // 查找并启动主程序
           const possiblePaths = [
             './static/build/app.js',
             './dist/app.js',
@@ -150,9 +139,8 @@ jobs:
       - name: Package
         if: steps.check.outputs.exists == 'false'
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          tar -czvf ${{ github.workspace }}/qinglong-v${VERSION}.tar.gz ql
-          ls -lh ${{ github.workspace }}/qinglong-v${VERSION}.tar.gz
+          tar -czvf qinglong-${{ steps.version.outputs.version }}.tar.gz qinglong
+          ls -lh qinglong-*.tar.gz
       
       - name: Create Release
         if: steps.check.outputs.exists == 'false'
