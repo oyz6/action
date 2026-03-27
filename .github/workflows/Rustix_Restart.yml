@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
   # schedule:
-  #   - cron: '0 2 * * *' # 如果需要定时运行，可以取消注释并修改时间 (UTC)
+  #   - cron: '0 2 * * *'
 
 jobs:
   rustix_task:
@@ -58,16 +58,11 @@ jobs:
 
       - name: 执行 Rustix 任务
         env:
+          RUSTIX: ${{ secrets.RUSTIX }}
           RUSTIX_ACCOUNTS: ${{ github.event.inputs.accounts }}
-          RUSTIX_1: ${{ secrets.RUSTIX_1 }}
-          RUSTIX_2: ${{ secrets.RUSTIX_2 }}
-          RUSTIX_3: ${{ secrets.RUSTIX_3 }}
-          RUSTIX_4: ${{ secrets.RUSTIX_4 }}
-          RUSTIX_5: ${{ secrets.RUSTIX_5 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
-          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
           python scripts/Rustix/Rustix.py
           echo "完成"
