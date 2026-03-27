@@ -68,7 +68,7 @@ jobs:
           PROXY_SERVER: http://127.0.0.1:7890
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
-          python scripts/Rustix.py
+          python scripts/Rustix/Rustix.py
           echo "完成"
 
       - name: 清理运行记录
