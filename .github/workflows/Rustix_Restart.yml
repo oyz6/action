@@ -68,7 +68,7 @@ jobs:
           echo "完成"
 
       - name: 上传调试截图
-        if: always()
+        if: always()     # 无论任务成功 / 失败 / 取消 都执行
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots-${{ github.run_number }}
