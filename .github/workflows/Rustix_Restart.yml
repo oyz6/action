@@ -67,6 +67,15 @@ jobs:
           python scripts/Rustix/Rustix.py
           echo "完成"
 
+      - name: 上传调试截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots-${{ github.run_number }}
+          path: output/screenshots/
+          retention-days: 3
+          if-no-files-found: ignore
+
       - name: 清理运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
