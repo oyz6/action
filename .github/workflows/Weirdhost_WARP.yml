@@ -1,0 +1,113 @@
+name: Weirdhost warp版
+
+on:
+#  schedule:
+#    - cron: '20 3 * * *'
+  workflow_dispatch:
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  add_time:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+#        with:
+#          repository: oyz6/scripts
+#          token: ${{ secrets.REPO_TOKEN }}
+
+      - name: 启用 WARP 网络
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      - name: 修复 DNS
+        run: |
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo systemctl disable systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1\n" | sudo tee /etc/resolv.conf
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
+          sleep 2
+
+          resolve_and_add() {
+            local domain=$1
+            getent hosts "$domain" >/dev/null 2>&1 && return
+            local ip=$(curl -sf --max-time 8 \
+              "https://cloudflare-dns.com/dns-query?name=${domain}&type=A" \
+              -H "accept: application/dns-json" | \
+              python3 -c "import sys,json
+          try:
+            d=json.load(sys.stdin)
+            for a in d.get('Answer',[]):
+              if a.get('type')==1: print(a['data']); break
+          except: pass" 2>/dev/null)
+            [ -z "$ip" ] && ip=$(curl -sf --max-time 8 \
+              "https://dns.google/resolve?name=${domain}&type=A" | \
+              python3 -c "import sys,json
+          try:
+            d=json.load(sys.stdin)
+            for a in d.get('Answer',[]):
+              if a.get('type')==1: print(a['data']); break
+          except: pass" 2>/dev/null)
+            [ -n "$ip" ] && echo "$ip $domain" | sudo tee -a /etc/hosts >/dev/null
+          }
+
+          for d in ctrl.lunes.host hub.weirdhost.xyz \
+            www.google.com www.gstatic.com www.recaptcha.net recaptcha.net \
+            apis.google.com accounts.google.com ssl.gstatic.com \
+            fonts.gstatic.com fonts.googleapis.com api.github.com; do
+            resolve_and_add "$d"
+          done
+
+          echo "验证:"
+          getent hosts hub.weirdhost.xyz && echo "  ✅ hub.weirdhost.xyz" || echo "  ❌ hub.weirdhost.xyz"
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            xvfb xdotool fonts-nanum ffmpeg
+          pip install --no-cache-dir \
+            seleniumbase aiohttp pynacl SpeechRecognition pydub
+
+      - name: 运行续期脚本
+        env:
+          WEIRDHOST_COOKIE_1: ${{ secrets.WEIRDHOST_COOKIE_1 }}
+          WEIRDHOST_COOKIE_2: ${{ secrets.WEIRDHOST_COOKIE_2 }}
+          WEIRDHOST_COOKIE_3: ${{ secrets.WEIRDHOST_COOKIE_3 }}
+          WEIRDHOST_COOKIE_4: ${{ secrets.WEIRDHOST_COOKIE_4 }}
+          WEIRDHOST_COOKIE_5: ${{ secrets.WEIRDHOST_COOKIE_5 }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RENEW_THRESHOLD_DAYS: "5"
+          FREE_RENEW_THRESHOLD_DAYS: "2"
+          USE_WARP: "false"
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            python scripts/Weirdhost/WARP/weirdhost_renew.py
+
+      - name: 清理旧运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
