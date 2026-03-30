@@ -1,8 +1,8 @@
 name: Weirdhost warp版
 
 on:
-#  schedule:
-#    - cron: '20 3 * * *'
+  schedule:
+    - cron: '20 3 * * *'
   workflow_dispatch:
 
 env:
@@ -19,9 +19,9 @@ jobs:
     steps:
       - name: 拉取私有仓库
         uses: actions/checkout@v4
-#        with:
-#          repository: oyz6/scripts
-#          token: ${{ secrets.REPO_TOKEN }}
+        with:
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
 
       - name: 启用 WARP 网络
         uses: fscarmen/warp-on-actions@v1.3
