@@ -22,141 +22,79 @@ jobs:
         with:
           repository: oyz6/scripts
           token: ${{ secrets.REPO_TOKEN }}
-          path: .  # 拉到根目录
 
       - name: 启用 WARP 网络
         uses: fscarmen/warp-on-actions@v1.3
         with:
-          stack: dual        # IPv4+IPv6
-          mode: client       # 客户端模式
+          stack: dual
+          mode: client
 
       - name: 修复 DNS
         run: |
-          echo "🔧 停用 systemd-resolved，直连 DNS..."
-          
-          # 停掉 systemd-resolved
+          echo "🔧 修复 DNS..."
           sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo systemctl disable systemd-resolved 2>/dev/null || true
-          
-          # 删掉软链接，写真实文件
           sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
-          
-          # 防止被覆盖
+          printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1\n" | sudo tee /etc/resolv.conf
           sudo chattr +i /etc/resolv.conf 2>/dev/null || true
-          
           sleep 2
-          
-          echo "🔍 DNS 测试:"
-          nslookup ctrl.lunes.host 1.1.1.1 || echo "⚠️ nslookup 失败"
-          getent hosts ctrl.lunes.host || echo "⚠️ getent 失败"
-          
-          # === 关键：如果系统 DNS 仍然失败，用 DoH 写 /etc/hosts 兜底 ===
-          echo ""
-          echo "🔧 预解析关键域名写入 /etc/hosts..."
-          
+
+          # DoH 兜底函数
           resolve_and_add() {
             local domain=$1
-            # 先测试系统能否解析
-            if getent hosts "$domain" > /dev/null 2>&1; then
-              echo "  ✅ $domain - 系统可解析"
-              return
-            fi
-            
-            # 系统不行，用 DoH
-            local ip=$(curl -s --max-time 8 \
+            getent hosts "$domain" >/dev/null 2>&1 && return
+            local ip=$(curl -sf --max-time 8 \
               "https://cloudflare-dns.com/dns-query?name=${domain}&type=A" \
               -H "accept: application/dns-json" | \
-              python3 -c "
-          import sys,json
+              python3 -c "import sys,json
           try:
             d=json.load(sys.stdin)
             for a in d.get('Answer',[]):
-              if a.get('type')==1:
-                print(a['data']); break
+              if a.get('type')==1: print(a['data']); break
           except: pass" 2>/dev/null)
-            
-            if [ -n "$ip" ]; then
-              echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
-              echo "  📝 $domain -> $ip (DoH 写入 hosts)"
-            else
-              # 再试 Google DoH
-              ip=$(curl -s --max-time 8 \
-                "https://dns.google/resolve?name=${domain}&type=A" | \
-                python3 -c "
-          import sys,json
+            [ -z "$ip" ] && ip=$(curl -sf --max-time 8 \
+              "https://dns.google/resolve?name=${domain}&type=A" | \
+              python3 -c "import sys,json
           try:
             d=json.load(sys.stdin)
             for a in d.get('Answer',[]):
-              if a.get('type')==1:
-                print(a['data']); break
+              if a.get('type')==1: print(a['data']); break
           except: pass" 2>/dev/null)
-              
-              if [ -n "$ip" ]; then
-                echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
-                echo "  📝 $domain -> $ip (Google DoH)"
-              else
-                echo "  ❌ $domain - 所有方式均失败"
-              fi
-            fi
+            [ -n "$ip" ] && echo "$ip $domain" | sudo tee -a /etc/hosts >/dev/null && echo "  📝 $domain -> $ip"
           }
-          
-          # 你的目标站点
-          resolve_and_add "ctrl.lunes.host"
-          resolve_and_add "hub.weirdhost.xyz"
-          
-          # reCAPTCHA 需要的 Google 域名
-          resolve_and_add "www.google.com"
-          resolve_and_add "www.gstatic.com"
-          resolve_and_add "www.recaptcha.net"
-          resolve_and_add "recaptcha.net"
-          resolve_and_add "apis.google.com"
-          resolve_and_add "accounts.google.com"
-          resolve_and_add "ssl.gstatic.com"
-          resolve_and_add "fonts.gstatic.com"
-          resolve_and_add "fonts.googleapis.com"
-          resolve_and_add "api.github.com"
-          
-          echo ""
-          echo "📄 /etc/resolv.conf:"
-          cat /etc/resolv.conf
-          
-          echo ""
-          echo "📄 /etc/hosts (新增):"
-          grep -v "^#\|^$\|localhost" /etc/hosts || true
-          
-          echo ""
-          echo "🔍 最终验证:"
-          getent hosts ctrl.lunes.host && echo "  ✅ ctrl.lunes.host OK" || echo "  ❌ ctrl.lunes.host FAIL"
-          getent hosts hub.weirdhost.xyz && echo "  ✅ hub.weirdhost.xyz OK" || echo "  ❌ hub.weirdhost.xyz FAIL"
-          getent hosts www.google.com && echo "  ✅ www.google.com OK" || echo "  ❌ www.google.com FAIL"
-          
-          echo ""
-          echo "🌍 当前 IP:"
-          curl -s --max-time 10 https://api.ipify.org && echo
-          echo "🔍 WARP Trace:"
+
+          for d in ctrl.lunes.host hub.weirdhost.xyz \
+            www.google.com www.gstatic.com www.recaptcha.net recaptcha.net \
+            apis.google.com accounts.google.com ssl.gstatic.com \
+            fonts.gstatic.com fonts.googleapis.com api.github.com; do
+            resolve_and_add "$d"
+          done
+
+          echo "🔍 验证:"
+          getent hosts ctrl.lunes.host && echo "  ✅ ctrl.lunes.host" || echo "  ❌ ctrl.lunes.host"
+          getent hosts hub.weirdhost.xyz && echo "  ✅ hub.weirdhost.xyz" || echo "  ❌ hub.weirdhost.xyz"
           curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
-          
-      - name: 设置 Python 环境
+
+      - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: 安装系统依赖
+      - name: 安装依赖
         run: |
+          # 系统依赖：xvfb(虚拟显示) + xdotool(点击Turnstile) + 韩文字体
           sudo apt-get update
-          sudo apt-get install -y xvfb x11-utils xdotool scrot ffmpeg
+          sudo apt-get install -y --no-install-recommends \
+            xvfb xdotool fonts-nanum fonts-noto-cjk-extra
 
-      - name: 安装韩文字体
-        run: |
-          sudo apt-get install -y fonts-nanum fonts-noto-cjk
+          # Python 依赖
+          pip install --no-cache-dir \
+            seleniumbase playwright \
+            aiohttp pynacl \
+            SpeechRecognition pydub
 
-      - name: 安装 Python 依赖
-        run: |
-          python -m pip install --upgrade pip
-          pip install seleniumbase aiohttp pynacl playwright SpeechRecognition pydub
-          playwright install chromium
-          playwright install-deps chromium
+          # Playwright 浏览器
+          playwright install --with-deps chromium
 
       - name: 运行续期脚本
         env:
@@ -173,8 +111,18 @@ jobs:
           FREE_RENEW_THRESHOLD_DAYS: "2"
           USE_WARP: "false"
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python scripts/Weirdhost/WARP/weirdhost_renew.py
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            python scripts/Weirdhost/WARP/weirdhost_renew.py
 
+      - name: 清理旧运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
+          
 #      - name: 上传调试截图
 #        if: always()
 #        uses: actions/upload-artifact@v4
@@ -186,12 +134,3 @@ jobs:
 #            output/screenshots/*.png
 #          if-no-files-found: ignore
 #          retention-days: 3
-
-      - name: 清理旧的工作流运行记录
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          delete_workflow_pattern: ${{ github.workflow }}
-          retain_days: 0
-          keep_minimum_runs: 3
