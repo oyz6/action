@@ -2,11 +2,6 @@ name: Rustix 自动重启
 
 on:
   workflow_dispatch:
-    inputs:
-      accounts:
-        description: '指定邮箱账号（留空运行全部，多个用逗号分隔）'
-        required: false
-        default: ''
 
 jobs:
   rustix_task:
@@ -56,12 +51,9 @@ jobs:
 
       - name: 执行 Rustix 任务
         env:
-          RUSTIX: ${{ secrets.RUSTIX }}
-          RUSTIX_ACCOUNTS: ${{ github.event.inputs.accounts }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
-          # 新增：长期有效的 cookies
           RUSTIX_COOKIES_JSON: ${{ secrets.RUSTIX_COOKIES }}
         run: |
           python scripts/Rustix/Rustix.py
