@@ -51,7 +51,7 @@ jobs:
 
       - name: 执行 Rustix 任务
         env:
-          RUSTIX_COOKIES_JSON: ${{ secrets.RUSTIX_COOKIES_JSON }}
+          RUSTIX_COOKIES_JSON: ${{ secrets.RUSTIX_COOKIES }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
