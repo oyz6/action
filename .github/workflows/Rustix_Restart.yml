@@ -62,7 +62,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
           # 新增：长期有效的 cookies
-          RUSTIX_COOKIES: ${{ secrets.RUSTIX_COOKIES }}
+          RUSTIX_COOKIES_JSON: ${{ secrets.RUSTIX_COOKIES }}
         run: |
           python scripts/Rustix/Rustix.py
           echo "完成"
