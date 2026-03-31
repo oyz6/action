@@ -34,7 +34,7 @@ jobs:
         run: |
           pip install -q seleniumbase pyvirtualdisplay requests PyNaCl
 
-      - name: 配置固定 IP 代理 (Hysteria2)
+      - name: 配置代理
         env:
           HY2_URL: ${{ secrets.HY2_URL_PL }}
         run: |
