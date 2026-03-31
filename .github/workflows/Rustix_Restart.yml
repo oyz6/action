@@ -7,8 +7,6 @@ on:
         description: '指定邮箱账号（留空运行全部，多个用逗号分隔）'
         required: false
         default: ''
-  # schedule:
-  #   - cron: '0 2 * * *'
 
 jobs:
   rustix_task:
@@ -30,11 +28,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 安装精简依赖
+      - name: 安装依赖
         run: |
-          pip install -q seleniumbase pyvirtualdisplay requests PyNaCl
+          pip install -q playwright requests PyNaCl
+          playwright install chromium
+          playwright install-deps chromium
 
-      - name: 配置代理
+      - name: 配置固定 IP 代理 (Hysteria2)
         env:
           HY2_URL: ${{ secrets.HY2_URL_PL }}
         run: |
@@ -68,13 +68,23 @@ jobs:
           echo "完成"
 
       - name: 上传调试截图
-        if: always()     # 无论任务成功 / 失败 / 取消 都执行
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots-${{ github.run_number }}
           path: output/screenshots/
           retention-days: 3
           if-no-files-found: ignore
+
+      - name: 清理运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
 
       - name: 清理运行记录
         if: always()
