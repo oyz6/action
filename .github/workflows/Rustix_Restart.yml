@@ -51,10 +51,10 @@ jobs:
 
       - name: 执行 Rustix 任务
         env:
+          RUSTIX_COOKIES_JSON: ${{ secrets.RUSTIX_COOKIES_JSON }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
-          RUSTIX_COOKIES_JSON: ${{ secrets.RUSTIX_COOKIES }}
         run: |
           python scripts/Rustix/Rustix.py
           echo "完成"
