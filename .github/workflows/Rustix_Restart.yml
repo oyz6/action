@@ -1,4 +1,4 @@
-name: Rustix 自动登录
+name: Rustix 自动重启
 
 on:
   workflow_dispatch:
@@ -30,9 +30,7 @@ jobs:
 
       - name: 安装依赖
         run: |
-          pip install -q curl_cffi requests PyNaCl playwright
-          playwright install chromium
-          playwright install-deps chromium
+          pip install -q curl_cffi requests PyNaCl
 
       - name: 配置固定 IP 代理 (Hysteria2)
         env:
@@ -63,6 +61,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
+          # 新增：长期有效的 cookies
+          RUSTIX_COOKIES: ${{ secrets.RUSTIX_COOKIES }}
         run: |
           python scripts/Rustix/Rustix.py
           echo "完成"
