@@ -30,9 +30,11 @@ jobs:
 
       - name: 安装依赖
         run: |
-          pip install -q curl_cffi requests PyNaCl
+          pip install -q curl_cffi requests PyNaCl playwright
+          playwright install chromium
+          playwright install-deps chromium
 
-      - name: 配置代理 (Hysteria2)
+      - name: 配置固定 IP 代理 (Hysteria2)
         env:
           HY2_URL: ${{ secrets.HY2_URL_PL }}
         run: |
@@ -69,7 +71,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-logs-${{ github.run_number }}
+          name: debug-${{ github.run_number }}
           path: output/
           retention-days: 3
           if-no-files-found: ignore
