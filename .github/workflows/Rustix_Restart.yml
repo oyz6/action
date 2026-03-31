@@ -30,9 +30,7 @@ jobs:
 
       - name: 安装依赖
         run: |
-          pip install -q playwright requests PyNaCl
-          playwright install chromium
-          playwright install-deps chromium
+          pip install -q requests PyNaCl cloudscraper
 
       - name: 配置固定 IP 代理 (Hysteria2)
         env:
