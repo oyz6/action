@@ -9,22 +9,39 @@ jobs:
   renew:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: write
 
     steps:
-      - name: Checkout repository
+      - name: 拉取私有仓库
         uses: actions/checkout@v4
+        with:
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
 
-      - name: Set up Python
+      - name: 配置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: pip install requests ddddocr beautifulsoup4 lxml
 
-      - name: Run renewal script
+      - name: 执行续期任务
         env:
           LEME: ${{ secrets.LEME }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python renew.py
+        run: python scripts/Leme/renew.py
+
+      - name: 清理运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
