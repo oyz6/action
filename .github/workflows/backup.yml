@@ -34,7 +34,7 @@ jobs:
           WEBDAV: ${{ secrets.WEBDAV }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          WEBDAV_URL: https://gima.teracloud.jp/dav/github/
+          WEBDAV_URL: ${{ secrets.WEBDAV_URL }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python scripts/backup.py
