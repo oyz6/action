@@ -1,28 +1,23 @@
-name: 自动备份到WebDAV
+name: 备份仓库文件
 
 on:
   schedule:
-    # 每天中国时间早上5点 (UTC时间21点)
     - cron: '0 21 * * *'
-  
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   backup:
     name: 执行备份
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       actions: write
     
     steps:
-      - name: 拉取私有仓库
+      - name: 拉取仓库
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取完整历史
-          repository: oyz6/scripts
-          token: ${{ secrets.REPO_TOKEN }}
-          path: .
+          fetch-depth: 0
       
       - name: 安装 Python
         uses: actions/setup-python@v4
@@ -55,12 +50,11 @@ jobs:
             -d parse_mode="HTML" \
             -d text="❌ <b>备份任务失败</b>%0A%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
       
-      - name: 清理历史运行记录
-        if: always()
+      - name: 清理工作流记录
         uses: Mattraks/delete-workflow-runs@v2
         with:
-          token: ${{ secrets.REPO_TOKEN }}
+          token: ${{ github.token }}
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 1
+          keep_minimum_runs: 3
