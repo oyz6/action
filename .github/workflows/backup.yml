@@ -42,7 +42,7 @@ jobs:
           WEBDAV_URL: https://gima.teracloud.jp/dav/github/oyz6/
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          python .github/scripts/backup.py
+          python scripts/backup.py
       
       - name: 失败时通知
         if: failure()
