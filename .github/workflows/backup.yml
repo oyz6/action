@@ -2,7 +2,7 @@ name: 备份仓库文件
 
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 21 * * *'  # 每天 UTC 21:00 (北京时间 5:00)
   workflow_dispatch:
 
 jobs:
@@ -12,34 +12,33 @@ jobs:
     permissions:
       contents: read
       actions: write
-    
+
     steps:
       - name: 拉取仓库
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: 安装 Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: 安装依赖
         run: |
           pip install requests pyminizip
-      
+
       - name: 执行备份
         env:
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-          WEBDAV: ${{ secrets.WEBDAV }}
+          WEBDAV: ${{ secrets.WEBDAV }}  # 格式: username-----password-----url
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          WEBDAV_URL: ${{ secrets.WEBDAV_URL }}
           WEBDAV_ZIP_PASSWORD: ${{ secrets.WEBDAV_ZIP_PASSWORD }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python scripts/backup.py
-      
+
       - name: 失败时通知
         if: failure()
         env:
@@ -50,7 +49,7 @@ jobs:
             -d chat_id="${TG_CHAT_ID}" \
             -d parse_mode="HTML" \
             -d text="❌ <b>备份任务失败</b>%0A%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-      
+
       - name: 清理工作流记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
