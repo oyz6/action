@@ -1,0 +1,49 @@
+name: 自动备份到WebDAV
+
+on:
+  schedule:
+    # 每天中国时间早上5点 (UTC时间21点)
+    - cron: '0 21 * * *'
+  
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Dependencies
+      run: |
+        pip install requests
+    
+    - name: Run Backup Script
+      env:
+        REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+        WEBDAV: ${{ secrets.WEBDAV }}
+        TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        WEBDAV_URL: https://gima.teracloud.jp/dav/github/oyz6/
+        GITHUB_REPOSITORY: ${{ github.repository }}
+      run: |
+        python .github/scripts/backup.py
+    
+    - name: Notify on Failure
+      if: failure()
+      env:
+        TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      run: |
+        curl -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+          -d chat_id="${TG_CHAT_ID}" \
+          -d parse_mode="HTML" \
+          -d text="❌ <b>备份任务失败</b>%0A%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
