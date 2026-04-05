@@ -9,41 +9,58 @@ on:
 
 jobs:
   backup:
+    name: 执行备份
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
     
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # 获取完整历史
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install Dependencies
-      run: |
-        pip install requests
-    
-    - name: Run Backup Script
-      env:
-        REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-        WEBDAV: ${{ secrets.WEBDAV }}
-        TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-        TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        WEBDAV_URL: https://gima.teracloud.jp/dav/github/oyz6/
-        GITHUB_REPOSITORY: ${{ github.repository }}
-      run: |
-        python .github/scripts/backup.py
-    
-    - name: Notify on Failure
-      if: failure()
-      env:
-        TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-        TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-      run: |
-        curl -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-          -d chat_id="${TG_CHAT_ID}" \
-          -d parse_mode="HTML" \
-          -d text="❌ <b>备份任务失败</b>%0A%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+      
+      - name: 安装 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: 安装依赖
+        run: |
+          pip install requests
+      
+      - name: 执行备份
+        env:
+          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+          WEBDAV: ${{ secrets.WEBDAV }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          WEBDAV_URL: https://gima.teracloud.jp/dav/github/oyz6/
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python .github/scripts/backup.py
+      
+      - name: 失败时通知
+        if: failure()
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          curl -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            -d parse_mode="HTML" \
+            -d text="❌ <b>备份任务失败</b>%0A%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      
+      - name: 清理历史运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.REPO_TOKEN }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 1
