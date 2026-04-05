@@ -143,7 +143,7 @@ def upload_to_webdav(backup_path):
 
     upload_url = webdav_url.rstrip('/') + '/' + backup_path.name
 
-    print(f"📤 上传到 WebDAV: {upload_url}")
+    print(f"📤 上传到 WebDAV")
 
     try:
         with open(backup_path, 'rb') as f:
