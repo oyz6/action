@@ -8,7 +8,7 @@ set -euo pipefail
 
 BAIHU_USER=$(whoami)
 BAIHU_HOME="/home/${BAIHU_USER}/www"
-BAIHU_VERSION="v1.0.28"
+BAIHU_VERSION="v1.0.39"
 BAIHU_URL="https://github.com/engigu/baihu-panel/releases/download/${BAIHU_VERSION}/baihu-linux-amd64.tar.gz"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RED='\033[0;31m'; NC='\033[0m'
