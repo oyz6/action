@@ -71,6 +71,9 @@ jobs:
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          ENABLE_WEBVIEW: "true"
+          WEBVIEW_MERGE_MODE: "smart"
+          WEBVIEW_SOURCE_URL: "https://raw.githubusercontent.com/yaoxieyoulei/YYKM_assets/main/webview.m3u"
         run: python scripts/TaoIPTV/main.py
 
 #      - name: 上传调试截图
