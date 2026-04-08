@@ -8,6 +8,7 @@ on:
 
 jobs:
   scrape:
+    name: 执行爬虫
     runs-on: ubuntu-latest
     permissions:
       contents: write
