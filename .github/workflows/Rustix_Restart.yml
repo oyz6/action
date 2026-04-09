@@ -56,7 +56,16 @@ jobs:
           EOF
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
           sleep 5
-          curl -x http://127.0.0.1:1080 -s https://api.ip.sb/ip || echo "⚠️ 代理测试失败"
+          
+          # 测试 Rustix 登录页面
+          echo "🔍 测试代理连接 Rustix..."
+          HTTP_CODE=$(curl -x http://127.0.0.1:1080 -s -o /dev/null -w "%{http_code}" --max-time 10 https://my.rustix.me/auth/login)
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ 代理测试成功 (HTTP $HTTP_CODE)"
+          else
+            echo "⚠️ 代理测试失败 (HTTP $HTTP_CODE)"
+            exit 1
+          fi
 
       - name: 执行任务
         env:
@@ -69,14 +78,14 @@ jobs:
           xvfb-run -a python scripts/Rustix/Rustix.py
           echo "✅ 执行完成"
 
-#      - name: 上传截图和日志
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: rustix-debug-${{ github.run_number }}
-#          path: output/
-#          retention-days: 3
-#          if-no-files-found: ignore
+      - name: 上传截图和日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustix-debug-${{ github.run_number }}
+          path: output/
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: 清理运行记录
         if: always()
