@@ -61,7 +61,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
         run: |
-          xvfb-run -a python scripts/Rustix/rustix_selenium.py
+          xvfb-run -a python scripts/Rustix/Rustix.py
           echo "✅ 执行完成"
 
       - name: 上传截图和日志
