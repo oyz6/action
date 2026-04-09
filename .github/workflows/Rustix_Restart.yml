@@ -78,14 +78,14 @@ jobs:
           xvfb-run -a python scripts/Rustix/Rustix.py
           echo "✅ 执行完成"
 
-      - name: 上传截图和日志
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rustix-debug-${{ github.run_number }}
-          path: output/
-          retention-days: 3
-          if-no-files-found: ignore
+#      - name: 上传截图和日志
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: rustix-debug-${{ github.run_number }}
+#          path: output/
+#          retention-days: 3
+#          if-no-files-found: ignore
 
       - name: 清理运行记录
         if: always()
@@ -95,4 +95,4 @@ jobs:
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 3
+          keep_minimum_runs: 2
