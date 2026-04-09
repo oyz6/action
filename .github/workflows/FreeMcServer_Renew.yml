@@ -33,7 +33,7 @@ jobs:
 
       - name: 配置代理
         env:
-          HY2_URL: ${{ secrets.HY2_URL }}
+          HY2_URL: ${{ secrets.HY2_URL_PL }}  # 注意这里我改为HY2_URL_PL了
         run: |
           if [ -z "$HY2_URL" ]; then
             echo "INFO: 无代理配置，使用直连模式"
