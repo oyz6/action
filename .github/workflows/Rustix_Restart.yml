@@ -1,6 +1,8 @@
 name: Rustix 自动重启
 
 on:
+  schedule:
+    - cron: '0 */6 * * *'  # 每 6 小时执行
   workflow_dispatch:
 
 jobs:
@@ -25,8 +27,9 @@ jobs:
 
       - name: 安装依赖
         run: |
-          pip install -q curl_cffi requests PyNaCl
-          node --version || echo "Node.js already available"
+          pip install -q seleniumbase
+          sudo apt-get update
+          sudo apt-get install -y xvfb
 
       - name: 配置固定 IP 代理 (Hysteria2)
         env:
@@ -48,23 +51,24 @@ jobs:
             listen: 127.0.0.1:7890
           EOF
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
-          sleep 3
+          sleep 5
+          curl -x http://127.0.0.1:7890 -s https://api.ip.sb/ip || echo "⚠️ 代理测试失败"
 
-      - name: 执行 Rustix 任务
+      - name: 执行 Rustix 任务 (多账号)
         env:
-          RUSTIX_COOKIES_JSON: ${{ secrets.RUSTIX_COOKIES }}
+          RUSTIX: ${{ secrets.RUSTIX }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: http://127.0.0.1:7890
         run: |
-          python scripts/Rustix/Rustix.py
-          echo "完成"
+          xvfb-run -a python scripts/Rustix/rustix_selenium.py
+          echo "✅ 执行完成"
 
-      - name: 上传调试日志
+      - name: 上传截图和日志
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-${{ github.run_number }}
+          name: rustix-debug-${{ github.run_number }}
           path: output/
           retention-days: 3
           if-no-files-found: ignore
@@ -77,4 +81,4 @@ jobs:
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 2
+          keep_minimum_runs: 3
