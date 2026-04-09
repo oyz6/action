@@ -7,7 +7,7 @@
 - name: 拉取私有仓库
   uses: actions/checkout@v4
   with:
-    repository: 用户名/私有仓库名
+    repository: ${{ github.repository_owner }}/私有仓库名
     token: ${{ secrets.REPO_TOKEN }}
     path: .  # 拉到根目录
 ```
