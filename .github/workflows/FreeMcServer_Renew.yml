@@ -33,7 +33,7 @@ jobs:
 
       - name: 配置代理
         env:
-          HY2_URL: ${{ secrets.HY2_URL_PL }}  # 注意这里我改为HY2_URL_PL了
+          HY2_URL: ${{ secrets.HY2_URL }}
         run: |
           if [ -z "$HY2_URL" ]; then
             echo "INFO: 无代理配置，使用直连模式"
@@ -63,6 +63,44 @@ jobs:
           sleep 3
           echo "PROXY_SERVER=http://127.0.0.1:1080" >> $GITHUB_ENV
           echo "INFO: 代理已启动"
+
+      - name: 测试代理连接
+        env:
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+        run: |
+          TEST_URL="https://panel.freemcserver.net/user/login"
+          
+          echo "INFO: 测试访问 $TEST_URL"
+          
+          if [ -n "$PROXY_SERVER" ]; then
+            echo "INFO: 使用代理: $PROXY_SERVER"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              -x "$PROXY_SERVER" \
+              --max-time 30 \
+              --retry 2 \
+              "$TEST_URL")
+          else
+            echo "INFO: 使用直连"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 30 \
+              --retry 2 \
+              "$TEST_URL")
+          fi
+          
+          echo "INFO: HTTP 状态码: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" = "403" ]; then
+            echo "⚠️ 访问被阻止 (HTTP 403)，请更换代理或检查 IP"
+            exit 1
+          elif [ "$HTTP_CODE" = "000" ] || [ -z "$HTTP_CODE" ]; then
+            echo "⚠️ 连接失败，无法访问目标网站"
+            exit 1
+          elif [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]; then
+            echo "✅ 连接正常 (HTTP $HTTP_CODE)"
+          else
+            echo "⚠️ 返回异常状态码: $HTTP_CODE"
+            exit 1
+          fi
 
       - name: 执行续订脚本
         env:
