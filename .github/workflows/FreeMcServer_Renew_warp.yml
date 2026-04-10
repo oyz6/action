@@ -1,4 +1,4 @@
-name: FreeMcServer warp 自动续订
+name: FreeMcServer-warp 续订
 
 on:
   schedule:
