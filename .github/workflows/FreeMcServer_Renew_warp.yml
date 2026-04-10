@@ -128,7 +128,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          python scripts/FreeMcServer/warp.py
+          python scripts/FreeMcServer/main.py
 
 #      - name: 上传截图
 #        if: always()
