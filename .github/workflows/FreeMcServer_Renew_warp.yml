@@ -128,11 +128,16 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          echo "[INFO] 开始执行 FreeMcServer 续订脚本"
-          echo "[INFO] 当前网络状态:"
-          curl -s https://www.cloudflare.com/cdn-cgi/trace | head -n 5
-          
-          python scripts/FreeMcServer/warp.py
+          python scripts/FreeMcServer/main.py
+
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-${{ github.run_number }}
+#          path: output/screenshots/*.png
+#          retention-days: 7
+#          if-no-files-found: ignore
 
       - name: 清理运行记录
         if: always()
