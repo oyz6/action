@@ -131,7 +131,7 @@ jobs:
           echo "[INFO] 当前网络状态:"
           curl -s https://www.cloudflare.com/cdn-cgi/trace | head -n 5
           
-          python scripts/FreeMcServer/main.py
+          python scripts/FreeMcServer/warp.py
 
       - name: 清理运行记录
         if: always()
