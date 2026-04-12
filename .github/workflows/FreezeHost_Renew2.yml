@@ -1,4 +1,4 @@
-name: FreezeHost 自动续期
+name: FreezeHost 自动续期-2
 
 on:
   schedule:
