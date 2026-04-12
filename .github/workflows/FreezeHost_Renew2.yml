@@ -2,19 +2,47 @@ name: FreezeHost 自动续期-2
 
 on:
   schedule:
-    - cron: '0 8 */10 * *'
+    - cron: '0 1 */10 * *'   # FREEZEHOST_DISCORD_TOKEN_1 - 下一次: 自动计算
+    - cron: '0 2 */10 * *'   # FREEZEHOST_DISCORD_TOKEN_2 - 下一次: 自动计算
   workflow_dispatch:
+    inputs:
+      token_number:
+        description: '选择 Token 编号'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
 
 jobs:
   renew:
     name: 执行续期
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: write
       actions: write
 
     steps:
+      - name: 确定使用哪个 Token
+        id: select_token
+        run: |
+          HOUR=$(date -u +%H)
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TOKEN_NUM="${{ github.event.inputs.token_number }}"
+          else
+            case "$HOUR" in
+              01) TOKEN_NUM=1 ;;
+              02) TOKEN_NUM=2 ;;
+              *) TOKEN_NUM=1 ;;
+            esac
+          fi
+
+          echo "token_number=$TOKEN_NUM" >> "$GITHUB_OUTPUT"
+          echo "::notice::选择 Token 编号: $TOKEN_NUM"
+
       - name: 拉取私有仓库
         uses: actions/checkout@v4
         with:
@@ -31,6 +59,8 @@ jobs:
         run: |
           pip install playwright
           playwright install chromium --with-deps
+          sudo apt-get update
+          sudo apt-get install -y jq bc
 
       - name: 启用 WARP 网络
         uses: fscarmen/warp-on-actions@v1.3
@@ -58,22 +88,186 @@ jobs:
           echo "[INFO] 当前出口 IP:"
           curl -s --max-time 10 https://api.ipify.org && echo
           echo "[INFO] WARP Trace:"
-          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc=' || true
+
+      - name: 设置 Discord Token
+        run: |
+          TOKEN_NUM="${{ steps.select_token.outputs.token_number }}"
+
+          case "$TOKEN_NUM" in
+            1) echo "DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_1 }}" >> "$GITHUB_ENV" ;;
+            2) echo "DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_2 }}" >> "$GITHUB_ENV" ;;
+            *) echo "DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_1 }}" >> "$GITHUB_ENV" ;;
+          esac
+
+          echo "::notice::已设置 Token 编号: $TOKEN_NUM"
 
       - name: 运行续期脚本
+        id: run_renew
         env:
-          FREEZEHOST_DISCORD_TOKEN: ${{ secrets.FREEZEHOST_DISCORD_TOKEN_2 }}
+          FREEZEHOST_DISCORD_TOKEN: ${{ env.DISCORD_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python scripts/FreezeHost/renew.py
+        run: |
+          echo "使用 Token 编号: ${{ steps.select_token.outputs.token_number }}"
+          python scripts/FreezeHost/renew.py 2>&1 | tee renew.log
 
-#      - name: 上传截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: renew-screenshots
-#          path: screenshots/
-#          retention-days: 7
+      - name: 提取剩余天数
+        id: extract_days
+        if: success()
+        run: |
+          set -e
+
+          if [ -f "renew_result.json" ]; then
+            REMAINING_DAYS=$(jq -r '.remaining_days // empty' renew_result.json)
+          else
+            REMAINING_DAYS=""
+          fi
+
+          if [ -z "$REMAINING_DAYS" ] && [ -f "renew.log" ]; then
+            LINE=$(grep -E "RENEWED, .* DAYS? AND .* HOURS? REMAINING" renew.log | tail -n1 || true)
+
+            if [ -n "$LINE" ]; then
+              DAYS=$(echo "$LINE" | sed -E 's/.*RENEWED, ([0-9]+) DAYS? AND ([0-9.]+) HOURS? REMAINING.*/\1/')
+              HOURS=$(echo "$LINE" | sed -E 's/.*RENEWED, ([0-9]+) DAYS? AND ([0-9.]+) HOURS? REMAINING.*/\2/')
+              REMAINING_DAYS=$(echo "scale=4; $DAYS + ($HOURS / 24)" | bc)
+            fi
+          fi
+
+          if [ -z "$REMAINING_DAYS" ]; then
+            echo "::warning::未能提取剩余天数，默认使用 11"
+            REMAINING_DAYS="11"
+          fi
+
+          echo "remaining_days=$REMAINING_DAYS" >> "$GITHUB_OUTPUT"
+          echo "::notice::剩余天数: $REMAINING_DAYS"
+
+      - name: 计算下次运行时间
+        id: calc_next_run
+        if: success()
+        run: |
+          set -e
+
+          REMAINING_DAYS="${{ steps.extract_days.outputs.remaining_days }}"
+          TOKEN_NUM="${{ steps.select_token.outputs.token_number }}"
+
+          if (( $(echo "$REMAINING_DAYS > 2" | bc -l) )); then
+            DAYS_UNTIL_NEXT_RUN=$(echo "$REMAINING_DAYS - 2" | bc)
+          else
+            DAYS_UNTIL_NEXT_RUN="1"
+          fi
+
+          DAYS_INT=$(printf "%.0f" "$DAYS_UNTIL_NEXT_RUN")
+
+          CURRENT_HOUR=$(date -u +%H)
+          CURRENT_MINUTE=$(date -u +%M)
+
+          NEXT_RUN_DATE=$(date -u -d "+${DAYS_INT} days" +"%Y-%m-%d ${CURRENT_HOUR}:${CURRENT_MINUTE}")
+          NEXT_RUN_DAY=$(date -u -d "+${DAYS_INT} days" +"%-d")
+          NEXT_RUN_MONTH=$(date -u -d "+${DAYS_INT} days" +"%-m")
+
+          # 保持每个 token 对应不同小时
+          case "$TOKEN_NUM" in
+            1) NEXT_RUN_HOUR=1 ;;
+            2) NEXT_RUN_HOUR=2 ;;
+            *) NEXT_RUN_HOUR="$CURRENT_HOUR" ;;
+          esac
+
+          NEW_CRON="$CURRENT_MINUTE $NEXT_RUN_HOUR $NEXT_RUN_DAY $NEXT_RUN_MONTH *"
+
+          echo "next_cron=$NEW_CRON" >> "$GITHUB_OUTPUT"
+          echo "next_run_date=$NEXT_RUN_DATE" >> "$GITHUB_OUTPUT"
+          echo "token_num=$TOKEN_NUM" >> "$GITHUB_OUTPUT"
+
+          echo "::notice::Token $TOKEN_NUM 下次运行: $NEXT_RUN_DATE UTC"
+          echo "::notice::新 Cron 表达式: $NEW_CRON"
+
+      - name: 检出当前仓库用于更新 workflow
+        if: success() && steps.calc_next_run.outputs.next_cron != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.REPO_TOKEN }}
+          path: workflow_repo
+          fetch-depth: 0
+
+      - name: 更新 Workflow Cron
+        if: success() && steps.calc_next_run.outputs.next_cron != ''
+        run: |
+          set -e
+
+          TOKEN_NUM="${{ steps.calc_next_run.outputs.token_num }}"
+          NEW_CRON="${{ steps.calc_next_run.outputs.next_cron }}"
+          NEXT_DATE="${{ steps.calc_next_run.outputs.next_run_date }}"
+
+          cd workflow_repo
+
+          echo "::notice::github.workflow = ${{ github.workflow }}"
+          echo "::notice::github.workflow_ref = ${{ github.workflow_ref }}"
+
+          WORKFLOW_FILE=$(echo "${{ github.workflow_ref }}" | sed -E 's|^[^/]+/[^/]+/(\.github/workflows/[^@]+)@.*|\1|')
+
+          if [ ! -f "$WORKFLOW_FILE" ]; then
+            echo "::error::当前 workflow 文件不存在: $WORKFLOW_FILE"
+            echo "::group::.github/workflows 列表"
+            find .github/workflows -type f || true
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          echo "::notice::当前 workflow 文件: $WORKFLOW_FILE"
+
+          TARGET_PATTERN="FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM"
+          NEW_LINE="    - cron: '$NEW_CRON'   # FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM - 下一次: $NEXT_DATE UTC"
+
+          LINE_NUM=$(grep -n "$TARGET_PATTERN" "$WORKFLOW_FILE" | cut -d: -f1 | head -n1 || true)
+
+          if [ -z "$LINE_NUM" ]; then
+            echo "::error::找不到 $TARGET_PATTERN 对应行"
+            echo "::group::文件内容"
+            nl -ba "$WORKFLOW_FILE"
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          echo "::notice::更新第 $LINE_NUM 行"
+
+          echo "::group::原始行"
+          sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
+          echo "::endgroup::"
+
+          sed -i "${LINE_NUM}c\\
+          $NEW_LINE
+          " "$WORKFLOW_FILE"
+
+          echo "::group::修改后"
+          sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
+          echo "::endgroup::"
+
+          echo "::group::完整 schedule 配置"
+          sed -n '/schedule:/,/workflow_dispatch:/p' "$WORKFLOW_FILE"
+          echo "::endgroup::"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$WORKFLOW_FILE"
+
+          if git diff --staged --quiet; then
+            echo "::notice::没有变化需要提交"
+            exit 0
+          fi
+
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          git commit \
+            -m "🤖 自动更新 Token $TOKEN_NUM 下次运行时间" \
+            -m "Token: FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM" \
+            -m "下次运行: $NEXT_DATE UTC" \
+            -m "Cron: $NEW_CRON" \
+            -m "自动生成: $TIMESTAMP"
+
+          git remote set-url origin "https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push
 
       - name: 清理历史运行记录
         uses: Mattraks/delete-workflow-runs@v2
