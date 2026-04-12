@@ -161,6 +161,14 @@ jobs:
           echo "::notice::Token ${{ steps.select_token.outputs.token_number }} 下次运行: $NEXT_RUN_DATE UTC"
           echo "::notice::新 Cron 表达式: $NEW_CRON"
 
+      - name: 检出 Workflow 仓库
+        if: success() && steps.calc_next_run.outputs.next_cron != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.REPO_TOKEN }}
+          path: workflow_repo
+
       - name: 更新 Workflow Cron
         if: success() && steps.calc_next_run.outputs.next_cron != ''
         run: |
@@ -168,36 +176,114 @@ jobs:
           NEW_CRON="${{ steps.calc_next_run.outputs.next_cron }}"
           NEXT_DATE="${{ steps.calc_next_run.outputs.next_run_date }}"
           
-          # 拉取 workflow 仓库
-          git clone https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/${{ github.repository }}.git workflow_repo
           cd workflow_repo
           
-          WORKFLOW_FILE=".github/workflows/freezehost-renew.yml"
+          # 自动查找当前 workflow 文件
+          WORKFLOW_NAME="${{ github.workflow }}"
+          echo "::notice::查找 workflow: $WORKFLOW_NAME"
+          
+          # 方法1: 通过 workflow 名称查找
+          WORKFLOW_FILE=$(find .github/workflows -type f \( -name "*.yml" -o -name "*.yaml" \) | while read file; do
+            if grep -q "name: $WORKFLOW_NAME" "$file"; then
+              echo "$file"
+              break
+            fi
+          done)
+          
+          # 方法2: 如果方法1失败，通过当前运行的 workflow 文件名查找
+          if [ -z "$WORKFLOW_FILE" ]; then
+            CURRENT_FILE="${{ github.workflow_ref }}"
+            # 提取文件路径，格式如: owner/repo/.github/workflows/file.yml@ref
+            WORKFLOW_FILE=$(echo "$CURRENT_FILE" | sed 's|.*/.github/workflows/\([^@]*\)@.*|.github/workflows/\1|')
+          fi
+          
+          # 方法3: 如果还是找不到，列出所有 workflow 文件
+          if [ ! -f "$WORKFLOW_FILE" ]; then
+            echo "::warning::未能自动识别 workflow 文件，列出所有文件:"
+            find .github/workflows -type f \( -name "*.yml" -o -name "*.yaml" \)
+            
+            # 尝试通过关键字查找（包含 FreezeHost 和 DISCORD_TOKEN）
+            WORKFLOW_FILE=$(grep -l "FREEZEHOST_DISCORD_TOKEN" .github/workflows/*.{yml,yaml} 2>/dev/null | head -n1)
+          fi
+          
+          if [ ! -f "$WORKFLOW_FILE" ]; then
+            echo "::error::找不到 workflow 文件"
+            echo "尝试的路径: $WORKFLOW_FILE"
+            echo "当前目录内容:"
+            ls -la .github/workflows/
+            exit 1
+          fi
+          
+          echo "::notice::找到 workflow 文件: $WORKFLOW_FILE"
           
           # 备份原文件
           cp "$WORKFLOW_FILE" "${WORKFLOW_FILE}.bak"
           
-          # 根据 token 编号更新对应的 cron 行
-          case $TOKEN_NUM in
-            1) LINE_NUM=5 ;;
-            2) LINE_NUM=6 ;;
-            3) LINE_NUM=7 ;;
-            4) LINE_NUM=8 ;;
-            5) LINE_NUM=9 ;;
-            *) LINE_NUM=5 ;;
-          esac
+          # 查找对应 token 的 cron 行号
+          echo "::notice::查找 Token $TOKEN_NUM 的 cron 配置..."
+          
+          # 使用更灵活的方式查找行号
+          LINE_NUM=$(grep -n "FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM" "$WORKFLOW_FILE" | grep "cron:" | cut -d: -f1)
+          
+          if [ -z "$LINE_NUM" ]; then
+            echo "::warning::未找到 Token $TOKEN_NUM 的 cron 配置，尝试按序号匹配..."
+            # 按顺序获取第 N 个 cron 行
+            LINE_NUM=$(grep -n "cron:" "$WORKFLOW_FILE" | sed -n "${TOKEN_NUM}p" | cut -d: -f1)
+          fi
+          
+          if [ -z "$LINE_NUM" ]; then
+            echo "::error::无法确定要更新的行号"
+            exit 1
+          fi
+          
+          echo "::notice::将更新第 $LINE_NUM 行"
+          
+          # 显示原始内容
+          echo "::group::原始行内容"
+          sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
+          echo "::endgroup::"
           
           # 更新 cron 表达式和注释
-          sed -i "${LINE_NUM}s|.*|    - cron: '$NEW_CRON'   # FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM - 下一次: $NEXT_DATE UTC|" "$WORKFLOW_FILE"
+          sed -i "${LINE_NUM}s|.*cron:.*|    - cron: '$NEW_CRON'   # FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM - 下一次: $NEXT_DATE UTC|" "$WORKFLOW_FILE"
+          
+          # 显示修改后的内容
+          echo "::group::修改后的行内容"
+          sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
+          echo "::endgroup::"
+          
+          # 显示完整的 schedule 部分
+          echo "::group::完整 schedule 配置"
+          sed -n '/schedule:/,/workflow_dispatch:/p' "$WORKFLOW_FILE"
+          echo "::endgroup::"
           
           # 提交更改
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$WORKFLOW_FILE"
-          git commit -m "🤖 自动更新 Token $TOKEN_NUM 下次运行时间: $NEXT_DATE UTC" || echo "没有变化需要提交"
-          git push || echo "推送失败"
           
-          echo "::notice::✅ Workflow 已更新: Token $TOKEN_NUM -> $NEXT_DATE UTC"
+          if git diff --staged --quiet; then
+            echo "::notice::⚠️ 没有变化需要提交"
+          else
+            # 生成时间戳
+            TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+            
+            # 提交（使用 -m 多次指定多行）
+            git commit \
+              -m "🤖 自动更新 Token $TOKEN_NUM 下次运行时间" \
+              -m "" \
+              -m "- Token: FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM" \
+              -m "- 下次运行: $NEXT_DATE UTC" \
+              -m "- Cron: $NEW_CRON" \
+              -m "- 自动生成于: $TIMESTAMP"
+            
+            # 推送
+            if git push; then
+              echo "::notice::✅ Workflow 已更新并推送"
+            else
+              echo "::error::❌ 推送失败"
+              exit 1
+            fi
+          fi
 
 #      - name: 上传截图
 #        if: always()
