@@ -1,4 +1,4 @@
-name: FreezeHost 续期多账号版
+name: FreezeHost 续期多账号版  # REPO_TOKEN 权限要求 repo + workflow
 
 on:
   schedule:
