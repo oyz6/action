@@ -3,7 +3,7 @@ name: FreezeHost 自动续期-2
 on:
   schedule:
     - cron: '0 1 */10 * *'   # FREEZEHOST_DISCORD_TOKEN_1 - 下一次: 自动计算
-    - cron: '0 2 */10 * *'   # FREEZEHOST_DISCORD_TOKEN_2 - 下一次: 自动计算
+    - cron: '37 2 21 4 *'   # FREEZEHOST_DISCORD_TOKEN_2 - 下一次: 2026-04-21 09:37 UTC
   workflow_dispatch:
     inputs:
       token_number:
