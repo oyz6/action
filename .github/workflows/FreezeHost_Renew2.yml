@@ -163,8 +163,6 @@ jobs:
 
       - name: 更新 Workflow Cron
         if: success() && steps.calc_next_run.outputs.next_cron != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
 
@@ -174,21 +172,12 @@ jobs:
 
           cd workflow_repo
 
-          echo "::notice::github.workflow      = ${{ github.workflow }}"
-          echo "::notice::github.workflow_ref  = ${{ github.workflow_ref }}"
-
-          # 直接从 workflow_ref 提取当前 workflow 文件路径
           WORKFLOW_FILE=$(echo "${{ github.workflow_ref }}" | sed -E 's|^[^/]+/[^/]+/(\.github/workflows/[^@]+)@.*|\1|')
 
           if [ ! -f "$WORKFLOW_FILE" ]; then
             echo "::error::当前 workflow 文件不存在: $WORKFLOW_FILE"
-            echo "::group::.github/workflows 列表"
-            find .github/workflows -type f
-            echo "::endgroup::"
             exit 1
           fi
-
-          echo "::notice::当前 workflow 文件: $WORKFLOW_FILE"
 
           TARGET_PATTERN="FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM"
           NEW_LINE="    - cron: '$NEW_CRON'   # FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM - 下一次: $NEXT_DATE UTC"
@@ -197,25 +186,13 @@ jobs:
 
           if [ -z "$LINE_NUM" ]; then
             echo "::error::找不到 $TARGET_PATTERN 对应行"
-            echo "::group::文件内容"
             nl -ba "$WORKFLOW_FILE"
-            echo "::endgroup::"
             exit 1
           fi
-
-          echo "::notice::更新第 $LINE_NUM 行"
-
-          echo "::group::原始行"
-          sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
-          echo "::endgroup::"
 
           sed -i "${LINE_NUM}c\\
           $NEW_LINE
           " "$WORKFLOW_FILE"
-
-          echo "::group::修改后"
-          sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
-          echo "::endgroup::"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -235,7 +212,7 @@ jobs:
             -m "Cron: $NEW_CRON" \
             -m "自动生成: $TIMESTAMP"
 
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git remote set-url origin "https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/${{ github.repository }}.git"
           git push
 
 #      - name: 上传截图
