@@ -112,111 +112,181 @@ jobs:
           echo "使用 Token 编号: ${{ steps.select_token.outputs.token_number }}"
           python scripts/FreezeHost/renew.py 2>&1 | tee renew.log
 
-      - name: 修改下一次运行时间
+      - name: 提取剩余天数
+        id: extract_days
         if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
+        run: |
+          set -e
+          
+          REMAINING_DAYS=""
+          
+          # 优先从 renew_result.json 读取
+          if [ -f "renew_result.json" ]; then
+            REMAINING_DAYS=$(jq -r '.remaining_days // empty' renew_result.json)
+            if [ -n "$REMAINING_DAYS" ]; then
+              echo "✅ 从 renew_result.json 读取剩余天数: $REMAINING_DAYS"
+            fi
+          fi
+          
+          # 其次从 renew.log 提取
+          if [ -z "$REMAINING_DAYS" ] && [ -f "renew.log" ]; then
+            LINE=$(grep -E "RENEWED, .* DAYS? AND .* HOURS? REMAINING" renew.log | tail -n1 || true)
+            
+            if [ -n "$LINE" ]; then
+              DAYS=$(echo "$LINE" | grep -oP '\d+(?=\s*DAYS?)' || echo "0")
+              HOURS=$(echo "$LINE" | grep -oP '\d+\.?\d*(?=\s*HOURS?)' || echo "0")
+              
+              if [ "$DAYS" != "0" ] || [ "$HOURS" != "0" ]; then
+                REMAINING_DAYS=$(echo "scale=2; $DAYS + ($HOURS / 24)" | bc)
+                echo "✅ 从 renew.log 提取剩余天数: $REMAINING_DAYS"
+              fi
+            fi
+          fi
+          
+          # 如果都没找到，退出
+          if [ -z "$REMAINING_DAYS" ] || [ "$REMAINING_DAYS" = "0" ]; then
+            echo "::warning::未找到有效的剩余时间，跳过 workflow 更新"
+            echo "skip_update=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          
+          # 保存到 output 和临时目录（避免后续 checkout 覆盖）
+          echo "remaining_days=$REMAINING_DAYS" >> "$GITHUB_OUTPUT"
+          echo "skip_update=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::剩余天数: $REMAINING_DAYS"
+          
+          mkdir -p /tmp/renew_data
+          echo "$REMAINING_DAYS" > /tmp/renew_data/remaining_days.txt
+
+      - name: 拉取公开仓库
+        if: success() && steps.extract_days.outputs.skip_update != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.REPO_TOKEN }}
+          path: workflow_repo
+          fetch-depth: 1
+
+      - name: 修改下一次运行时间
+        if: success() && steps.extract_days.outputs.skip_update != 'true'
         run: |
           set -e
 
-          # 提取剩余天数
-          if [ -f "renew_result.json" ]; then
-            REMAINING_DAYS=$(jq -r '.remaining_days // 11' renew_result.json)
-          elif [ -f "next_time.txt" ]; then
-            LINE=$(cat next_time.txt | tr '[:lower:]' '[:upper:]')
-            DAYS=$(echo "$LINE" | grep -oP '\d+(?=\s*DAYS?)' || echo "0")
-            HOURS=$(echo "$LINE" | grep -oP '\d+\.?\d*(?=\s*HOURS?)' || echo "0")
-            REMAINING_DAYS=$(echo "scale=2; $DAYS + ($HOURS / 24)" | bc)
-          else
-            REMAINING_DAYS=11
-            echo "::warning::未找到剩余时间文件，使用默认值 11 天"
+          # 读取剩余天数（优先 output，其次临时文件）
+          REMAINING_DAYS="${{ steps.extract_days.outputs.remaining_days }}"
+          
+          if [ -z "$REMAINING_DAYS" ] && [ -f "/tmp/renew_data/remaining_days.txt" ]; then
+            REMAINING_DAYS=$(cat /tmp/renew_data/remaining_days.txt)
           fi
+          
+          TOKEN_NUM="${{ steps.select_token.outputs.token_number }}"
 
           echo "剩余天数: $REMAINING_DAYS"
+          echo "Token 编号: $TOKEN_NUM"
 
-          # 计算下次运行时间
+          # 计算下次运行时间（到期前 2 天）
           if (( $(echo "$REMAINING_DAYS > 2" | bc -l) )); then
             DAYS_UNTIL_NEXT_RUN=$(echo "$REMAINING_DAYS - 2" | bc)
           else
             DAYS_UNTIL_NEXT_RUN=0.5
+            echo "::warning::剩余时间不足 2 天，12 小时后重试"
           fi
 
           DAYS_INT=$(printf "%.0f" "$DAYS_UNTIL_NEXT_RUN")
           NEXT_DATE=$(date -u -d "+${DAYS_INT} days" +"%Y-%m-%d %H:%M")
           NEXT_DAY=$(date -u -d "+${DAYS_INT} days" +"%-d")
           NEXT_MONTH=$(date -u -d "+${DAYS_INT} days" +"%-m")
-          NEXT_HOUR=$(date -u +"%H")
+          
+          # 根据 Token 编号设置不同的小时
+          case "$TOKEN_NUM" in
+            1) NEXT_HOUR=1 ;;
+            2) NEXT_HOUR=2 ;;
+            *) NEXT_HOUR=$(date -u +"%H") ;;
+          esac
+          
           NEXT_MINUTE=$(date -u +"%M")
 
           NEW_CRON="$NEXT_MINUTE $NEXT_HOUR $NEXT_DAY $NEXT_MONTH *"
 
-          echo "::notice::下次运行: $NEXT_DATE UTC"
-          echo "::notice::新 Cron: $NEW_CRON"
+          echo "::notice::📅 下次运行: $NEXT_DATE UTC"
+          echo "::notice::⏰ 新 Cron: $NEW_CRON"
+
+          # 切换到 workflow_repo 目录
+          cd workflow_repo
 
           # 从 github.workflow_ref 提取当前 workflow 文件路径
           WORKFLOW_FILE=$(echo "${{ github.workflow_ref }}" | sed -E 's|^[^/]+/[^/]+/(\.github/workflows/[^@]+)@.*|\1|')
 
-          echo "::notice::当前 workflow 文件: $WORKFLOW_FILE"
+          echo "::notice::📄 当前 workflow 文件: $WORKFLOW_FILE"
 
-          # 通过 GitHub API 获取文件内容和 SHA
-          API_URL="https://api.github.com/repos/${{ github.repository }}/contents/$WORKFLOW_FILE"
-          
-          RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$API_URL")
-          
-          FILE_SHA=$(echo "$RESPONSE" | jq -r '.sha')
-          CONTENT_BASE64=$(echo "$RESPONSE" | jq -r '.content')
-
-          if [ "$FILE_SHA" = "null" ] || [ -z "$FILE_SHA" ]; then
-            echo "::error::无法获取文件 SHA"
-            echo "$RESPONSE"
+          if [ ! -f "$WORKFLOW_FILE" ]; then
+            echo "::error::文件不存在: $WORKFLOW_FILE"
+            echo "::group::.github/workflows 目录内容"
+            ls -la .github/workflows/
+            echo "::endgroup::"
             exit 1
           fi
 
-          echo "文件 SHA: $FILE_SHA"
+          # 查找对应 Token 的 cron 行
+          TARGET_PATTERN="FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM"
+          LINE_NUM=$(grep -n "$TARGET_PATTERN" "$WORKFLOW_FILE" | cut -d: -f1 | head -n1)
 
-          # 解码内容
-          CURRENT_CONTENT=$(echo "$CONTENT_BASE64" | base64 -d)
+          if [ -z "$LINE_NUM" ]; then
+            echo "::error::找不到 $TARGET_PATTERN 对应行"
+            echo "::group::文件内容"
+            nl -ba "$WORKFLOW_FILE"
+            echo "::endgroup::"
+            exit 1
+          fi
 
-          # 替换 cron 行（使用 sed）
-          NEW_CONTENT=$(echo "$CURRENT_CONTENT" | sed -E "s|(- cron: ')[^']*'(.*#.*)|\1$NEW_CRON' # 下一个: $NEXT_DATE UTC (到期前2天自动执行)|")
+          echo "::notice::更新第 $LINE_NUM 行"
+
+          echo "::group::原始行"
+          sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
+          echo "::endgroup::"
+
+          # 替换指定行
+          sed -i "${LINE_NUM}c\\    - cron: '$NEW_CRON'   # FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM - 下一次: $NEXT_DATE UTC" "$WORKFLOW_FILE"
+
+          echo "::group::修改后"
+          sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
+          echo "::endgroup::"
 
           # 检查是否有变化
-          if [ "$NEW_CONTENT" = "$CURRENT_CONTENT" ]; then
+          if git diff --quiet "$WORKFLOW_FILE"; then
             echo "::notice::没有变化需要提交"
             exit 0
           fi
 
-          # Base64 编码新内容
-          NEW_CONTENT_BASE64=$(echo "$NEW_CONTENT" | base64 -w 0)
+          echo "::group::完整修改内容"
+          git diff "$WORKFLOW_FILE"
+          echo "::endgroup::"
 
-          # 通过 API 更新文件
-          UPDATE_RESPONSE=$(curl -s -X PUT \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "$API_URL" \
-            -d @- << EOF
-          {
-            "message": "调整下次续期时间\n\n下次运行: $NEXT_DATE UTC\nCron: $NEW_CRON",
-            "content": "$NEW_CONTENT_BASE64",
-            "sha": "$FILE_SHA",
-            "branch": "main"
-          }
-          EOF
-          )
-
-          # 检查结果
-          COMMIT_SHA=$(echo "$UPDATE_RESPONSE" | jq -r '.commit.sha')
-
-          if [ "$COMMIT_SHA" = "null" ] || [ -z "$COMMIT_SHA" ]; then
-            echo "::error::更新失败"
-            echo "$UPDATE_RESPONSE"
-            exit 1
-          fi
+          # 提交并推送
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$WORKFLOW_FILE"
+          
+          git commit -m "🤖 自动调整 Token $TOKEN_NUM 下次续期时间" \
+                     -m "下次运行: $NEXT_DATE UTC" \
+                     -m "Cron: $NEW_CRON" \
+                     -m "剩余天数: $REMAINING_DAYS"
+          
+          git remote set-url origin "https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push
 
           echo "::notice::✅ 成功更新 workflow 文件"
-          echo "::notice::Commit SHA: $COMMIT_SHA"
+
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: renew-screenshots-token-${{ steps.select_token.outputs.token_number }}
+#          path: screenshots/
+#          retention-days: 7
 
       - name: 清理历史运行记录
+        if: always()
         uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ github.token }}
