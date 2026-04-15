@@ -350,15 +350,47 @@ jobs:
           cd scripts_repo
           python3 scripts/HidenCloud/main.py 2>&1 | tee renew.log
 
-      - name: 上传日志和截图
+#      - name: 上传日志和截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: hidencloud-logs
+#          path: |
+#            scripts_repo/screenshots/*.png
+#            scripts_repo/renew.log
+#          retention-days: 3
+
+      - name: 删除旧浏览器状态缓存
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: hidencloud-logs
-          path: |
-            scripts_repo/screenshots/*.png
-            scripts_repo/renew.log
-          retention-days: 3
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🗑️ 清理旧缓存..."
+          
+          # 切换到主仓库目录（确保在 git 仓库上下文中）
+          cd $GITHUB_WORKSPACE
+          
+          # 缓存键前缀（必须与 cache 步骤中使用的 key 前缀一致）
+          PREFIX="hidencloud-state-"
+          
+          # 获取所有匹配前缀的缓存键列表
+          CACHE_KEYS=$(gh cache list --limit 100 --json key -q '.[].key' --repo ${{ github.repository }} | grep "^${PREFIX}" || true)
+          
+          if [ -z "$CACHE_KEYS" ]; then
+            echo "没有找到旧缓存"
+          else
+            echo "找到以下缓存:"
+            echo "$CACHE_KEYS"
+            echo ""
+            
+            for key in $CACHE_KEYS; do
+              echo "删除: $key"
+              gh cache delete "$key" --repo ${{ github.repository }} || true
+            done
+            
+            echo "✅ 旧缓存清理完成"
+          fi
 
       - name: 保存浏览器状态缓存
         if: success()
@@ -458,38 +490,6 @@ jobs:
           git push
 
           echo "::notice::✅ Cron 更新成功"
-
-      - name: 删除旧浏览器状态缓存
-        if: always()
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "🗑️ 清理旧缓存..."
-          
-          # 切换到主仓库目录（确保在 git 仓库上下文中）
-          cd $GITHUB_WORKSPACE
-          
-          # 缓存键前缀（必须与 cache 步骤中使用的 key 前缀一致）
-          PREFIX="hidencloud-state-"
-          
-          # 获取所有匹配前缀的缓存键列表
-          CACHE_KEYS=$(gh cache list --limit 100 --json key -q '.[].key' --repo ${{ github.repository }} | grep "^${PREFIX}" || true)
-          
-          if [ -z "$CACHE_KEYS" ]; then
-            echo "没有找到旧缓存"
-          else
-            echo "找到以下缓存:"
-            echo "$CACHE_KEYS"
-            echo ""
-            
-            for key in $CACHE_KEYS; do
-              echo "删除: $key"
-              gh cache delete "$key" --repo ${{ github.repository }} || true
-            done
-            
-            echo "✅ 旧缓存清理完成"
-          fi
 
       - name: 清理运行记录
         if: always()
