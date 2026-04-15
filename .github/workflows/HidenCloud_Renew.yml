@@ -34,7 +34,7 @@ jobs:
 
       - name: 安装并启动代理
         env:
-          PROXY_NODE: ${{ secrets.PROXY_NODE_US }}
+          PROXY_NODE: ${{ secrets.PROXY_NODE }}
         run: |
           if [ -z "$PROXY_NODE" ]; then
             echo "[INFO] 未配置代理，直连模式"
@@ -338,7 +338,7 @@ jobs:
           # 测试代理
           echo "[INFO] 测试代理连接..."
           for i in 1 2 3 4 5; do
-            if curl -x socks5://127.0.0.1:10808 -s --max-time 15 https://api.ipify.org > /dev/null 2>&1; then
+            if curl -x socks5://127.0.0.1:1080 -s --max-time 15 https://api.ipify.org > /dev/null 2>&1; then
               echo "[INFO] ✅ 代理连接成功"
               echo "PROXY_SERVER=socks5://127.0.0.1:1080" >> $GITHUB_ENV
               exit 0
@@ -346,6 +346,11 @@ jobs:
             echo "[WARN] 尝试 $i/5..."
             sleep 3
           done
+          
+          echo "[ERROR] ❌ 代理连接失败"
+          echo "--- Xray 日志 ---"
+          cat xray.log
+          exit 1
 
       - name: 恢复浏览器状态缓存
         id: cache-restore
