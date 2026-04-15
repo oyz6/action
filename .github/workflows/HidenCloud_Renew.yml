@@ -19,7 +19,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
-          path: scripts_repo
+          path: .
 
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
@@ -334,7 +334,7 @@ jobs:
         id: cache-restore
         uses: actions/cache/restore@v4
         with:
-          path: scripts_repo/browser_state
+          path: browser_state
           key: hidencloud-state-${{ github.run_id }}
           restore-keys: |
             hidencloud-state-
@@ -347,18 +347,18 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
         run: |
-          cd scripts_repo
           python3 scripts/HidenCloud/main.py 2>&1 | tee renew.log
 
-#      - name: 上传日志和截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: hidencloud-logs
-#          path: |
-#            scripts_repo/screenshots/*.png
-#            scripts_repo/renew.log
-#          retention-days: 3
+     # 如需上传日志截图，可取消注释以下步骤
+     # - name: 上传日志和截图
+     #   if: always()
+     #   uses: actions/upload-artifact@v4
+     #   with:
+     #     name: hidencloud-logs
+     #     path: |
+     #       screenshots/*.png
+     #       renew.log
+     #     retention-days: 3
 
       - name: 删除旧浏览器状态缓存
         if: always()
@@ -367,9 +367,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "🗑️ 清理旧缓存..."
-          
-          # 切换到主仓库目录（确保在 git 仓库上下文中）
-          cd $GITHUB_WORKSPACE
           
           # 缓存键前缀（必须与 cache 步骤中使用的 key 前缀一致）
           PREFIX="hidencloud-state-"
@@ -396,13 +393,12 @@ jobs:
         if: success()
         uses: actions/cache/save@v4
         with:
-          path: scripts_repo/browser_state
+          path: browser_state
           key: hidencloud-state-${{ github.run_id }}
 
       - name: 提取到期时间
         id: extract_due
         if: success()
-        working-directory: scripts_repo
         run: |
           DUE_DATE=$(grep -oP '到期时间\(标准\): \K\d{4}-\d{2}-\d{2}' renew.log | tail -1 || echo "")
           if [ -z "$DUE_DATE" ]; then
