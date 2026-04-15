@@ -369,6 +369,16 @@ jobs:
         run: |
           python scripts/HidenCloud/main.py 2>&1 | tee renew.log
 
+      - name: 上传日志和截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hidencloud-logs
+          path: |
+            scripts_repo/scripts/HidenCloud/*.png
+            scripts_repo/scripts/HidenCloud/renew.log
+          retention-days: 3
+          
       - name: 保存浏览器状态缓存
         if: always()
         uses: actions/cache/save@v4
@@ -415,16 +425,6 @@ jobs:
           git add "$WORKFLOW_FILE"
           git commit -m "🔄 自动更新 HidenCloud 续期 Cron" || echo "无变化"
           git push
-
-      - name: 上传日志和截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: hidencloud-logs
-          path: |
-            scripts_repo/scripts/HidenCloud/*.png
-            scripts_repo/scripts/HidenCloud/renew.log
-          retention-days: 3
 
       - name: 清理运行记录
         if: always()
