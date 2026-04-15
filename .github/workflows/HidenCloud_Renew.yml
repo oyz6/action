@@ -33,7 +33,7 @@ jobs:
       - name: 配置 Hysteria2 代理
         if: env.HY2_URL != ''
         env:
-          HY2_URL: ${{ secrets.HY2_URL }}
+          HY2_URL: ${{ secrets.HY2_URL_US }}
         run: |
           wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
