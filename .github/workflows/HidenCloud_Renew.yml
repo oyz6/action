@@ -3,7 +3,7 @@ name: HidenCloud 续期
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'   # 初始占位，运行后自动更新
+    - cron: '0 0 19 4 *'   # 初始占位，运行后自动更新
 
 permissions:
   contents: write
@@ -397,7 +397,7 @@ jobs:
           cd workflow_repo
           
           WORKFLOW_FILE=".github/workflows/HidenCloud_Renew.yml"
-          sed -i "s|cron: '.*'|cron: '$NEW_CRON'|g" "$WORKFLOW_FILE"
+          sed -i "s|cron: '0 0 19 4 *'|g" "$WORKFLOW_FILE"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
