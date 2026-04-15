@@ -375,7 +375,7 @@ jobs:
         with:
           name: hidencloud-logs
           path: |
-            scripts/HidenCloud/*.png
+            screenshots/*.png
             renew.log
           retention-days: 3
           
