@@ -382,7 +382,7 @@ jobs:
           echo "skip_update=false" >> $GITHUB_OUTPUT
           echo "::notice::📅 当前到期时间: $DUE_DATE"
 
-      - name: 修改下次 Cron 时间
+- name: 修改下次 Cron 时间
         if: success() && steps.extract_due.outputs.skip_update != 'true'
         run: |
           set -e
@@ -392,21 +392,26 @@ jobs:
 
           # 计算距离到期还有多少小时
           CURRENT_EPOCH=$(date -u +%s)
-          DUE_EPOCH=$(date -u -d "$DUE_DATE" +%s)
+          # 加上 00:00:00 确保解析到当天的 0 点
+          DUE_EPOCH=$(date -u -d "$DUE_DATE 00:00:00" +%s)
           REMAINING_SECONDS=$((DUE_EPOCH - CURRENT_EPOCH))
-          REMAINING_HOURS=$(echo "scale=2; $REMAINING_SECONDS / 3600" | bc)
+          
+          # 用于展示的带小数的时间
+          REMAINING_HOURS_DISPLAY=$(echo "scale=2; $REMAINING_SECONDS / 3600" | bc)
+          echo "⏳ 距离到期还有 $REMAINING_HOURS_DISPLAY 小时"
 
-          echo "⏳ 距离到期还有 $REMAINING_HOURS 小时"
+          # 用于计算的纯整数的时间 (直接利用 bash 的整数除法，舍弃小数)
+          REMAINING_HOURS_INT=$((REMAINING_SECONDS / 3600))
 
           # 提前 20 小时运行续期
-          if (( $(echo "$REMAINING_HOURS > 20" | bc -l) )); then
-            HOURS_UNTIL_NEXT_RUN=$(echo "$REMAINING_HOURS - 20" | bc)
+          if [ "$REMAINING_HOURS_INT" -gt 20 ]; then
+            HOURS_UNTIL_NEXT_RUN=$((REMAINING_HOURS_INT - 20))
           else
             HOURS_UNTIL_NEXT_RUN=4
             echo "::warning::剩余时间不足 20 小时，4 小时后重试"
           fi
 
-          # 计算下次运行时间
+          # 计算下次运行时间 (此时 HOURS_UNTIL_NEXT_RUN 是标准的整数，如 113)
           NEXT_DATE=$(date -u -d "+${HOURS_UNTIL_NEXT_RUN} hours" +"%Y-%m-%d %H:%M")
           NEXT_MINUTE=$(date -u -d "+${HOURS_UNTIL_NEXT_RUN} hours" +"%-M")
           NEXT_HOUR=$(date -u -d "+${HOURS_UNTIL_NEXT_RUN} hours" +"%-H")
