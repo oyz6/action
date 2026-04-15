@@ -1,0 +1,145 @@
+name: HidenCloud 续期
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'   # 初始占位，运行后自动更新
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出脚本仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: scripts_repo
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          pip install --quiet seleniumbase requests
+
+      - name: 配置 Hysteria2 代理
+        if: env.HY2_URL != ''
+        env:
+          HY2_URL: ${{ secrets.HY2_URL }}
+        run: |
+          wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
+          chmod +x hysteria
+          
+          URL="${HY2_URL#hysteria2://}"
+          PASSWORD="${URL%%@*}"
+          SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
+          SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
+          
+          cat > hy2.yaml << EOF
+          server: ${SERVER}
+          auth: ${PASSWORD}
+          tls:
+            sni: ${SNI}
+            insecure: true
+          socks5:
+            listen: 127.0.0.1:1080
+          EOF
+          
+          ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
+          sleep 3
+          echo "PROXY_SERVER=socks5://127.0.0.1:1080" >> $GITHUB_ENV
+          echo "✅ Hysteria2 代理已启动"
+
+      - name: 恢复浏览器状态缓存
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ./browser_state
+          key: hidencloud-state-${{ github.run_id }}
+          restore-keys: |
+            hidencloud-state-
+
+      - name: 运行续期脚本
+        id: run_renew
+        env:
+          HIDENCLOUD: ${{ secrets.HIDENCLOUD }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+        run: |
+          cd scripts_repo/scripts/HidenCloud
+          python main.py 2>&1 | tee renew.log
+
+      - name: 保存浏览器状态缓存
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ./browser_state
+          key: hidencloud-state-${{ github.run_id }}
+
+      - name: 提取到期时间
+        id: extract_due
+        if: success()
+        run: |
+          DUE_DATE=$(grep -oP '到期时间: \K\d{4}-\d{2}-\d{2}' renew.log | tail -1 || echo "")
+          if [ -z "$DUE_DATE" ]; then
+            echo "skip_update=true" >> $GITHUB_OUTPUT
+            echo "::warning::未能提取到期时间，跳过 Cron 更新"
+            exit 0
+          fi
+          echo "due_date=$DUE_DATE" >> $GITHUB_OUTPUT
+          echo "skip_update=false" >> $GITHUB_OUTPUT
+          echo "::notice::📅 当前到期时间: $DUE_DATE"
+
+      - name: 修改下次 Cron 时间
+        if: success() && steps.extract_due.outputs.skip_update != 'true'
+        run: |
+          DUE_DATE="${{ steps.extract_due.outputs.due_date }}"
+          # 计算到期前2天的日期
+          RUN_DATE=$(date -u -d "$DUE_DATE -2 days" +"%Y-%m-%d")
+          RUN_DAY=$(date -u -d "$RUN_DATE" +"%-d")
+          RUN_MONTH=$(date -u -d "$RUN_DATE" +"%-m")
+          # 固定UTC时间 00:00
+          NEW_CRON="0 0 $RUN_DAY $RUN_MONTH *"
+          
+          echo "::notice::⏰ 新 Cron: $NEW_CRON (运行于 $RUN_DATE 00:00 UTC)"
+          
+          # 检出工作流仓库
+          git clone https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/${{ github.repository }}.git workflow_repo
+          cd workflow_repo
+          
+          WORKFLOW_FILE=".github/workflows/HidenCloud_Renew.yml"
+          sed -i "s|cron: '.*'|cron: '$NEW_CRON'|g" "$WORKFLOW_FILE"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$WORKFLOW_FILE"
+          git commit -m "🔄 自动更新 HidenCloud 续期 Cron" || echo "无变化"
+          git push
+
+      - name: 上传日志和截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hidencloud-logs
+          path: |
+            scripts_repo/scripts/HidenCloud/*.png
+            scripts_repo/scripts/HidenCloud/renew.log
+          retention-days: 3
+
+      - name: 清理旧工作流运行
+        if: always()
+        uses: MajorScruffy/delete-old-workflow-runs@v0.3.0
+        with:
+          repository: ${{ github.repository }}
+          older-than-seconds: 86400
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
