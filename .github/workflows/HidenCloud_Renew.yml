@@ -400,7 +400,7 @@ jobs:
           cd workflow_repo
           
           WORKFLOW_FILE=".github/workflows/HidenCloud_Renew.yml"
-          sed -i "s|cron: '.*'|cron: '$NEW_CRON'|g" "$WORKFLOW_FILE"
+          sed -i "s|cron: '0 4 20 4 *'|g" "$WORKFLOW_FILE"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
