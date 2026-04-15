@@ -28,9 +28,7 @@ jobs:
 
       - name: 安装依赖
         run: |
-          pip install --quiet camoufox playwright
-          playwright install chromium
-          playwright install-deps chromium
+          pip install --quiet seleniumbase requests
 
       - name: 安装并启动代理
         env:
@@ -56,7 +54,6 @@ jobs:
               print("[ERROR] PROXY_NODE 为空")
               sys.exit(1)
 
-          # 解析协议
           if url.startswith("vless://"):
               protocol = "vless"
               content = url[8:]
@@ -71,7 +68,6 @@ jobs:
               content = url[5:]
           elif url.startswith("socks5://") or url.startswith("socks://"):
               protocol = "socks5"
-              # 直接使用外部 SOCKS5
               content = url.split("://")[1].split("#")[0]
               if "@" in content:
                   server = content.split("@")[1].split(":")[0]
@@ -85,7 +81,6 @@ jobs:
               print(f"[ERROR] 不支持的协议: {url.split('://')[0]}")
               sys.exit(1)
 
-          # 去除备注
           if "#" in content:
               content = content.rsplit("#", 1)[0]
 
@@ -99,7 +94,6 @@ jobs:
           }
 
           if protocol == "vless":
-              # vless://uuid@server:port?params
               uuid, rest = content.split("@", 1)
               if "?" in rest:
                   host_port, params_str = rest.split("?", 1)
@@ -138,18 +132,15 @@ jobs:
                   }
               }
               
-              # 添加 flow
               if flow:
                   outbound["settings"]["vnext"][0]["users"][0]["flow"] = flow
               
-              # Reality 设置
               if security == "reality":
                   outbound["streamSettings"]["realitySettings"] = {
                       "serverName": sni,
                       "fingerprint": fp,
                       "publicKey": pbk
                   }
-              # TLS 设置
               elif security == "tls":
                   outbound["streamSettings"]["tlsSettings"] = {
                       "serverName": sni,
@@ -157,13 +148,11 @@ jobs:
                       "allowInsecure": False
                   }
               
-              # WebSocket 设置
               if network == "ws":
                   outbound["streamSettings"]["wsSettings"] = {
                       "path": path,
                       "headers": {"Host": host}
                   }
-              # gRPC 设置
               elif network == "grpc":
                   service_name = params.get("serviceName", [""])[0]
                   outbound["streamSettings"]["grpcSettings"] = {
@@ -173,9 +162,7 @@ jobs:
               config["outbounds"].append(outbound)
 
           elif protocol == "vmess":
-              # vmess://base64
               try:
-                  # 处理 URL 安全的 base64
                   padding = 4 - len(content) % 4
                   if padding != 4:
                       content += "=" * padding
@@ -229,7 +216,6 @@ jobs:
               config["outbounds"].append(outbound)
 
           elif protocol == "trojan":
-              # trojan://password@server:port?params
               password, rest = content.split("@", 1)
               if "?" in rest:
                   host_port, params_str = rest.split("?", 1)
@@ -279,16 +265,13 @@ jobs:
               config["outbounds"].append(outbound)
 
           elif protocol == "ss":
-              # ss://base64@server:port 或 ss://base64#name
               try:
                   if "@" in content:
-                      # 新格式: base64(method:password)@server:port
                       encoded, server_part = content.split("@", 1)
                       decoded = base64.b64decode(encoded + "==").decode("utf-8")
                       method, password = decoded.split(":", 1)
                       address, port = server_part.split(":", 1)
                   else:
-                      # 旧格式: base64(method:password@server:port)
                       decoded = base64.b64decode(content + "==").decode("utf-8")
                       if "@" in decoded:
                           user_part, server_part = decoded.split("@", 1)
@@ -316,14 +299,12 @@ jobs:
               
               config["outbounds"].append(outbound)
 
-          # 保存配置
           with open("xray_config.json", "w") as f:
               json.dump(config, f, indent=2)
           
           print("[INFO] ✅ 代理配置已生成")
           PYEOF
           
-          # 检查是否使用外部 SOCKS5
           if [ -f "use_external_socks.txt" ]; then
             EXTERNAL_SOCKS=$(cat use_external_socks.txt)
             echo "PROXY_SERVER=$EXTERNAL_SOCKS" >> $GITHUB_ENV
@@ -331,11 +312,9 @@ jobs:
             exit 0
           fi
           
-          # 启动 Xray
           ./xray/xray run -c xray_config.json > xray.log 2>&1 &
           sleep 5
           
-          # 测试代理
           echo "[INFO] 测试代理连接..."
           for i in 1 2 3 4 5; do
             if curl -x socks5://127.0.0.1:1080 -s --max-time 15 https://api.ipify.org > /dev/null 2>&1; then
@@ -348,7 +327,6 @@ jobs:
           done
           
           echo "[ERROR] ❌ 代理连接失败"
-          echo "--- Xray 日志 ---"
           cat xray.log
           exit 1
 
@@ -370,7 +348,7 @@ jobs:
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
         run: |
           cd scripts_repo
-          xvfb-run -a -s "-screen 0 1920x1080x24" python3 scripts/HidenCloud/main.py 2>&1 | tee renew.log
+          python3 scripts/HidenCloud/main.py 2>&1 | tee renew.log
 
       - name: 上传日志和截图
         if: always()
@@ -394,7 +372,7 @@ jobs:
         if: success()
         working-directory: scripts_repo
         run: |
-          DUE_DATE=$(grep -oP '到期时间：\K\d{4}-\d{2}-\d{2}' renew.log | tail -1 || echo "")
+          DUE_DATE=$(grep -oP '到期时间: \K\d{4}-\d{2}-\d{2}' renew.log | tail -1 || echo "")
           if [ -z "$DUE_DATE" ]; then
             echo "skip_update=true" >> $GITHUB_OUTPUT
             echo "::warning::未能提取到期时间，跳过 Cron 更新"
@@ -402,4 +380,37 @@ jobs:
           fi
           echo "due_date=$DUE_DATE" >> $GITHUB_OUTPUT
           echo "skip_update=false" >> $GITHUB_OUTPUT
-          echo "::notice::📅 当前到期时间：$DUE_DATE"
+          echo "::notice::📅 当前到期时间: $DUE_DATE"
+
+      - name: 修改下次 Cron 时间
+        if: success() && steps.extract_due.outputs.skip_update != 'true'
+        run: |
+          DUE_DATE="${{ steps.extract_due.outputs.due_date }}"
+          RUN_DATE=$(date -u -d "$DUE_DATE -2 days" +"%Y-%m-%d")
+          RUN_DAY=$(date -u -d "$RUN_DATE" +"%-d")
+          RUN_MONTH=$(date -u -d "$RUN_DATE" +"%-m")
+          NEW_CRON="0 0 $RUN_DAY $RUN_MONTH *"
+          
+          echo "::notice::⏰ 新 Cron: $NEW_CRON (运行于 $RUN_DATE 00:00 UTC)"
+          
+          git clone https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/${{ github.repository }}.git workflow_repo
+          cd workflow_repo
+          
+          WORKFLOW_FILE=".github/workflows/HidenCloud_Renew.yml"
+          sed -i "s|cron: '.*'|cron: '$NEW_CRON'|g" "$WORKFLOW_FILE"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$WORKFLOW_FILE"
+          git commit -m "🔄 自动更新 HidenCloud 续期 Cron" || echo "无变化"
+          git push
+
+      - name: 清理运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
