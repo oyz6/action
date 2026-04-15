@@ -459,6 +459,35 @@ jobs:
 
           echo "::notice::✅ Cron 更新成功"
 
+      - name: 删除旧的浏览器状态缓存
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🗑️ 清理旧缓存..."
+          
+          # 缓存键前缀（必须与 cache 步骤中使用的 key 前缀一致）
+          PREFIX="hidencloud-state-"
+          
+          # 获取所有匹配前缀的缓存键列表
+          CACHE_KEYS=$(gh cache list --limit 100 --json key -q '.[].key' | grep "^${PREFIX}" || true)
+          
+          if [ -z "$CACHE_KEYS" ]; then
+            echo "没有找到旧缓存"
+          else
+            echo "找到以下缓存:"
+            echo "$CACHE_KEYS"
+            echo ""
+            
+            for key in $CACHE_KEYS; do
+              echo "删除: $key"
+              gh cache delete "$key" --repo ${{ github.repository }} || true
+            done
+            
+            echo "✅ 旧缓存清理完成"
+          fi
+
       - name: 清理运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
