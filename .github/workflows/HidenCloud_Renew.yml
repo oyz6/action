@@ -28,7 +28,9 @@ jobs:
           
       - name: 安装依赖 
         run: |
-          pip install --quiet seleniumbase requests beautifulsoup4  # pip install --quiet seleniumbase requests
+          pip install --quiet seleniumbase requests beautifulsoup4
+          
+          # pip install --quiet seleniumbase requests
 
       - name: 安装并启动代理
         env:
