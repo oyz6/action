@@ -3,7 +3,7 @@ name: HidenCloud 续期
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 19 4 *'   # 初始占位，运行后自动更新
+    - cron: '0 0 * * *'   # 初始占位，运行后自动更新
 
 permissions:
   contents: write
@@ -386,18 +386,21 @@ jobs:
         if: success() && steps.extract_due.outputs.skip_update != 'true'
         run: |
           DUE_DATE="${{ steps.extract_due.outputs.due_date }}"
-          RUN_DATE=$(date -u -d "$DUE_DATE -2 days" +"%Y-%m-%d")
-          RUN_DAY=$(date -u -d "$RUN_DATE" +"%-d")
-          RUN_MONTH=$(date -u -d "$RUN_DATE" +"%-m")
-          NEW_CRON="0 0 $RUN_DAY $RUN_MONTH *"
+          # 提前20小时运行
+          TARGET_DATETIME=$(date -u -d "$DUE_DATE -20 hours" +"%Y-%m-%d %H:%M:%S")
+          RUN_MINUTE=$(date -u -d "$TARGET_DATETIME" +"%-M")
+          RUN_HOUR=$(date -u -d "$TARGET_DATETIME" +"%-H")
+          RUN_DAY=$(date -u -d "$TARGET_DATETIME" +"%-d")
+          RUN_MONTH=$(date -u -d "$TARGET_DATETIME" +"%-m")
+          NEW_CRON="$RUN_MINUTE $RUN_HOUR $RUN_DAY $RUN_MONTH *"
           
-          echo "::notice::⏰ 新 Cron: $NEW_CRON (运行于 $RUN_DATE 00:00 UTC)"
+          echo "::notice::⏰ 新 Cron: $NEW_CRON (运行于 $TARGET_DATETIME UTC)"
           
           git clone https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/${{ github.repository }}.git workflow_repo
           cd workflow_repo
           
           WORKFLOW_FILE=".github/workflows/HidenCloud_Renew.yml"
-          sed -i "s|cron: '0 0 19 4 *'|g" "$WORKFLOW_FILE"
+          sed -i "s|cron: '.*'|cron: '$NEW_CRON'|g" "$WORKFLOW_FILE"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
