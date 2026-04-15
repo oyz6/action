@@ -367,8 +367,7 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
         run: |
-          cd scripts_repo/scripts/HidenCloud
-          python main.py 2>&1 | tee renew.log
+          python scripts/HidenCloud/main.py 2>&1 | tee renew.log
 
       - name: 保存浏览器状态缓存
         if: always()
