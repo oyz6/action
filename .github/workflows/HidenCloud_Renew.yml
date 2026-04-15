@@ -382,7 +382,7 @@ jobs:
           echo "skip_update=false" >> $GITHUB_OUTPUT
           echo "::notice::📅 当前到期时间: $DUE_DATE"
 
-- name: 修改下次 Cron 时间
+      - name: 修改下次 Cron 时间
         if: success() && steps.extract_due.outputs.skip_update != 'true'
         run: |
           set -e
