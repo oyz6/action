@@ -334,7 +334,7 @@ jobs:
         id: cache-restore
         uses: actions/cache/restore@v4
         with:
-          path: ./browser_state
+          path: scripts_repo/browser_state
           key: hidencloud-state-${{ github.run_id }}
           restore-keys: |
             hidencloud-state-
@@ -361,10 +361,10 @@ jobs:
           retention-days: 3
 
       - name: 保存浏览器状态缓存
-        if: always()
+        if: success()
         uses: actions/cache/save@v4
         with:
-          path: ./browser_state
+          path: scripts_repo/browser_state
           key: hidencloud-state-${{ github.run_id }}
 
       - name: 提取到期时间
@@ -372,7 +372,7 @@ jobs:
         if: success()
         working-directory: scripts_repo
         run: |
-          DUE_DATE=$(grep -oP '到期时间: \K\d{4}-\d{2}-\d{2}' renew.log | tail -1 || echo "")
+          DUE_DATE=$(grep -oP '到期时间\(标准\): \K\d{4}-\d{2}-\d{2}' renew.log | tail -1 || echo "")
           if [ -z "$DUE_DATE" ]; then
             echo "skip_update=true" >> $GITHUB_OUTPUT
             echo "::warning::未能提取到期时间，跳过 Cron 更新"
