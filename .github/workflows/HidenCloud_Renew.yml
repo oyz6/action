@@ -375,8 +375,8 @@ jobs:
         with:
           name: hidencloud-logs
           path: |
-            scripts_repo/scripts/HidenCloud/*.png
-            scripts_repo/scripts/HidenCloud/renew.log
+            scripts/HidenCloud/*.png
+            renew.log
           retention-days: 3
           
       - name: 保存浏览器状态缓存
