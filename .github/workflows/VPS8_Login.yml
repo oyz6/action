@@ -15,10 +15,12 @@ jobs:
       actions: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 拉取私有仓库代码
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
+          path: .
 
       - uses: actions/setup-python@v5
         with:
