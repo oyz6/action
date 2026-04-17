@@ -77,7 +77,7 @@ jobs:
         run: python scripts/VPS8/main.py
 
       - name: 上传失败截图
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshots-${{ github.run_number }}
