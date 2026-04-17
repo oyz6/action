@@ -27,22 +27,8 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y \
-            xvfb \
-            ffmpeg \
-            google-chrome-stable \
-            fonts-noto-cjk \
-            fonts-wqy-zenhei \
-            fonts-wqy-microhei
-
-      - name: 安装 Py 依赖
-        run: |
-          pip install -q \
-            DrissionPage \
-            xvfbwrapper \
-            SpeechRecognition \
-            pydub \
-            requests
+          sudo apt-get install -y xvfb ffmpeg google-chrome-stable fonts-noto-cjk fonts-wqy-zenhei fonts-wqy-microhei
+          pip install -q DrissionPage xvfbwrapper SpeechRecognition pydub requests
 
       - name: 启用 WARP
         uses: fscarmen/warp-on-actions@v1.3
