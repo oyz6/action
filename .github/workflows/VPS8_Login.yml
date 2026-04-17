@@ -1,4 +1,4 @@
-name: VPS8-warp 每日签到
+name: VPS8 每日签到
 
 on:
   schedule:
