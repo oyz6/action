@@ -8,6 +8,7 @@ on:
 
 jobs:
   run:
+    name: 执行续期
     runs-on: ubuntu-22.04
     timeout-minutes: 20
 
@@ -214,7 +215,7 @@ jobs:
           curl -s --proxy http://127.0.0.1:8080 https://api.ipify.org && echo
           curl -s --proxy http://127.0.0.1:8080 https://ipinfo.io
 
-      - name: 执行续期流程
+      - name: 执行续期
         env:
           teohe_ACCOUNTS: ${{ secrets.TEOHEBERG }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
