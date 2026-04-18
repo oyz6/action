@@ -34,7 +34,7 @@ jobs:
 
       - name: 生成 Xray 代理配置
         env:
-          PROXY_URL: ${{ secrets.teohe_ROXY_NODE }}
+          PROXY_URL: ${{ secrets.teohe_PROXY_NODE }}
         run: |
           python - <<'PY'
           import base64
