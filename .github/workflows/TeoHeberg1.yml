@@ -89,7 +89,6 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
         run: |
-          mkdir -p screenshots
           xvfb-run --auto-servernum \
             --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
             python scripts/TeoHeberg/main.py
@@ -99,7 +98,7 @@ jobs:
         if: always()
         with:
           name: 运行截图
-          path: screenshots/*
+          path: scripts/TeoHeberg/screenshots/*
           retention-days: 1
 
       - name: 清理历史
