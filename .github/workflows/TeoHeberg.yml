@@ -199,16 +199,43 @@ jobs:
           npm init -y --silent
           npm install --silent playwright
           npx playwright install --with-deps chromium 2>&1 | tail -5
-          # 验证码绕过扩展 - Buster
-          mkdir -p extensions/buster
-          wget -qO extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
-          mkdir -p extensions/buster/unpacked
-          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
-          # 验证码绕过扩展 - Turnstile Bypasser
-          mkdir -p extensions/turnstile-bypasser/unpacked
-          curl -sL "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=131.0.0.0&acceptformat=crx2,crx3&x=id%3Ddockglonapofdibnccbnendkgdmhdplk%26installsource%3Dondemand%26uc" -o extensions/turnstile-bypasser/turnstile.crx
-          7z x -y extensions/turnstile-bypasser/turnstile.crx -oextensions/turnstile-bypasser/unpacked > /dev/null
+          
+          # 确保扩展路径与 main.js 一致 (main.js 位于 scripts/TeoHeberg/，扩展在 ../extensions/...)
+          mkdir -p scripts/TeoHeberg/extensions/buster/unpacked
+          mkdir -p scripts/TeoHeberg/extensions/turnstile-bypasser/unpacked
+          
+          # Buster 扩展
+          wget -qO buster.zip https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+          7z x -y buster.zip -oscripts/TeoHeberg/extensions/buster/unpacked > /dev/null
+          
+          # Turnstile Bypasser 扩展
+          curl -sL "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=131.0.0.0&acceptformat=crx2,crx3&x=id%3Ddockglonapofdibnccbnendkgdmhdplk%26installsource%3Dondemand%26uc" -o turnstile.crx
+          7z x -y turnstile.crx -oscripts/TeoHeberg/extensions/turnstile-bypasser/unpacked > /dev/null
+
+      - name: 创建 Chromium 包装脚本（强制软件渲染）
+        run: |
+          # 定位 Playwright 下载的 Chromium 可执行文件
+          CHROME_PATH=$(find ~/.cache/ms-playwright -name chrome -type f | head -1)
+          if [ -z "$CHROME_PATH" ]; then
+            echo "❌ 未找到 Chromium 可执行文件"
+            exit 1
+          fi
+          
+          # 创建包装脚本，注入 GPU 禁用及软件渲染参数
+          cat > chromium-wrapper.sh << EOF
+          #!/bin/bash
+          exec "$CHROME_PATH" \\
+            --disable-gpu \\
+            --disable-gpu-compositing \\
+            --disable-software-rasterizer \\
+            --use-gl=swiftshader \\
+            --disable-dev-shm-usage \\
+            --no-sandbox \\
+            "\$@"
+          EOF
+          
+          chmod +x chromium-wrapper.sh
+          echo "✅ Chromium 包装脚本已创建，路径：$(pwd)/chromium-wrapper.sh"
 
       - name: 检查代理出口 IP
         run: |
@@ -224,6 +251,8 @@ jobs:
           DISPLAY: :99
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
+          # 关键：让 Playwright 使用我们的包装脚本启动 Chromium
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ github.workspace }}/chromium-wrapper.sh
         run: |
           mkdir -p screenshots
           xvfb-run --auto-servernum \
