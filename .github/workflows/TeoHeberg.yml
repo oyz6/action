@@ -25,99 +25,31 @@ jobs:
         with:
           node-version: 20
 
-      - name: 安装 Xray 代理核心
+      - name: 启用 WARP
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      - name: 配置 DNS
         run: |
-          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-          mkdir -p xray-bin
-          unzip -oq Xray-linux-64.zip -d xray-bin
-          chmod +x xray-bin/xray
-          sudo mv xray-bin/xray /usr/local/bin/xray
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:3" | sudo tee /etc/resolv.conf
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
+          sleep 3
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'warp=|loc='
 
-      - name: 生成 Xray 代理配置
-        env:
-          PROXY_URL: ${{ secrets.PROXY_NODE }}
+      - name: 验证 WARP 连接
         run: |
-          python - <<'PY'
-          import base64
-          import json
-          import os
-
-          proxy_url = os.environ["PROXY_URL"]
-          if proxy_url.startswith("vmess://"):
-              raw = proxy_url[8:]
-              decoded = base64.b64decode(raw).decode("utf-8")
-              vmess = json.loads(decoded)
-
-              config = {
-                  "log": {"loglevel": "warning"},
-                  "inbounds": [
-                      {
-                          "port": 8080,
-                          "protocol": "http",
-                          "settings": {"auth": "noauth"},
-                          "listen": "127.0.0.1",
-                          "sniffing": {"enabled": True, "destOverride": ["http", "tls"]}
-                      },
-                      {
-                          "port": 1080,
-                          "protocol": "socks",
-                          "settings": {"auth": "noauth", "udp": True},
-                          "listen": "127.0.0.1",
-                          "sniffing": {"enabled": True, "destOverride": ["http", "tls"]}
-                      }
-                  ],
-                  "outbounds": [
-                      {
-                          "protocol": "vmess",
-                          "settings": {
-                              "vnext": [
-                                  {
-                                      "address": vmess["add"],
-                                      "port": int(vmess["port"]),
-                                      "users": [
-                                          {
-                                              "id": vmess["id"],
-                                              "security": vmess.get("scy", "auto"),
-                                              "alterId": int(vmess.get("aid", 0))
-                                          }
-                                      ]
-                                  }
-                              ]
-                          },
-                          "streamSettings": {
-                              "network": vmess.get("net", "tcp"),
-                              "security": vmess.get("tls", ""),
-                              "tcpSettings": None,
-                              "wsSettings": None
-                          },
-                          "tag": "proxy"
-                      }
-                  ]
-              }
-              if vmess.get("net") == "ws":
-                  config["outbounds"][0]["streamSettings"]["wsSettings"] = {
-                      "path": vmess.get("path", "/"),
-                      "headers": {"Host": vmess.get("host", vmess["add"])}
-                  }
-              if vmess.get("tls") == "tls":
-                  config["outbounds"][0]["streamSettings"]["security"] = "tls"
-                  config["outbounds"][0]["streamSettings"]["tlsSettings"] = {
-                      "allowInsecure": True,
-                      "serverName": vmess.get("sni", vmess["add"])
-                  }
-          else:
-              raise ValueError("Only vmess:// proxy URL is supported")
-
-          with open("xray-config.json", "w") as f:
-              json.dump(config, f, indent=2)
-          PY
-
-      - name: 启动 Xray 代理
-        run: |
-          nohup xray run -c xray-config.json > xray.log 2>&1 &
-          sleep 2
-          xray version
-          sed -n '1,20p' xray.log || true
+          for i in {1..30}; do
+            status=$(curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -oP 'warp=\K\w+' || echo "unknown")
+            [[ "$status" =~ ^(on|plus)$ ]] && echo "✅ WARP 已连接" && break
+            echo "⏳ WARP 连接中... ($i/30)"
+            sleep 2
+          done
+          # 最终检查一次出口 IP
+          curl -s https://api.ipify.org && echo
 
       - name: 安装系统依赖与浏览器自动化组件
         env:
@@ -128,7 +60,6 @@ jobs:
           sudo -E apt-get install -y -qq -o Dpkg::Use-Pty=0 \
             xvfb p7zip-full \
             mesa-utils libgl1-mesa-glx libgl1-mesa-dri
-          sudo -E apt-get install -y -qq -o Dpkg::Use-Pty=0 xvfb p7zip-full 2>&1 | tail -5
           npm init -y --silent
           npm install --silent playwright
           npx playwright install --with-deps chromium 2>&1 | tail -5
@@ -147,14 +78,12 @@ jobs:
 
       - name: 创建 Chromium 包装脚本（强制软件渲染）
         run: |
-          # 定位 Playwright 下载的 Chromium 可执行文件
           CHROME_PATH=$(find ~/.cache/ms-playwright -name chrome -type f | head -1)
           if [ -z "$CHROME_PATH" ]; then
             echo "❌ 未找到 Chromium 可执行文件"
             exit 1
           fi
 
-          # 创建包装脚本，注入 GPU 禁用及软件渲染参数
           cat > chromium-wrapper.sh << EOF
           #!/bin/bash
           exec "$CHROME_PATH" \\
@@ -168,23 +97,16 @@ jobs:
           EOF
 
           chmod +x chromium-wrapper.sh
-          echo "✅ Chromium 包装脚本已创建，路径：$(pwd)/chromium-wrapper.sh"
-
-      - name: 检查代理出口 IP
-        run: |
-          curl -s --proxy http://127.0.0.1:8080 https://api.ipify.org && echo
-          curl -s --proxy http://127.0.0.1:8080 https://ipinfo.io
+          echo "✅ Chromium 包装脚本已创建"
 
       - name: 执行续期
         env:
           teohe_ACCOUNTS: ${{ secrets.TEOHEBERG }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          BYPASS_PROXY: http://127.0.0.1:8080
           DISPLAY: :99
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
-          # 关键：让 Playwright 使用我们的包装脚本启动 Chromium
           PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ github.workspace }}/chromium-wrapper.sh
         run: |
           mkdir -p screenshots
