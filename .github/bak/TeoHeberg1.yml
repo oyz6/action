@@ -36,8 +36,8 @@ jobs:
             xvfb p7zip-full \
             mesa-utils libgl1-mesa-glx libgl1-mesa-dri
 
-          pip install --quiet seleniumbase requests
-          seleniumbase install chromedriver
+          pip install --quiet playwright requests
+          python -m playwright install --with-deps chromium
 
           BUSTER_DIR="scripts/TeoHeberg/extensions/buster/unpacked"
           TURNSTILE_DIR="scripts/TeoHeberg/extensions/turnstile-bypasser/unpacked"
