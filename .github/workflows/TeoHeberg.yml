@@ -25,32 +25,6 @@ jobs:
         with:
           node-version: 20
 
-      - name: 启用 WARP
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual
-          mode: client
-
-      - name: 配置 DNS
-        run: |
-          sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:3" | sudo tee /etc/resolv.conf
-          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
-          sleep 3
-          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'warp=|loc='
-
-      - name: 验证 WARP 连接
-        run: |
-          for i in {1..30}; do
-            status=$(curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -oP 'warp=\K\w+' || echo "unknown")
-            [[ "$status" =~ ^(on|plus)$ ]] && echo "✅ WARP 已连接" && break
-            echo "⏳ WARP 连接中... ($i/30)"
-            sleep 2
-          done
-          # 最终检查一次出口 IP
-          curl -s https://api.ipify.org && echo
-
       - name: 安装系统依赖与浏览器自动化组件
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -98,6 +72,32 @@ jobs:
 
           chmod +x chromium-wrapper.sh
           echo "✅ Chromium 包装脚本已创建"
+
+      - name: 启用 WARP
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      - name: 配置 DNS
+        run: |
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:3" | sudo tee /etc/resolv.conf
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
+          sleep 3
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'warp=|loc='
+
+      - name: 验证 WARP 连接
+        run: |
+          for i in {1..30}; do
+            status=$(curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -oP 'warp=\K\w+' || echo "unknown")
+            [[ "$status" =~ ^(on|plus)$ ]] && echo "✅ WARP 已连接" && break
+            echo "⏳ WARP 连接中... ($i/30)"
+            sleep 2
+          done
+          # 最终检查一次出口 IP
+          curl -s https://api.ipify.org && echo
 
       - name: 执行续期
         env:
