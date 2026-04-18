@@ -94,12 +94,13 @@ jobs:
             python scripts/TeoHeberg/main.py
 
       - name: 上传截图
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: 运行截图
-          path: scripts/TeoHeberg/screenshots/*
-          retention-days: 1
+          name: screenshots-${{ github.run_number }}
+          path: scripts/TeoHeberg/screenshots/*.png
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: 清理历史
         if: always()
