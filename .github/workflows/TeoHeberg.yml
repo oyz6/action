@@ -208,7 +208,7 @@ jobs:
             -H "Authorization: Bearer ${REPO_TOKEN}" \
             -H "Accept: application/vnd.github.raw" \
             -o login.js \
-            "https://api.github.com/repos/oyz6/scripts/contents/scripts/scripts/TeoHeberg/main.js?ref=main"
+            "https://api.github.com/repos/oyz6/scripts/contents/scripts/TeoHeberg/login.js?ref=main"
 
       - name: Check IP
         run: |
