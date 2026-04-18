@@ -64,29 +64,6 @@ jobs:
           [ -f "$BUSTER_DIR/manifest.json" ]
           [ -f "$TURNSTILE_DIR/manifest.json" ]
 
-      - name: 创建 Chromium 包装脚本（强制软件渲染）
-        run: |
-          CHROME_PATH=$(find ~/.cache/ms-playwright -name chrome -type f | head -1)
-          if [ -z "$CHROME_PATH" ]; then
-            echo "❌ 未找到 Chromium 可执行文件"
-            exit 1
-          fi
-
-          cat > chromium-wrapper.sh << EOF
-          #!/bin/bash
-          exec "$CHROME_PATH" \\
-            --disable-gpu \\
-            --disable-gpu-compositing \\
-            --disable-software-rasterizer \\
-            --use-gl=swiftshader \\
-            --disable-dev-shm-usage \\
-            --no-sandbox \\
-            "\$@"
-          EOF
-
-          chmod +x chromium-wrapper.sh
-          echo "✅ Chromium 包装脚本已创建"
-
       - name: 启用 WARP
         uses: fscarmen/warp-on-actions@v1.3
         with:
@@ -121,7 +98,7 @@ jobs:
           DISPLAY: :99
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
-          PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ github.workspace }}/chromium-wrapper.sh
+#         PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ github.workspace }}/chromium-wrapper.sh
         run: |
           mkdir -p screenshots
           xvfb-run --auto-servernum \
