@@ -98,7 +98,6 @@ jobs:
           DISPLAY: :99
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
-#         PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ github.workspace }}/chromium-wrapper.sh
         run: |
           mkdir -p screenshots
           xvfb-run --auto-servernum \
