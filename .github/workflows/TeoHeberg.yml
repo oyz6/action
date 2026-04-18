@@ -223,7 +223,7 @@ jobs:
           BYPASS_PROXY: http://127.0.0.1:8080
         run: |
           mkdir -p screenshots
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node main.js
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node login.js
 
       - uses: actions/upload-artifact@v4
         if: failure()
