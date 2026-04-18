@@ -48,7 +48,7 @@ scripts/FreeMcServer/main.py
 
 ## 4. 前提条件
 
-* 已创建 GitHub Token（需 `repo` 权限）
+* 已创建 GitHub Token（需 `repo` `workflow` 权限）
 * 已添加到仓库 Secrets：
 
   ```
