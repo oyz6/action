@@ -25,31 +25,6 @@ jobs:
         with:
           node-version: 20
 
-#      - name: 安装系统依赖与浏览器自动化组件
-#        env:
-#          DEBIAN_FRONTEND: noninteractive
-#          NEEDRESTART_MODE: a
-#        run: |
-#          sudo -E apt-get update -qq
-#          sudo -E apt-get install -y -qq -o Dpkg::Use-Pty=0 \
-#            xvfb p7zip-full \
-#            mesa-utils libgl1-mesa-glx libgl1-mesa-dri
-#          npm init -y --silent
-#          npm install --silent playwright
-#          npx playwright install --with-deps chromium 2>&1 | tail -5
-
-          # 确保扩展路径与 main.js 一致 (main.js 位于 scripts/TeoHeberg/，扩展在 ../extensions/...)
-#          mkdir -p scripts/TeoHeberg/extensions/buster/unpacked
-#          mkdir -p scripts/TeoHeberg/extensions/turnstile-bypasser/unpacked
-
-          # Buster 扩展
-#          wget -qO buster.zip https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
-#          7z x -y buster.zip -oscripts/TeoHeberg/extensions/buster/unpacked > /dev/null
-
-          # Turnstile Bypasser 扩展
-#          curl -sL "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=131.0.0.0&acceptformat=crx2,crx3&x=id%3Ddockglonapofdibnccbnendkgdmhdplk%26installsource%3Dondemand%26uc" -o turnstile.crx
-#          7z x -y turnstile.crx -oscripts/TeoHeberg/extensions/turnstile-bypasser/unpacked > /dev/null
-
       - name: 安装系统依赖与浏览器自动化组件
         env:
           DEBIAN_FRONTEND: noninteractive
