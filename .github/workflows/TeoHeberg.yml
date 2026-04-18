@@ -63,12 +63,6 @@ jobs:
           stack: dual
           mode: client
 
-      - name: 启用 WARP
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual
-          mode: client
-
       - name: 配置 DNS 并验证 WARP
         run: |
           set -euo pipefail
