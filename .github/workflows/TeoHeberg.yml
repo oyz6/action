@@ -192,7 +192,9 @@ jobs:
           NEEDRESTART_MODE: a
         run: |
           sudo -E apt-get update -qq
-          sudo -E apt-get install -y -qq -o Dpkg::Use-Pty=0 xvfb p7zip-full 2>&1 | tail -5
+          sudo -E apt-get install -y -qq -o Dpkg::Use-Pty=0 \
+            xvfb p7zip-full \
+            mesa-utils libgl1-mesa-glx libgl1-mesa-dri
           npm init -y --silent
           npm install --silent playwright
           npx playwright install --with-deps chromium 2>&1 | tail -5
@@ -218,9 +220,14 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           BYPASS_PROXY: http://127.0.0.1:8080
+          DISPLAY: :99
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: "llvmpipe"
         run: |
           mkdir -p screenshots
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node scripts/TeoHeberg/main.js
+          xvfb-run --auto-servernum \
+            --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
+            node scripts/TeoHeberg/main.js
 
       - name: 上传截图
         uses: actions/upload-artifact@v4
