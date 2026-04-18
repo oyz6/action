@@ -1,9 +1,9 @@
-name: TeoHeberg 续期
+name: TeoHeberg 续期1
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '33 0 * * *'
+#  schedule:
+#    - cron: '33 0 * * *'
 
 jobs:
   run:
