@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.REPO_TOKEN }}
           path: .
 
-      - name: 设置 Python 环境
+      - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -46,12 +46,12 @@ jobs:
           7z x -y turnstile.crx -o"$EXT_DIR" >/dev/null
           test -f "$EXT_DIR/manifest.json"
 
-      - name: 启用 WARP（使用稳定 Action）
+      - name: 启用 WARP（代理模式）
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
-          mode: proxy      # 代理模式，支持 IP 切换
-          proxy-port: 40000
+          mode: proxy
+        # 注意：该 Action 会启动 warp-svc 并创建 SOCKS5 代理于 127.0.0.1:40000
 
       - name: 验证 WARP 代理并固定 DNS
         run: |
@@ -82,7 +82,6 @@ jobs:
           GALLIUM_DRIVER: "llvmpipe"
           HTTP_PROXY: socks5h://127.0.0.1:40000
           HTTPS_PROXY: socks5h://127.0.0.1:40000
-          ALL_PROXY: socks5h://127.0.0.1:40000
         run: |
           xvfb-run --auto-servernum \
             --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
@@ -96,4 +95,4 @@ jobs:
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 3
+          keep_minimum_runs: 5
