@@ -66,20 +66,28 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 首次注册（接受条款）
-          warp-cli registration new --accept-tos || true
+          # 启动 warp 守护进程（系统服务）
+          sudo systemctl start warp-svc || true
+          sudo systemctl enable warp-svc || true
+
+          # 通过创建 .lic 文件接受服务条款
+          mkdir -p ~/.local/share/warp
+          echo "tos=accepted" > ~/.local/share/warp/.lic
+
+          # 首次注册（若已注册则忽略错误）
+          warp-cli registration new || true
 
           # 设置为代理模式
           warp-cli mode proxy
 
-          # 设置代理端口
+          # 设置 SOCKS5 代理端口
           warp-cli proxy port 40000
 
-          # 可选：禁用 IPv6
+          # 禁用 IPv6（可选，减少网络问题）
           warp-cli disable-ipv6 || true
 
-          # 连接（接受条款）
-          warp-cli connect --accept-tos
+          # 连接 WARP
+          warp-cli connect
 
           # 等待代理就绪
           for i in {1..30}; do
@@ -91,6 +99,7 @@ jobs:
             sleep 2
           done
 
+          # 显示当前出口 IP
           echo -n "🌐 当前 WARP 出口 IP: "
           curl -s --proxy socks5h://127.0.0.1:40000 https://api.ipify.org
           echo
