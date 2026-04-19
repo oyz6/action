@@ -34,7 +34,7 @@ jobs:
           sudo apt-get install -y -qq -o Dpkg::Use-Pty=0 \
             xvfb p7zip-full ffmpeg \
             mesa-utils libgl1-mesa-glx libgl1-mesa-dri \
-            curl gnupg lsb-release dnsutils
+            curl dnsutils
 
           pip install --quiet playwright requests SpeechRecognition pydub
           python -m playwright install --with-deps chromium
@@ -46,61 +46,29 @@ jobs:
           7z x -y turnstile.crx -o"$EXT_DIR" >/dev/null
           test -f "$EXT_DIR/manifest.json"
 
-      - name: 配置系统 DNS（为 WARP 准备）
-        run: |
-          sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo systemctl disable systemd-resolved 2>/dev/null || true
-          sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
-          # 验证 DNS 可用
-          dig +short google.com >/dev/null 2>&1 || nslookup google.com >/dev/null 2>&1 || echo "DNS 正常"
+      - name: 启用 WARP（使用稳定 Action）
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: proxy      # 代理模式，支持 IP 切换
+          proxy-port: 40000
 
-      - name: 安装 Cloudflare WARP 客户端
-        run: |
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq cloudflare-warp
-
-      - name: 启动 WARP（代理模式，支持动态切换 IP）
+      - name: 验证 WARP 代理并固定 DNS
         run: |
           set -euo pipefail
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
 
-          # 启动 warp 守护进程（系统服务）
-          sudo systemctl start warp-svc || true
-          sudo systemctl enable warp-svc || true
-
-          # 通过创建 .lic 文件接受服务条款
-          mkdir -p ~/.local/share/warp
-          echo "tos=accepted" > ~/.local/share/warp/.lic
-
-          # 首次注册（若已注册则忽略错误）
-          warp-cli registration new || true
-
-          # 设置为代理模式
-          warp-cli mode proxy
-
-          # 设置 SOCKS5 代理端口
-          warp-cli proxy port 40000
-
-          # 禁用 IPv6（可选，减少网络问题）
-          warp-cli disable-ipv6 || true
-
-          # 连接 WARP
-          warp-cli connect
-
-          # 等待代理就绪
           for i in {1..30}; do
             if curl -s --max-time 5 --proxy socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -qP 'warp=(on|plus)'; then
-              echo "✅ WARP 代理已就绪"
+              echo "✅ WARP 代理就绪"
               break
             fi
-            echo "⏳ 等待 WARP 代理 ($i/30)..."
+            echo "等待 WARP ($i/30)..."
             sleep 2
           done
-
-          # 显示当前出口 IP
-          echo -n "🌐 当前 WARP 出口 IP: "
+          echo -n "出口 IP: "
           curl -s --proxy socks5h://127.0.0.1:40000 https://api.ipify.org
           echo
 
@@ -119,9 +87,9 @@ jobs:
           cd scripts
           xvfb-run --auto-servernum \
             --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
-            python TeoHeberg/main2.py
+            python TeoHeberg/main.py
 
-      - name: 清理工作流历史记录（可选）
+      - name: 清理工作流历史记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
         with:
