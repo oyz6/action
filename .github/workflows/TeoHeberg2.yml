@@ -87,7 +87,7 @@ jobs:
           cd scripts
           xvfb-run --auto-servernum \
             --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
-            python TeoHeberg/main.py
+            python TeoHeberg/main2.py
 
       - name: 清理工作流历史记录
         if: always()
