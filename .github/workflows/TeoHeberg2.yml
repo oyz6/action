@@ -34,7 +34,7 @@ jobs:
           sudo apt-get install -y -qq -o Dpkg::Use-Pty=0 \
             xvfb p7zip-full ffmpeg \
             mesa-utils libgl1-mesa-glx libgl1-mesa-dri \
-            curl gnupg lsb-release
+            curl gnupg lsb-release dnsutils
 
           pip install --quiet playwright requests SpeechRecognition pydub
           python -m playwright install --with-deps chromium
@@ -48,19 +48,12 @@ jobs:
 
       - name: 配置系统 DNS（为 WARP 准备）
         run: |
-          # 停止 systemd-resolved 避免端口冲突
           sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo systemctl disable systemd-resolved 2>/dev/null || true
-
-          # 移除旧 resolv.conf 并写入 Cloudflare DNS（WARP 会通过代理转发，不影响最终出口）
           sudo rm -f /etc/resolv.conf
           echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
-
-          # 可选锁定防止被覆盖（但 WARP 代理模式不依赖系统 DNS，锁定无妨）
-          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
-
           # 验证 DNS 可用
-          dig +short google.com || nslookup google.com || echo "DNS 解析正常"
+          dig +short google.com >/dev/null 2>&1 || nslookup google.com >/dev/null 2>&1 || echo "DNS 正常"
 
       - name: 安装 Cloudflare WARP 客户端
         run: |
@@ -69,28 +62,29 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq cloudflare-warp
 
-      - name: 启动 WARP（代理模式，支持 IP 切换）
+      - name: 启动 WARP（代理模式，支持动态切换 IP）
         run: |
           set -euo pipefail
 
-          # 首次注册
-          warp-cli register || true
+          # 新版 warp-cli 命令
+          # 首次注册（如果已注册可忽略）
+          warp-cli registration new || true
 
-          # 设置为代理模式（这样切换 IP 不影响系统路由）
-          warp-cli set-mode proxy
-          warp-cli set-proxy-port 40000
+          # 设置为代理模式
+          warp-cli mode proxy
 
-          # 可选：禁用 IPv6 避免部分网络问题
+          # 设置代理端口
+          warp-cli proxy port 40000
+
+          # 可选：禁用 IPv6
           warp-cli disable-ipv6 || true
 
-          # 连接 WARP
+          # 连接
           warp-cli connect
 
-          # 等待连接成功
+          # 等待代理就绪
           for i in {1..30}; do
-            # 通过代理检测 warp 状态
-            status=$(curl -s --max-time 5 --proxy socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -oP 'warp=\K\w+' || echo unknown)
-            if [[ "$status" =~ ^(on|plus)$ ]]; then
+            if curl -s --max-time 5 --proxy socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -qP 'warp=(on|plus)'; then
               echo "✅ WARP 代理已就绪"
               break
             fi
@@ -98,7 +92,6 @@ jobs:
             sleep 2
           done
 
-          # 显示当前出口 IP（经代理）
           echo -n "🌐 当前 WARP 出口 IP: "
           curl -s --proxy socks5h://127.0.0.1:40000 https://api.ipify.org
           echo
@@ -111,7 +104,6 @@ jobs:
           DISPLAY: :99
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
-          # 传递给脚本的代理地址（供 Playwright 和 requests 使用）
           HTTP_PROXY: socks5h://127.0.0.1:40000
           HTTPS_PROXY: socks5h://127.0.0.1:40000
           ALL_PROXY: socks5h://127.0.0.1:40000
