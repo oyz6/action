@@ -66,9 +66,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 新版 warp-cli 命令
-          # 首次注册（如果已注册可忽略）
-          warp-cli registration new || true
+          # 首次注册（接受条款）
+          warp-cli registration new --accept-tos || true
 
           # 设置为代理模式
           warp-cli mode proxy
@@ -79,8 +78,8 @@ jobs:
           # 可选：禁用 IPv6
           warp-cli disable-ipv6 || true
 
-          # 连接
-          warp-cli connect
+          # 连接（接受条款）
+          warp-cli connect --accept-tos
 
           # 等待代理就绪
           for i in {1..30}; do
