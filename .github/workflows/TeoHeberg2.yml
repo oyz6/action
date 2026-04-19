@@ -9,7 +9,7 @@ jobs:
   renew:
     name: 执行多账号续期
     runs-on: ubuntu-22.04
-    timeout-minutes: 90  # 多账号需更长时间
+    timeout-minutes: 90
 
     steps:
       - name: 检出私有脚本仓库
@@ -46,6 +46,22 @@ jobs:
           7z x -y turnstile.crx -o"$EXT_DIR" >/dev/null
           test -f "$EXT_DIR/manifest.json"
 
+      - name: 配置系统 DNS（为 WARP 准备）
+        run: |
+          # 停止 systemd-resolved 避免端口冲突
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo systemctl disable systemd-resolved 2>/dev/null || true
+
+          # 移除旧 resolv.conf 并写入 Cloudflare DNS（WARP 会通过代理转发，不影响最终出口）
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+
+          # 可选锁定防止被覆盖（但 WARP 代理模式不依赖系统 DNS，锁定无妨）
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
+
+          # 验证 DNS 可用
+          dig +short google.com || nslookup google.com || echo "DNS 解析正常"
+
       - name: 安装 Cloudflare WARP 客户端
         run: |
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
@@ -53,28 +69,39 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq cloudflare-warp
 
-      - name: 启动 WARP 并验证连接
+      - name: 启动 WARP（代理模式，支持 IP 切换）
         run: |
           set -euo pipefail
-          sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
-          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
 
-          # 注册并连接 WARP（首次需注册）
+          # 首次注册
           warp-cli register || true
-          warp-cli set-mode proxy || true
-          warp-cli set-proxy-port 40000 || true
-          warp-cli connect || true
+
+          # 设置为代理模式（这样切换 IP 不影响系统路由）
+          warp-cli set-mode proxy
+          warp-cli set-proxy-port 40000
+
+          # 可选：禁用 IPv6 避免部分网络问题
+          warp-cli disable-ipv6 || true
+
+          # 连接 WARP
+          warp-cli connect
 
           # 等待连接成功
           for i in {1..30}; do
-            status=$(curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -oP 'warp=\K\w+' || echo unknown)
-            [[ "$status" =~ ^(on|plus)$ ]] && echo "WARP 已连接" && break
-            echo "等待 WARP ($i/30)..."
+            # 通过代理检测 warp 状态
+            status=$(curl -s --max-time 5 --proxy socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -oP 'warp=\K\w+' || echo unknown)
+            if [[ "$status" =~ ^(on|plus)$ ]]; then
+              echo "✅ WARP 代理已就绪"
+              break
+            fi
+            echo "⏳ 等待 WARP 代理 ($i/30)..."
             sleep 2
           done
-          echo -n "当前出口 IP: " && curl -s https://api.ipify.org && echo
+
+          # 显示当前出口 IP（经代理）
+          echo -n "🌐 当前 WARP 出口 IP: "
+          curl -s --proxy socks5h://127.0.0.1:40000 https://api.ipify.org
+          echo
 
       - name: 执行多账号续期脚本
         env:
@@ -84,11 +111,15 @@ jobs:
           DISPLAY: :99
           LIBGL_ALWAYS_SOFTWARE: "1"
           GALLIUM_DRIVER: "llvmpipe"
+          # 传递给脚本的代理地址（供 Playwright 和 requests 使用）
+          HTTP_PROXY: socks5h://127.0.0.1:40000
+          HTTPS_PROXY: socks5h://127.0.0.1:40000
+          ALL_PROXY: socks5h://127.0.0.1:40000
         run: |
           cd scripts
           xvfb-run --auto-servernum \
             --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
-            python TeoHeberg/main.py
+            python TeoHeberg/main2.py
 
       - name: 清理工作流历史记录（可选）
         if: always()
