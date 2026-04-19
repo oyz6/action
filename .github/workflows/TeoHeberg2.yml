@@ -17,7 +17,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
-          path: scripts
+          path: .
 
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
@@ -84,10 +84,9 @@ jobs:
           HTTPS_PROXY: socks5h://127.0.0.1:40000
           ALL_PROXY: socks5h://127.0.0.1:40000
         run: |
-          cd scripts
           xvfb-run --auto-servernum \
             --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
-            python TeoHeberg/main2.py
+            python scripts/TeoHeberg/main2.py
 
       - name: 清理工作流历史记录
         if: always()
