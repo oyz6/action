@@ -85,14 +85,14 @@ jobs:
             --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
             python scripts/TeoHeberg/main.py
 
-      - name: 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots-${{ github.run_number }}
-          path: scripts/TeoHeberg/screenshots/*.png
-          retention-days: 7
-          if-no-files-found: ignore
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-${{ github.run_number }}
+#          path: scripts/TeoHeberg/screenshots/*.png
+#          retention-days: 7
+#          if-no-files-found: ignore
 
       - name: 清理历史
         if: always()
