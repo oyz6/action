@@ -2,8 +2,8 @@ name: TeoHeberg 续期1
 
 on:
   workflow_dispatch:
-#  schedule:
-#    - cron: '33 0 * * *'
+  schedule:
+    - cron: '33 0 * * *'  # 北京时间每天早上 08:33
 
 jobs:
   run:
