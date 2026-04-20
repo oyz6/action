@@ -1,0 +1,90 @@
+name: Rustix 重启
+
+on:
+  workflow_dispatch:
+    inputs:
+      accounts:
+        description: '指定邮箱账号（留空运行全部，多个用逗号分隔）'
+        required: false
+        default: ''
+
+jobs:
+  rustix_task:
+    name: 执行任务
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          pip install -q seleniumbase
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: 启用 WARP
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      - name: 配置 DNS 并验证
+        run: |
+          set -euo pipefail
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
+          sleep 3
+
+          # 测试 Rustix 登录页面
+          echo "🔍 测试 WARP 访问 Rustix 登录页面..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://my.rustix.me/auth/login)
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+            echo "✅ Rustix 登录页面可访问 (HTTP $HTTP_CODE)"
+          else
+            echo "❌ Rustix 登录页面访问失败 (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: 执行任务
+        env:
+          RUSTIX: ${{ secrets.RUSTIX }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TARGET_ACCOUNTS: ${{ github.event.inputs.accounts }}
+        run: |
+          xvfb-run -a python scripts/Rustix/Rustix.py
+          echo "✅ 执行完成"
+
+      #      - name: 上传截图和日志
+      #        if: always()
+      #        uses: actions/upload-artifact@v4
+      #        with:
+      #          name: rustix-debug-${{ github.run_number }}
+      #          path: output/
+      #          retention-days: 3
+      #          if-no-files-found: ignore
+
+      - name: 清理运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
