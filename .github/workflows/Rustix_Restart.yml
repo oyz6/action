@@ -1,0 +1,153 @@
+name: Rustix 重启
+
+on:
+  workflow_dispatch:
+    inputs:
+      accounts:
+        description: '指定邮箱账号（留空运行全部，多个用逗号分隔）'
+        required: false
+        default: ''
+
+jobs:
+  rustix_task:
+    name: 执行任务
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          pip install -q seleniumbase requests
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: 配置全局代理
+        env:
+          HY2_URL: ${{ secrets.HY2_URL_US }}
+        run: |
+          wget -q https://github.com/oyz6/action/releases/download/proxy/hysteria-linux-amd64 -O hysteria
+          chmod +x hysteria
+          URL="${HY2_URL#hysteria2://}"
+          PASSWORD="${URL%%@*}"
+          SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
+          SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
+
+          # TUN 全局代理模式
+          cat > hy2.yaml << EOF
+          server: ${SERVER}
+          auth: ${PASSWORD}
+          tls:
+            sni: ${SNI}
+            insecure: true
+          tun:
+            enabled: true
+          EOF
+
+          # tun 模式需要 root 权限
+          sudo ./hysteria client -c hy2.yaml > hysteria.log 2>&1 &
+          HY2_PID=$!
+          echo "HY2_PID=${HY2_PID}" >> $GITHUB_ENV
+
+          echo "⏳ 等待 TUN 接口就绪..."
+          for i in $(seq 1 15); do
+            if ip link show tun0 > /dev/null 2>&1 || ip link show hysteria > /dev/null 2>&1; then
+              echo "✅ TUN 接口已就绪"
+              break
+            fi
+            if [ $i -eq 15 ]; then
+              echo "⚠️ TUN 接口等待超时，查看日志："
+              cat hysteria.log || true
+              echo "尝试回退到 HTTP 代理模式..."
+
+              # 回退：HTTP 代理模式
+              kill $HY2_PID 2>/dev/null || true
+              sleep 1
+              cat > hy2.yaml << FALLBACK
+          server: ${SERVER}
+          auth: ${PASSWORD}
+          tls:
+            sni: ${SNI}
+            insecure: true
+          http:
+            listen: 127.0.0.1:1080
+          FALLBACK
+              ./hysteria client -c hy2.yaml > hysteria.log 2>&1 &
+              echo "HY2_PID=$!" >> $GITHUB_ENV
+              echo "USE_HTTP_PROXY=true" >> $GITHUB_ENV
+              sleep 5
+            fi
+            sleep 1
+          done
+
+          # 测试连接
+          echo "🔍 测试代理连接..."
+          if [ "${USE_HTTP_PROXY}" = "true" ]; then
+            HTTP_CODE=$(curl -x http://127.0.0.1:1080 -s -o /dev/null -w "%{http_code}" --max-time 15 https://my.rustix.me/auth/login)
+          else
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://my.rustix.me/auth/login)
+          fi
+
+          echo "HTTP 状态码: ${HTTP_CODE}"
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+            echo "✅ 代理连接正常"
+          elif [ "$HTTP_CODE" = "403" ]; then
+            echo "⚠️ 被目标站拒绝 (403)，可能需要换代理节点"
+            cat hysteria.log || true
+            exit 0
+          else
+            echo "⚠️ 代理测试返回: HTTP ${HTTP_CODE}"
+            cat hysteria.log || true
+          fi
+
+      - name: 执行任务
+        env:
+          RUSTIX: ${{ secrets.RUSTIX }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TARGET_ACCOUNTS: ${{ github.event.inputs.accounts }}
+          USE_HTTP_PROXY: ${{ env.USE_HTTP_PROXY }}
+        run: |
+          # 如果是 TUN 模式，不需要设置代理；如果回退到 HTTP 模式，设置代理
+          if [ "${USE_HTTP_PROXY}" = "true" ]; then
+            export PROXY_SERVER="http://127.0.0.1:1080"
+            echo "使用 HTTP 代理模式"
+          else
+            echo "使用 TUN 全局代理模式（无需设置 PROXY_SERVER）"
+          fi
+          xvfb-run -a python scripts/Rustix/Rustix.py
+          echo "✅ 执行完成"
+
+      - name: 上传截图和日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustix-debug-${{ github.run_number }}
+          path: |
+            output/
+            hysteria.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: 清理运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
