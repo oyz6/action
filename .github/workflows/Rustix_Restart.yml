@@ -35,7 +35,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb
 
-      - name: 配置全局代理
+      - name: 配置代理
         env:
           HY2_URL: ${{ secrets.HY2_URL_US }}
         run: |
@@ -46,37 +46,7 @@ jobs:
           SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
           SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
 
-          # TUN 全局代理模式
           cat > hy2.yaml << EOF
-          server: ${SERVER}
-          auth: ${PASSWORD}
-          tls:
-            sni: ${SNI}
-            insecure: true
-          tun:
-            enabled: true
-          EOF
-
-          # tun 模式需要 root 权限
-          sudo ./hysteria client -c hy2.yaml > hysteria.log 2>&1 &
-          HY2_PID=$!
-          echo "HY2_PID=${HY2_PID}" >> $GITHUB_ENV
-
-          echo "⏳ 等待 TUN 接口就绪..."
-          for i in $(seq 1 15); do
-            if ip link show tun0 > /dev/null 2>&1 || ip link show hysteria > /dev/null 2>&1; then
-              echo "✅ TUN 接口已就绪"
-              break
-            fi
-            if [ $i -eq 15 ]; then
-              echo "⚠️ TUN 接口等待超时，查看日志："
-              cat hysteria.log || true
-              echo "尝试回退到 HTTP 代理模式..."
-
-              # 回退：HTTP 代理模式
-              kill $HY2_PID 2>/dev/null || true
-              sleep 1
-              cat > hy2.yaml << FALLBACK
           server: ${SERVER}
           auth: ${PASSWORD}
           tls:
@@ -84,33 +54,38 @@ jobs:
             insecure: true
           http:
             listen: 127.0.0.1:1080
-          FALLBACK
-              ./hysteria client -c hy2.yaml > hysteria.log 2>&1 &
-              echo "HY2_PID=$!" >> $GITHUB_ENV
-              echo "USE_HTTP_PROXY=true" >> $GITHUB_ENV
-              sleep 5
+          EOF
+
+          ./hysteria client -c hy2.yaml > hysteria.log 2>&1 &
+          echo "HY2_PID=$!" >> $GITHUB_ENV
+
+          echo "⏳ 等待代理启动..."
+          for i in $(seq 1 10); do
+            if curl -x http://127.0.0.1:1080 -s -o /dev/null --max-time 3 https://www.google.com 2>/dev/null; then
+              echo "✅ 代理隧道已就绪"
+              break
+            fi
+            if [ $i -eq 10 ]; then
+              echo "⚠️ 代理启动超时"
+              cat hysteria.log || true
+              exit 1
             fi
             sleep 1
           done
 
-          # 测试连接
-          echo "🔍 测试代理连接..."
-          if [ "${USE_HTTP_PROXY}" = "true" ]; then
-            HTTP_CODE=$(curl -x http://127.0.0.1:1080 -s -o /dev/null -w "%{http_code}" --max-time 15 https://my.rustix.me/auth/login)
-          else
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://my.rustix.me/auth/login)
-          fi
-
-          echo "HTTP 状态码: ${HTTP_CODE}"
+          # 测试目标站（仅参考，403 不退出）
+          echo "🔍 测试目标站连接..."
+          HTTP_CODE=$(curl -x http://127.0.0.1:1080 -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
+            -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
+            https://my.rustix.me/auth/login)
+          echo "目标站响应: HTTP ${HTTP_CODE}"
           if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
-            echo "✅ 代理连接正常"
+            echo "✅ 目标站直接可达"
           elif [ "$HTTP_CODE" = "403" ]; then
-            echo "⚠️ 被目标站拒绝 (403)，可能需要换代理节点"
-            cat hysteria.log || true
-            exit 0
+            echo "⚠️ curl 被拦截 (403)，这是正常的 Cloudflare 行为，浏览器 UC 模式会处理"
           else
-            echo "⚠️ 代理测试返回: HTTP ${HTTP_CODE}"
-            cat hysteria.log || true
+            echo "⚠️ 目标站返回: HTTP ${HTTP_CODE}"
           fi
 
       - name: 执行任务
@@ -118,16 +93,9 @@ jobs:
           RUSTIX: ${{ secrets.RUSTIX }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROXY_SERVER: "http://127.0.0.1:1080"
           TARGET_ACCOUNTS: ${{ github.event.inputs.accounts }}
-          USE_HTTP_PROXY: ${{ env.USE_HTTP_PROXY }}
         run: |
-          # 如果是 TUN 模式，不需要设置代理；如果回退到 HTTP 模式，设置代理
-          if [ "${USE_HTTP_PROXY}" = "true" ]; then
-            export PROXY_SERVER="http://127.0.0.1:1080"
-            echo "使用 HTTP 代理模式"
-          else
-            echo "使用 TUN 全局代理模式（无需设置 PROXY_SERVER）"
-          fi
           xvfb-run -a python scripts/Rustix/Rustix.py
           echo "✅ 执行完成"
 
