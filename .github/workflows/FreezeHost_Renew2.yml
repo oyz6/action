@@ -2,7 +2,7 @@ name: FreezeHost 续期多账号版  # REPO_TOKEN 权限要求 repo + workflow
 
 on:
   schedule:
-    - cron: '34 1 3 5 *'   # FREEZEHOST_DISCORD_TOKEN_1 - 下一次: 2026-05-03 16:34 UTC
+    - cron: '04 1 23 4 *'   # FREEZEHOST_DISCORD_TOKEN_1 - 下一次: 2026-04-23 10:04 UTC
     - cron: '37 2 21 4 *'   # FREEZEHOST_DISCORD_TOKEN_2 - 下一次: 2026-04-21 09:37 UTC
   workflow_dispatch:
     inputs:
@@ -112,51 +112,59 @@ jobs:
           echo "使用 Token 编号: ${{ steps.select_token.outputs.token_number }}"
           python scripts/FreezeHost/renew.py 2>&1 | tee renew.log
 
-      - name: 提取剩余天数
+      - name: 提取剩余天数（取所有服务器的最小值）
         id: extract_days
         if: success()
         run: |
           set -e
           
-          REMAINING_DAYS=""
+          MIN_DAYS=""
           
-          # 优先从 renew_result.json 读取
+          # 优先从 renew_result.json 读取（若存在）
           if [ -f "renew_result.json" ]; then
-            REMAINING_DAYS=$(jq -r '.remaining_days // empty' renew_result.json)
-            if [ -n "$REMAINING_DAYS" ]; then
-              echo "✅ 从 renew_result.json 读取剩余天数: $REMAINING_DAYS"
+            MIN_DAYS=$(jq -r '.min_remaining_days // empty' renew_result.json)
+            if [ -n "$MIN_DAYS" ]; then
+              echo "✅ 从 renew_result.json 读取最小剩余天数: $MIN_DAYS"
             fi
           fi
           
-          # 其次从 renew.log 提取
-          if [ -z "$REMAINING_DAYS" ] && [ -f "renew.log" ]; then
-            LINE=$(grep -E "RENEWED, .* DAYS? AND .* HOURS? REMAINING" renew.log | tail -n1 || true)
+          # 其次从 renew.log 提取所有剩余天数，取最小值
+          if [ -z "$MIN_DAYS" ] && [ -f "renew.log" ]; then
+            echo "📋 从 renew.log 提取所有服务器剩余天数："
             
-            if [ -n "$LINE" ]; then
-              DAYS=$(echo "$LINE" | grep -oP '\d+(?=\s*DAYS?)' || echo "0")
-              HOURS=$(echo "$LINE" | grep -oP '\d+\.?\d*(?=\s*HOURS?)' || echo "0")
+            MIN_DAYS=""
+            while IFS= read -r line; do
+              DAYS=$(echo "$line" | grep -oP '\d+(?=\s*DAYS?)' || echo "0")
+              HOURS=$(echo "$line" | grep -oP '\d+\.?\d*(?=\s*HOURS?)' || echo "0")
               
               if [ "$DAYS" != "0" ] || [ "$HOURS" != "0" ]; then
-                REMAINING_DAYS=$(echo "scale=2; $DAYS + ($HOURS / 24)" | bc)
-                echo "✅ 从 renew.log 提取剩余天数: $REMAINING_DAYS"
+                TOTAL=$(echo "scale=6; $DAYS + ($HOURS / 24)" | bc)
+                echo "  - $DAYS 天 + $HOURS 小时 = $TOTAL 天"
+                
+                if [ -z "$MIN_DAYS" ] || (( $(echo "$TOTAL < $MIN_DAYS" | bc -l) )); then
+                  MIN_DAYS="$TOTAL"
+                fi
               fi
+            done < <(grep -E "续期状态: .* DAYS? AND .* HOURS? REMAINING" renew.log || true)
+            
+            if [ -n "$MIN_DAYS" ]; then
+              echo "✅ 最小剩余天数: $MIN_DAYS"
             fi
           fi
           
           # 如果都没找到，退出
-          if [ -z "$REMAINING_DAYS" ] || [ "$REMAINING_DAYS" = "0" ]; then
+          if [ -z "$MIN_DAYS" ] || [ "$MIN_DAYS" = "0" ]; then
             echo "::warning::未找到有效的剩余时间，跳过 workflow 更新"
             echo "skip_update=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
-          # 保存到 output 和临时目录（避免后续 checkout 覆盖）
-          echo "remaining_days=$REMAINING_DAYS" >> "$GITHUB_OUTPUT"
+          echo "remaining_days=$MIN_DAYS" >> "$GITHUB_OUTPUT"
           echo "skip_update=false" >> "$GITHUB_OUTPUT"
-          echo "::notice::剩余天数: $REMAINING_DAYS"
+          echo "::notice::剩余天数（最小值）: $MIN_DAYS"
           
           mkdir -p /tmp/renew_data
-          echo "$REMAINING_DAYS" > /tmp/renew_data/remaining_days.txt
+          echo "$MIN_DAYS" > /tmp/renew_data/remaining_days.txt
 
       - name: 拉取公开仓库
         if: success() && steps.extract_days.outputs.skip_update != 'true'
@@ -197,7 +205,7 @@ jobs:
           NEXT_DAY=$(date -u -d "+${DAYS_INT} days" +"%-d")
           NEXT_MONTH=$(date -u -d "+${DAYS_INT} days" +"%-m")
           
-          # 根据 Token 编号设置不同的小时
+          # 根据 Token 编号设置不同的小时（保持 01/02 UTC，避免冲突）
           case "$TOKEN_NUM" in
             1) NEXT_HOUR=1 ;;
             2) NEXT_HOUR=2 ;;
@@ -270,7 +278,7 @@ jobs:
           git commit -m "自动调整 FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM 下次续期时间" \
                      -m "下次运行: $NEXT_DATE UTC" \
                      -m "Cron: $NEW_CRON" \
-                     -m "剩余天数: $REMAINING_DAYS"
+                     -m "剩余天数（最小值）: $REMAINING_DAYS"
           
           git remote set-url origin "https://x-access-token:${{ secrets.REPO_TOKEN }}@github.com/${{ github.repository }}.git"
           git push
