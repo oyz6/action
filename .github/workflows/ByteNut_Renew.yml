@@ -343,9 +343,9 @@ jobs:
 
       - name: 运行续期脚本
         env:
+          bytenut_ACCOUNTS: ${{ secrets.BYTENUT }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          bytenut_ACCOUNTS: ${{ secrets.bytenut_ACCOUNTS }}
           PROXY: ${{ steps.proxy.outputs.proxy_server }}
         run: |
           sudo apt-get update -y && sudo apt-get install -y xvfb && \
