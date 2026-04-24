@@ -341,14 +341,19 @@ jobs:
           echo "use_proxy=false" >> $GITHUB_OUTPUT
           echo "proxy_server=" >> $GITHUB_OUTPUT
 
-      - name: 运行续期脚本
-        env:
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          bytenut_ACCOUNTS: ${{ secrets.BYTENUT }}
-          BYTENUT_NETWORK_MODE: ${{ steps.proxy.outputs.use_proxy == 'true' && '代理' || '直连' }}
-          PROXY: ${{ steps.proxy.outputs.proxy_server }}
-        run: python3 scripts/ByteNut/main.py
+          - name: 运行续期脚本
+            env:
+              TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+              TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+              bytenut_ACCOUNTS: ${{ secrets.bytenut_ACCOUNTS }}
+              PROXY: ${{ steps.proxy.outputs.proxy_server }}
+            run: |
+              sudo apt-get update -y
+              sudo apt-get install -y xvfb
+              Xvfb :1 -screen 0 1280x753x24 &
+              sleep 2
+             export DISPLAY=:1
+              python3 scripts/ByteNut/main.py
 
       - name: 清理工作流记录
         uses: Mattraks/delete-workflow-runs@v2
