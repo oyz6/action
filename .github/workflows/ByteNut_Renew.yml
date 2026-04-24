@@ -345,7 +345,7 @@ jobs:
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          bytenut_ACCOUNTS: ${{ secrets.bytenut_ACCOUNTS }}
+          bytenut_ACCOUNTS: ${{ secrets.BYTENUT }}
           BYTENUT_NETWORK_MODE: ${{ steps.proxy.outputs.use_proxy == 'true' && '代理' || '直连' }}
           PROXY: ${{ steps.proxy.outputs.proxy_server }}
         run: python3 scripts/ByteNut/main.py
