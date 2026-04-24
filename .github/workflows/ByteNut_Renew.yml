@@ -2,8 +2,9 @@ name: Bytenut 续期
 
 on:
   workflow_dispatch:
-#  schedule:
-#    - cron: '0 16 * * *'
+  schedule:
+    - cron: '0 */3 * * *'    # 每 3 小时执行 2 次（间隔 90 分钟）
+    - cron: '30 */3 * * *'   # 每 3 小时执行 2 次（间隔 90 分钟）
 
 permissions:
   contents: write
