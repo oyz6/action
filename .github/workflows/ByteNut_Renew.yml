@@ -343,7 +343,7 @@ jobs:
 
       - name: 运行续期脚本
         env:
-          bytenut_ACCOUNTS: ${{ secrets.BYTENUT }}
+          BYTENUT: ${{ secrets.BYTENUT }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY: ${{ steps.proxy.outputs.proxy_server }}
