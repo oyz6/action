@@ -349,7 +349,7 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY: ${{ steps.proxy.outputs.proxy_server }}
         run: |
-          sudo apt-get update -y && sudo apt-get install -y xvfb && \
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
           xvfb-run -a python3 scripts/ByteNut/main.py
 
       - name: 清理历史
