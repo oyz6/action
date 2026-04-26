@@ -29,7 +29,6 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          # 仅保留必要的包，移除 p7zip-full
           sudo apt-get install -y -qq xvfb ffmpeg mesa-utils libgl1-mesa-glx libgl1-mesa-dri
 
           pip install --quiet playwright requests SpeechRecognition pydub
