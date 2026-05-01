@@ -2,6 +2,18 @@ name: FreezeHost 自动重启
 
 on:
   workflow_dispatch:
+    inputs:
+      token_number:
+        description: '指定 DISCORD 账号（FREEZEHOST_DISCORD_TOKEN_*）'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
 
 jobs:
   restart:
@@ -13,12 +25,15 @@ jobs:
       actions: write
 
     steps:
-      - name: 拉取私有仓库
+      - name: 确定使用哪个 Token
+        id: select_token
+        run: |
+          TOKEN_NUM="${{ github.event.inputs.token_number }}"
+          echo "token_number=$TOKEN_NUM" >> "$GITHUB_OUTPUT"
+          echo "::notice::选择 Token 编号: $TOKEN_NUM"
+
+      - name: 拉取仓库
         uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/scripts
-          token: ${{ secrets.REPO_TOKEN }}
-          path: .
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -39,39 +54,46 @@ jobs:
       - name: 修复 DNS
         run: |
           echo "[INFO] 停用 systemd-resolved，直连 DNS..."
-
           sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo systemctl disable systemd-resolved 2>/dev/null || true
-
           sudo rm -f /etc/resolv.conf
           echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
-
           sudo chattr +i /etc/resolv.conf 2>/dev/null || true
           sleep 2
-
           echo "[INFO] DNS 测试:"
           nslookup free.freezehost.pro 1.1.1.1 || echo "[WARN] 解析失败"
-
           echo ""
           echo "[INFO] 当前出口 IP:"
           curl -s --max-time 10 https://api.ipify.org && echo
           echo "[INFO] WARP Trace:"
           curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
 
+      - name: 设置 Discord Token
+        run: |
+          TOKEN_NUM="${{ steps.select_token.outputs.token_number }}"
+          case "$TOKEN_NUM" in
+            1) echo "FREEZEHOST_DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_1 }}" >> "$GITHUB_ENV" ;;
+            2) echo "FREEZEHOST_DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_2 }}" >> "$GITHUB_ENV" ;;
+            3) echo "FREEZEHOST_DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_3 }}" >> "$GITHUB_ENV" ;;
+            4) echo "FREEZEHOST_DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_4 }}" >> "$GITHUB_ENV" ;;
+            5) echo "FREEZEHOST_DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_5 }}" >> "$GITHUB_ENV" ;;
+            *) echo "FREEZEHOST_DISCORD_TOKEN=${{ secrets.FREEZEHOST_DISCORD_TOKEN_1 }}" >> "$GITHUB_ENV" ;;
+          esac
+          echo "::notice::已设置 Token 编号: $TOKEN_NUM"
+
       - name: 运行重启脚本
         env:
-          FREEZEHOST_DISCORD_TOKEN: ${{ secrets.FREEZEHOST_DISCORD_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python scripts/FreezeHost/restart.py
+        run: python restart.py
 
-#      - name: 上传截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: restart-screenshots
-#          path: screenshots/
-#          retention-days: 7
+      - name: 上传截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restart-screenshots-token-${{ steps.select_token.outputs.token_number }}
+          path: screenshots/
+          retention-days: 7
 
       - name: 清理历史运行记录
         uses: Mattraks/delete-workflow-runs@v2
