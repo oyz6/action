@@ -32,8 +32,12 @@ jobs:
           echo "token_number=$TOKEN_NUM" >> "$GITHUB_OUTPUT"
           echo "::notice::选择 Token 编号: $TOKEN_NUM"
 
-      - name: 拉取仓库
+      - name: 拉取私有仓库
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
 
       - name: 安装 Python
         uses: actions/setup-python@v5
