@@ -1,0 +1,64 @@
+name: Zampto 重启
+
+on:
+  workflow_dispatch:
+
+jobs:
+  renew:
+    name: 执行重启
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    concurrency:
+      group: Zampto_Restart
+      cancel-in-progress: false
+
+    steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb unzip
+          pip install seleniumbase>=4.25.0 pyvirtualdisplay>=3.0 requests>=2.31.0
+
+      - name: 启用 WARP 网络
+        uses: fscarmen/warp-on-actions@v1.4
+        with:
+          stack: dual        # 同时支持 IPv4 和 IPv6
+          mode: wireguard    # 使用 WireGuard 协议
+
+      - name: 执行重启
+        env:
+          ZAMPTO_ACCOUNT: ${{ secrets.ZAMPTO_ACCOUNT }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          # PROXY_SOCKS5 未设置，脚本将直连，实际经 WARP 路由
+        run: python scripts/Zampto/Zampto_Restart.py
+
+      # - name: 上传截图
+      #   uses: actions/upload-artifact@v4
+      #   if: always()
+      #   with:
+      #     name: screenshots-${{ github.run_number }}
+      #     path: output/screenshots/
+      #     retention-days: 3
+
+      - name: 清理旧运行
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
