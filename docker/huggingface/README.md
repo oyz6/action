@@ -6,5 +6,5 @@
 
 Dockerfile
 ```
-FROM ghcr.io/oyz6/sadfc-2026-5-5:latest
+FROM ghcr.io/oyz6/huggingface-app:latest
 ```
