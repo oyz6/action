@@ -1,4 +1,4 @@
-name: 构建哪吒镜像
+name: 构建探针镜像
 
 on:
   workflow_dispatch:
