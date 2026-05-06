@@ -1,8 +1,8 @@
 name: Godlike 续期
 on:
   schedule:
-    - cron: '0 */3 * * *'
-    - cron: '30 1-23/3 * * *'
+#    - cron: '0 */3 * * *'
+#    - cron: '30 1-23/3 * * *'
   workflow_dispatch:
 
 jobs:
