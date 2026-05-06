@@ -30,7 +30,7 @@ jobs:
 
       - name: 安装并启动代理
         env:
-          PROXY_NODE: ${{ secrets.PROXY_NODE_US }}
+          PROXY_NODE: ${{ secrets.PROXY_NODE }}
         run: |
           if [ -z "$PROXY_NODE" ]; then
             echo "[INFO] 未配置代理，直连模式"
@@ -330,7 +330,7 @@ jobs:
 
       - name: 运行续期脚本
         env:
-          GODLIKE_1: ${{ secrets.GODLIKE }}
+          GODLIKE_1: ${{ secrets.GODLIKE_1 }}
 #          GODLIKE_2: ${{ secrets.GODLIKE_2 }}
 #          GODLIKE_3: ${{ secrets.GODLIKE_3 }}
 #          GODLIKE_4: ${{ secrets.GODLIKE_4 }}
