@@ -331,10 +331,10 @@ jobs:
       - name: 运行续期脚本
         env:
           GODLIKE_1: ${{ secrets.GODLIKE }}
-          GODLIKE_2: ${{ secrets.GODLIKE_2 }}
-          GODLIKE_3: ${{ secrets.GODLIKE_3 }}
-          GODLIKE_4: ${{ secrets.GODLIKE_4 }}
-          GODLIKE_5: ${{ secrets.GODLIKE_5 }}
+#          GODLIKE_2: ${{ secrets.GODLIKE_2 }}
+#          GODLIKE_3: ${{ secrets.GODLIKE_3 }}
+#          GODLIKE_4: ${{ secrets.GODLIKE_4 }}
+#          GODLIKE_5: ${{ secrets.GODLIKE_5 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
