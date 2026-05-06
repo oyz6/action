@@ -11,8 +11,12 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: 拉取脚本仓库
+      - name: 拉取私有仓库
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
 
       - name: 设置 Python
         uses: actions/setup-python@v5
