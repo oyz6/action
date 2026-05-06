@@ -1,4 +1,4 @@
-name: Godlike 续期
+name: Godlike 续期 + 开机
 on:
 #  schedule:
 #    - cron: '0 */3 * * *'
@@ -7,6 +7,7 @@ on:
 
 jobs:
   add_time_job:
+    name: 运行续期脚本
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
