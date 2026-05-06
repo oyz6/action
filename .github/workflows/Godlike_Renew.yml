@@ -23,7 +23,7 @@ jobs:
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
           godlike_PROXY_NODE: ${{ secrets.godlike_PROXY_NODE }}
           godlike_PTERODACTYL_COOKIE: ${{ secrets.godlike_PTERODACTYL_COOKIE }}
-          godlike_PTERODACTYL: ${{ secrets.godlike_PTERODACTYL }}
+          godlike_PTERODACTYL: ${{ secrets.GODLIKE }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
