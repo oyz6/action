@@ -46,7 +46,7 @@ jobs:
           from pathlib import Path
           from urllib.parse import urlparse
 
-          text = Path("private-scripts/scripts/godlike/main.py").read_text(encoding="utf-8", errors="ignore")
+          text = Path("private-scripts/scripts/Godlike/main.py").read_text(encoding="utf-8", errors="ignore")
           for name in ("SERVER_URL", "LOGIN_URL"):
               match = re.search(rf"^{name}\s*=\s*(['\"])(.*?)\1", text, re.M)
               if not match:
@@ -66,7 +66,7 @@ jobs:
           import re
           from pathlib import Path
 
-          text = Path("private-scripts/scripts/godlike/main.py").read_text(encoding="utf-8", errors="ignore")
+          text = Path("private-scripts/scripts/Godlike/main.py").read_text(encoding="utf-8", errors="ignore")
           match = re.search(r"^SERVER_URL\s*=\s*(?:os\.environ\.get\([^,]+,\s*)?(['\"])(.*?)\1", text, re.M)
           print(match.group(2) if match else "")
           PY
@@ -181,7 +181,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          path = Path("private-scripts/scripts/godlike/main.py")
+          path = Path("private-scripts/scripts/Godlike/main.py")
           text = path.read_text(encoding="utf-8")
           old = "p.chromium.launch(headless=True)"
           new = "p.chromium.launch(headless=True, proxy={'server': os.environ.get('PLAYWRIGHT_PROXY_SERVER')} if os.environ.get('PLAYWRIGHT_PROXY_SERVER') else None)"
@@ -199,7 +199,7 @@ jobs:
           SERVER_URL: ${{ env.SERVER_URL }}
           SOCKS5_PROXY: socks5://127.0.0.1:10808
           PLAYWRIGHT_PROXY_SERVER: socks5://127.0.0.1:10808
-        working-directory: private-scripts/scripts/godlike
+        working-directory: private-scripts/scripts/Godlike
         run: |
           set +e
           python -u main.py > godlike-run.log 2>&1
@@ -266,7 +266,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: error-screenshots
-          path: private-scripts/scripts/godlike/*.png
+          path: private-scripts/scripts/Godlike/*.png
 
       - name: Clean workflow runs
         if: always()
