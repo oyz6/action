@@ -1,17 +1,10 @@
 name: Godlike 续期 + 开机
 
 on:
-#  schedule:
-#    - cron: '0 */3 * * *'
-#    - cron: '30 1-23/3 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: write
-  actions: write
-
 jobs:
-  run_renewal:
+  renew:
     name: 运行续期脚本
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -31,25 +24,22 @@ jobs:
 
       - name: 安装依赖
         run: |
-          python -m pip install --upgrade pip
-          pip install seleniumbase requests pynacl
-          seleniumbase install chromedriver
+          pip install -q seleniumbase requests
+          sudo apt-get update
+          sudo apt-get install -y xvfb
 
       - name: 安装并启动代理
-        id: proxy
         env:
           PROXY_NODE: ${{ secrets.PROXY_NODE }}
         run: |
           if [ -z "$PROXY_NODE" ]; then
-            echo "use_proxy=false" >> $GITHUB_OUTPUT
-            echo "proxy_server=" >> $GITHUB_OUTPUT
-            echo "[INFO] 未配置代理,直连模式"
+            echo "[INFO] 未配置代理，直连模式"
             exit 0
           fi
-          
+
           wget -q https://github.com/oyz6/action/releases/download/proxy/Xray-linux-64.zip
           unzip -q Xray-linux-64.zip -d xray && chmod +x xray/xray
-          
+
           python3 << 'PYEOF'
           import os, sys, json, base64
           from urllib.parse import parse_qs, unquote, urlparse
@@ -312,35 +302,33 @@ jobs:
           
           print("[INFO] ✅ 代理配置已生成")
           PYEOF
-          
+
           if [ -f "use_external_socks.txt" ]; then
             EXTERNAL_SOCKS=$(cat use_external_socks.txt)
-            echo "proxy_server=$EXTERNAL_SOCKS" >> $GITHUB_OUTPUT
-            echo "use_proxy=true" >> $GITHUB_OUTPUT
+            echo "PROXY_SERVER=$EXTERNAL_SOCKS" >> $GITHUB_ENV
             echo "[INFO] ✅ 使用外部 SOCKS5 代理"
             exit 0
           fi
-          
+
           ./xray/xray run -c xray_config.json > xray.log 2>&1 &
           sleep 5
-          
+
           echo "[INFO] 测试代理连接..."
           for i in 1 2 3 4 5; do
             if curl -x socks5://127.0.0.1:1080 -s --max-time 15 https://api.ipify.org > /dev/null 2>&1; then
-              echo "proxy_server=socks5://127.0.0.1:1080" >> $GITHUB_OUTPUT
-              echo "use_proxy=true" >> $GITHUB_OUTPUT
               echo "[INFO] ✅ 代理连接成功"
+              echo "PROXY_SERVER=socks5://127.0.0.1:1080" >> $GITHUB_ENV
               exit 0
             fi
             echo "[WARN] 尝试 $i/5..."
             sleep 3
           done
-          
-          echo "[ERROR] ❌ 代理连接失败,回退直连"
-          echo "use_proxy=false" >> $GITHUB_OUTPUT
-          echo "proxy_server=" >> $GITHUB_OUTPUT
 
-      - name: 运行续期脚本
+          echo "[ERROR] ❌ 代理连接失败"
+          cat xray.log
+          exit 1
+
+      - name: 执行续期脚本
         env:
           GODLIKE_1: ${{ secrets.GODLIKE_1 }}
 #          GODLIKE_2: ${{ secrets.GODLIKE_2 }}
@@ -350,17 +338,16 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-          PROXY: ${{ steps.proxy.outputs.proxy_server }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
-          xvfb-run -a python3 scripts/Godlike/main.py
+          xvfb-run -a python scripts/Godlike/main.py
 
 #      - name: 上传截图
 #        if: always()
 #        uses: actions/upload-artifact@v4
 #        with:
-#          name: error-screenshots
-#          path: scripts/Godlike/artifacts/*.png
+#          name: godlike-screenshots
+#          path: scripts/Godlike/*.png
 
       - name: 清理历史
         if: always()
