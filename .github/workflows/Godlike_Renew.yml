@@ -1,4 +1,4 @@
-name: Godlike 续期 + 开机
+name: Godlike 续期
 on:
 #  schedule:
 #    - cron: '0 */3 * * *'
