@@ -1,5 +1,4 @@
-# workflow 文件
-name: Host2Play 续期 (Hash 破解)
+name: Host2Play 续期 (cache)
 
 on:
   workflow_dispatch:
@@ -41,7 +40,7 @@ jobs:
       - name: 安装 Python 依赖
         run: pip install DrissionPage xvfbwrapper requests
 
-      - name: 执行续订
+      - name: 执行续期
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
@@ -56,7 +55,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: 清理历史运行记录
+      - name: 清理旧运行
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
         with:
