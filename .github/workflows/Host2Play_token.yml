@@ -1,4 +1,4 @@
-name: Host2Play 续期 renew
+name: Host2Play 续期 (cache)
 
 on:
   workflow_dispatch:
@@ -8,51 +8,39 @@ permissions:
   contents: read
 
 jobs:
-  run-renew:
-    name: 执行脚本
+  renew:
     runs-on: ubuntu-latest
-
     steps:
-      - name: 拉取私有仓库
+      - name: 拉取仓库
         uses: actions/checkout@v4
         with:
           repository: oyz6/scripts
           token: ${{ secrets.REPO_TOKEN }}
           path: .
 
-      - name: 配置 Python 环境
+      - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      # ✅ 缓存 Chrome 用户数据（captcha_solver）
+      - name: 缓存 captcha_solver
+        uses: actions/cache@v4
+        with:
+          path: captcha_solver
+          key: captcha-solver-chromium-latest-v1
 
       - name: 安装系统依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb unzip curl
-          wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo dpkg -i /tmp/google-chrome-stable_current_amd64.deb || sudo apt-get install -f -y
+          wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo dpkg -i /tmp/chrome.deb || sudo apt-get install -f -y
 
       - name: 安装 Python 依赖
         run: pip install DrissionPage xvfbwrapper requests
 
-      - name: 启用 WARP 网络（可选，可根据需要注释）
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual
-          mode: client
-
-      - name: 修复 DNS（配合 WARP）
-        run: |
-          sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo systemctl disable systemd-resolved 2>/dev/null || true
-          sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
-          sleep 2
-          nslookup host2play.gratis 1.1.1.1 || echo "[WARN] 解析失败"
-          curl -s --max-time 10 https://api.ipify.org && echo
-          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc=' || true
-
-      - name: 执行续订
+      - name: 执行续期
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
@@ -67,7 +55,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: 清理历史运行记录
+      - name: 清理旧运行
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
         with:
