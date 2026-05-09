@@ -66,7 +66,7 @@ jobs:
 
       - name: 执行续订
         env:
-          GODLIKE_IDS: ${{ secrets.GODLIKE_ID }}
+          GODLIKE_ID: ${{ secrets.GODLIKE_ID }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python scripts/Godlike/renew.py
