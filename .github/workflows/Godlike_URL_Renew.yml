@@ -1,7 +1,14 @@
 name: Godlike URL 续期
 
 on:
+  schedule:
+    - cron: '*/7 * * * *'
   workflow_dispatch:
+    inputs:
+      accounts:
+        description: '指定ID（多个用逗号或换行分隔，留空运行全部）'
+        required: false
+        default: ''
 
 permissions:
   actions: write
@@ -46,16 +53,12 @@ jobs:
 
       - name: 修复 DNS
         run: |
-          echo "[INFO] 停用 systemd-resolved，设置公共 DNS..."
           sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo systemctl disable systemd-resolved 2>/dev/null || true
           sudo rm -f /etc/resolv.conf
           echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" \
             | sudo tee /etc/resolv.conf
           sleep 2
-          echo "[INFO] DNS 测试:"
-          nslookup godlike.cool 1.1.1.1 || echo "[WARN] 解析失败"
-          echo ""
           echo "[INFO] 当前出口 IP:"
           curl -s --max-time 10 https://api.ipify.org && echo
           echo "[INFO] WARP Trace:"
@@ -65,6 +68,7 @@ jobs:
       - name: 执行续订
         env:
           GODLIKE_ID: ${{ secrets.GODLIKE_ID }}
+          GODLIKE_ID_INPUT: ${{ github.event.inputs.accounts }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python scripts/Godlike/renew.py
