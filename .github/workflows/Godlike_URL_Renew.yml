@@ -1,4 +1,4 @@
-name: Godlike URL 续期
+name: Godlike Host Renewal
 
 on:
   workflow_dispatch:
@@ -13,12 +13,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 拉取仓库代码
+      - name: 拉取私有仓库
         uses: actions/checkout@v4
         with:
-          repository: oyz6/scripts
+          repository: ${{ github.repository_owner }}
           token: ${{ secrets.REPO_TOKEN }}
-          path: .  # 拉到根目录
+          path: .# 拉到根目录
 
       - name: 配置 Python 环境
         uses: actions/setup-python@v5
@@ -59,7 +59,7 @@ jobs:
           GODLIKE_ID: ${{ secrets.GODLIKE_ID }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python godlike_renew.py
+        run: python scripts/Godlike/renew.py
 
       - name: 上传截图
         if: always()
