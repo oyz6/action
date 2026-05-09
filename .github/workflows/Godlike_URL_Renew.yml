@@ -1,8 +1,6 @@
 name: Godlike URL 续期
 
 on:
-  schedule:
-    - cron: '*/7 * * * *'   # 每7分钟尝试一次（冷却期6分钟）
   workflow_dispatch:
 
 permissions:
