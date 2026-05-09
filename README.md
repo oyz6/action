@@ -8,9 +8,9 @@
 - name: 拉取私有仓库
   uses: actions/checkout@v4
   with:
-    repository: ${{ github.repository_owner }}/私有仓库名
+    repository: ${{ github.repository_owner }}/scripts   # 私有仓库名如: scripts
     token: ${{ secrets.REPO_TOKEN }}
-    path: .
+    path: .    # 拉到根目录
 ```
 
 ---
