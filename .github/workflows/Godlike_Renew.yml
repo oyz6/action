@@ -336,7 +336,7 @@ jobs:
 #          GODLIKE_3: ${{ secrets.GODLIKE_3 }}
 #          GODLIKE_4: ${{ secrets.GODLIKE_4 }}
 #          GODLIKE_5: ${{ secrets.GODLIKE_5 }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN_8 }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
