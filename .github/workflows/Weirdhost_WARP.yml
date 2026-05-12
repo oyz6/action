@@ -23,6 +23,19 @@ jobs:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
 
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            xvfb xdotool fonts-nanum ffmpeg
+          pip install --no-cache-dir \
+            seleniumbase aiohttp pynacl SpeechRecognition pydub
+
       - name: 启用 WARP 网络
         uses: fscarmen/warp-on-actions@v1.3
         with:
@@ -71,19 +84,6 @@ jobs:
           echo "验证:"
           getent hosts hub.weirdhost.xyz && echo "  ✅ hub.weirdhost.xyz" || echo "  ❌ hub.weirdhost.xyz"
           curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc='
-
-      - name: 设置 Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: 安装依赖
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            xvfb xdotool fonts-nanum ffmpeg
-          pip install --no-cache-dir \
-            seleniumbase aiohttp pynacl SpeechRecognition pydub
 
       - name: 运行续期脚本
         env:
