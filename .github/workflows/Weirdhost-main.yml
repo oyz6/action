@@ -14,8 +14,11 @@ jobs:
       actions: write
 
     steps:
-      - name: 检出代码
+      - name: 拉取私有仓库
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
 
       # ========== 新加：启用 WARP 网络 + 修复 DNS ==========
       - name: 启用 WARP 网络
