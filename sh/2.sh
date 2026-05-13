@@ -36,8 +36,8 @@ USE_IPV6_COUNTRY_CODE="false"
 DEBUG="false"
 
 # 批量注册参数
-TOTAL_SERVERS=100          # 要注册的假服务器总数（可改）
-REGISTER_TIMEOUT=8         # 每个 Agent 的注册等待时间（秒）
+TOTAL_SERVERS=1080          # 要注册的假服务器总数（可改）
+REGISTER_TIMEOUT=3         # 每个 Agent 的注册等待时间（秒）
 INTERVAL=1                 # 间隔（秒）
 
 # ---------- 准备工作 ----------
