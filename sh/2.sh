@@ -14,7 +14,7 @@ AGENT_ARCH="amd64"
 AGENT_ZIP="nezha-agent_linux_${AGENT_ARCH}.zip"
 DOWNLOAD_URL="https://github.com/nezhahq/agent/releases/download/${AGENT_VERSION}/${AGENT_ZIP}"
 
-# 面板连接信息（这里用你给出的真实数据）
+# 面板连接信息
 CLIENT_SECRET="qL7B61misbNGiLMBDxXJSBztCna5Vwsy"
 SERVER="nazhav1.gamesover.eu.org:443"
 TLS="true"
