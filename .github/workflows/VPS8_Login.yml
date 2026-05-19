@@ -1,8 +1,8 @@
 name: VPS8 每日签到
 
 on:
-  # schedule:
-  #   - cron: '35 3 * * *'  # 每天北京时间 11:35 运行
+#  schedule:
+#    - cron: '35 3 * * *'  # 每天北京时间 11:35 运行
   workflow_dispatch:
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
         run: |
           pip install -q seleniumbase pyvirtualdisplay requests
 
-      - name: 配置 HP2 代理
+      - name: 配置代理
         env:
           HY2_URL: ${{ secrets.HY2_URL_PL }}
         run: |
@@ -41,16 +41,16 @@ jobs:
             echo "INFO: 无代理配置，使用直连模式"
             exit 0
           fi
-          
+
           echo "INFO: 配置 Hysteria2 代理"
           wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
-          
+
           URL="${HY2_URL#hysteria2://}"
           PASSWORD="${URL%%@*}"
           SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
           SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
-          
+
           cat > hy2.yaml << EOF
           server: ${SERVER}
           auth: ${PASSWORD}
@@ -60,7 +60,7 @@ jobs:
           http:
             listen: 127.0.0.1:1080
           EOF
-          
+
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
           sleep 3
           echo "PROXY_SERVER=http://127.0.0.1:1080" >> $GITHUB_ENV
@@ -71,8 +71,6 @@ jobs:
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          http_proxy: ${{ env.PROXY_SERVER }}
-          https_proxy: ${{ env.PROXY_SERVER }}
         run: python scripts/VPS8/main.py
 
 #      - name: 上传截图
