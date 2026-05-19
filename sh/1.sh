@@ -5,8 +5,8 @@ TOTAL=108000                       # 你要的总数
 REGISTER_TIMEOUT=3              # 留给 Agent 注册的时间（秒），网络好可以调小
 INTERVAL=1                       # 每个之间的间隔（秒）
 
-CLIENT_SECRET="qL7B61misbNGiLMBDxXJSBztCna5Vwsy"
-SERVER="nazhav1.gamesover.eu.org:443"
+CLIENT_SECRET="qL7Bdddddddddddddsy"
+SERVER="nazha..eu.org:443"
 TLS="true"
 # 其他固定配置
 DISABLE_AUTO_UPDATE="true"
