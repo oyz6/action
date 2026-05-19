@@ -1,4 +1,4 @@
-name: VPS8 每日签到
+name: VPS8 每日签到 cf
 
 on:
 #  schedule:
@@ -63,7 +63,7 @@ jobs:
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python scripts/VPS8/main.py
+        run: python scripts/VPS8/main-cf.py
 
 #      - name: 上传截图
 #        if: always()
