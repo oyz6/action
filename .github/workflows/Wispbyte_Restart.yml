@@ -61,7 +61,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wispbyte-screenshots-${{ github.run_number }}
-          path: repo/output/screenshots/*.png
+          path: output/screenshots/*.png
           retention-days: 7
           if-no-files-found: ignore
 
