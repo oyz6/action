@@ -1,0 +1,67 @@
+name: Serv00平台构建 Uptime-Kuma（基于FreeBSD系统）
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:   # 允许手动触发
+
+jobs:
+  build:
+    name: 构建
+    runs-on: ubuntu-latest
+    steps:
+    
+      - name: 官方仓库检出 2.3.2 版本
+        uses: actions/checkout@v4
+        with:
+          repository: louislam/uptime-kuma
+          ref: refs/tags/2.3.2
+
+      - name: 设置 Node.js 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: 安装依赖项
+        run: npm install
+
+      - name: 构建前端界面
+        run: npm run build
+
+      - name: 修复FreeBSD上的Playwright相关问题
+        run: |
+          node -e "
+          const fs = require('fs');
+          const file = 'node_modules/playwright-core/lib/server/registry/index.js';
+          let content = fs.readFileSync(file, 'utf8');
+          let lines = content.split('\n');
+          lines[295] = lines[295].replace(/else throw new Error\\('Unsupported platform: ' \\+ process\\.platform\\);/, 'else { cacheDirectory = _path.default.join(os.homedir(), \\\".cache\\\"); }');
+          fs.writeFileSync(file, lines.join('\n'));
+          "
+
+      - name: 禁用真实浏览器监控功能
+        run: |
+          sed -i 's/.*RealBrowserMonitorType.*/\/\/ &/' server/uptime-kuma-server.js
+
+      - name: 删除 devDependencies，减小 zip 体积
+        run: npm prune --production
+
+      - name: 打包整个项目
+        run: |
+          zip -r uptime-kuma.zip . -x ".git/*" ".github/*" "node_modules/.cache/*"
+
+      - name: 上传构建文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: uptime-kuma-serv00
+          path: uptime-kuma.zip
+
+      - name: 清理历史运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
