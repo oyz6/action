@@ -64,14 +64,14 @@ jobs:
           INPUT_ACCOUNTS: ${{ inputs.accounts }}
         run: python scripts/Wispbyte/Wispbyte_Restart.py
 
-      - name: 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: wispbyte-screenshots-${{ github.run_number }}
-          path: output/screenshots/*.png
-          retention-days: 7
-          if-no-files-found: ignore
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: wispbyte-screenshots-${{ github.run_number }}
+#          path: output/screenshots/*.png
+#          retention-days: 7
+#          if-no-files-found: ignore
 
       - name: 清理历史运行记录
         if: always()
