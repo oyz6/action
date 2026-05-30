@@ -1,4 +1,4 @@
-name: 构建 Uptime Kuma Serv00 专用版（自定义端口）
+name: 构建 Serv00 专用版 Uptime Kuma
 
 on:
   workflow_dispatch:
