@@ -1,5 +1,16 @@
 #!/bin/bash
 
+########################################
+# 启动命令 chmod +x start.sh && bash start.sh
+# 类型选 User prograr
+# start.sh 文件放 /home/用户名/www 目录
+# AlwaysData 白虎面板安装脚本
+# ADMIN_PASSWORD=你的面板密码
+# GH_TOKEN=ghp_vssssssssssssssssssss
+# GH_BACKUP_REPO=oyz8/backup
+# GH_BACKUP_BRANCH=备份分支
+########################################
+
 # ===================== 辅助函数 ========================
 log_info() { echo "[INFO] $1"; }
 log_warn() { echo "[WARN] $1"; }
