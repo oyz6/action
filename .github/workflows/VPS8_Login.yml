@@ -1,9 +1,9 @@
-name: VPS8 签到 (修复版)
+name: VPS8 每日签到 (NopeCHA + 主动激活扩展)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '35 3 * * *'
+#  schedule:
+#    - cron: '35 3 * * *'   # 北京时间 11:35
 
 jobs:
   sign:
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - name: 检出代码
+      - name: 检出私有仓库
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
@@ -39,23 +39,19 @@ jobs:
 
       - name: 安装 Python 依赖
         run: |
-          pip install -q playwright requests
-          # ⚠️ 只安装 playwright 库，不安装 Playwright 的 Chromium
-          # playwright install chromium  ← 不需要这行
+          pip install -q playwright requests pyvirtualdisplay
+          # 注意：不运行 playwright install，因为我们使用系统 Chrome
 
-      - name: 下载 NopeCHA 扩展
+      - name: 下载并解压 NopeCHA 扩展
         run: |
-          wget -q \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
+          wget -q https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
           unzip -q chromium.zip -d nopecha_extension
-          
-          echo "=== 扩展文件 ==="
+          echo "=== 扩展文件列表 ==="
           ls -la nopecha_extension/
-          
           echo "=== manifest.json ==="
           cat nopecha_extension/manifest.json | python3 -m json.tool
 
-      - name: 配置代理 (Hysteria2)
+      - name: 配置 Hysteria2 代理 (SOCKS5)
         env:
           HY2_URL: ${{ secrets.HY2_URL_PL }}
         run: |
@@ -63,9 +59,7 @@ jobs:
             echo "PROXY_SERVER=" >> $GITHUB_ENV
             exit 0
           fi
-          wget -q \
-            https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 \
-            -O hysteria
+          wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
 
           URL="${HY2_URL#hysteria2://}"
@@ -81,17 +75,16 @@ jobs:
             insecure: true
           http:
             listen: 127.0.0.1:1080
+          socks5:
+            listen: 127.0.0.1:10808
           EOF
 
-          ./hysteria client -c hy2.yaml > /tmp/hy2.log 2>&1 &
-          sleep 3
-          
-          echo "=== Hysteria2 状态 ==="
-          cat /tmp/hy2.log | tail -5
-          
-          echo "PROXY_SERVER=http://127.0.0.1:1080" >> $GITHUB_ENV
+          ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
+          sleep 5
+          echo "PROXY_SERVER=socks5://127.0.0.1:10808" >> $GITHUB_ENV
+          echo "代理已启动 (SOCKS5 :10808)"
 
-      - name: 执行签到
+      - name: 执行 VPS8 签到
         env:
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -107,3 +100,13 @@ jobs:
           name: screenshots-${{ github.run_number }}
           path: screenshots/
           retention-days: 3
+
+      - name: 清理历史运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
