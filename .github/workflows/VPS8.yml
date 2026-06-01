@@ -1,85 +1,76 @@
-name: VPS8 每日签到 (Node.js + NopeCHA)
+name: VPS8 每日签到
 
 on:
   workflow_dispatch:
 #  schedule:
-#    - cron: '35 3 * * *'   # 北京时间 11:35
+#    - cron: '10 17 * * *'  # 北京时间凌晨1:10
 
 jobs:
   sign:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-
+    timeout-minutes: 30
     steps:
-      - name: 检出私有仓库
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            xvfb \
-            wget \
-            unzip \
-            fonts-noto-cjk \
-            libnss3 \
-            libatk-bridge2.0-0 \
-            libgtk-3-0 \
-            libgbm1 \
-            libasound2t64
+          sudo apt-get update
+          sudo apt-get install -y xvfb wget unzip p7zip-full \
+            fonts-liberation libnss3 libatk-bridge2.0-0 libgtk-3-0 \
+            libxss1 libasound2t64 libgbm1 libu2f-udev
 
-      - name: 安装 Node.js 依赖及 Playwright 浏览器
+      - name: 安装 Google Chrome
+        run: |
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+          google-chrome --version
+
+      - name: 安装 Node.js 依赖
         run: |
           npm install playwright form-data
-          npx playwright install --with-deps chromium
+          npx playwright install chromium  # 虽然用系统Chrome，但playwright需要一些库
 
-      - name: 下载并解压 NopeCHA 扩展
+      - name: 下载并解压 NopeCHA
         run: |
           mkdir -p scripts/extensions/nopecha
-          wget -q -O scripts/extensions/nopecha/chromium.zip \
+          wget -O scripts/extensions/nopecha/chromium.zip \
             https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
           cd scripts/extensions/nopecha
-          unzip -q chromium.zip -d unpacked
-          echo "扩展文件:"
+          7z x -y chromium.zip -ounpacked
           ls unpacked
 
-      - name: 配置 Hysteria2 代理 (SOCKS5)
+      - name: 配置代理 (Hysteria2)
         env:
-          HY2_URL: ${{ secrets.HY2_URL_PL }}
+          VPS8_HY2_URL: ${{ secrets.HY2_URL }}
         run: |
-          if [ -z "$HY2_URL" ]; then
+          if [ -z "$VPS8_HY2_URL" ]; then
             echo "PROXY_SERVER=" >> $GITHUB_ENV
             exit 0
           fi
           wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
-
-          URL="${HY2_URL#hysteria2://}"
+          URL="${VPS8_HY2_URL#hysteria2://}"
           PASSWORD="${URL%%@*}"
           SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
           SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
-
           cat > hy2.yaml << EOF
           server: ${SERVER}
           auth: ${PASSWORD}
           tls:
             sni: ${SNI}
             insecure: true
-          http:
-            listen: 127.0.0.1:1080
           socks5:
             listen: 127.0.0.1:10808
           EOF
-
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
           sleep 5
           echo "PROXY_SERVER=socks5://127.0.0.1:10808" >> $GITHUB_ENV
-          echo "代理已启动 (SOCKS5 :10808)"
+          echo "代理已启动"
 
-      - name: 执行签到
+      - name: 运行签到
         env:
           VPS8_BATCH: ${{ secrets.VPS8 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -93,16 +84,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots-${{ github.run_number }}
+          name: screenshots
           path: screenshots/
           retention-days: 3
-
-      - name: 清理历史运行记录
-        if: always()
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          delete_workflow_pattern: ${{ github.workflow }}
-          retain_days: 0
-          keep_minimum_runs: 2
