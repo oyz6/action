@@ -24,7 +24,6 @@ jobs:
             xvfb \
             wget \
             unzip \
-            p7zip-full \
             fonts-noto-cjk \
             libnss3 \
             libatk-bridge2.0-0 \
@@ -41,7 +40,7 @@ jobs:
       - name: 安装 Node.js 依赖
         run: |
           npm install playwright form-data
-          npx playwright install chromium
+          # 不再安装 Playwright 自带的 Chromium
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
