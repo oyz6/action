@@ -31,16 +31,10 @@ jobs:
             libgbm1 \
             libasound2t64
 
-      - name: 安装 Google Chrome
-        run: |
-          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
-          google-chrome --version
-
-      - name: 安装 Node.js 依赖
+      - name: 安装 Node.js 依赖及 Playwright 浏览器
         run: |
           npm install playwright form-data
-          # 不再安装 Playwright 自带的 Chromium
+          npx playwright install --with-deps chromium
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
