@@ -1,13 +1,12 @@
-name: VPS8 每日签到 (CLIP 求解器)
+name: VPS8 每日签到 (NopeCHA)
 
 on:
   # schedule:
-  #   - cron: '35 3 * * *'  # 北京时间 11:35
+  #   - cron: '35 3 * * *'
   workflow_dispatch:
 
 jobs:
   sign:
-    name: 执行签到
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
@@ -28,31 +27,33 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei fonts-wqy-microhei
+          sudo apt-get install -y xvfb fonts-noto-cjk
 
       - name: 安装 Python 依赖
         run: |
-          pip install -q playwright Pillow numpy opencv-python-headless torch transformers requests pyvirtualdisplay
+          pip install -q playwright requests pyvirtualdisplay
           python -m playwright install chromium
+
+      - name: 下载 NopeCHA 扩展
+        run: |
+          wget -q https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
+          unzip -q chromium.zip -d nopecha_extension
+          ls -la nopecha_extension
 
       - name: 配置代理
         env:
-          HY2_URL: ${{ secrets.HY2_URL_PL }}
+          HY2_URL: ${{ secrets.HY2_URL }}
         run: |
           if [ -z "$HY2_URL" ]; then
-            echo "INFO: 无代理配置，使用直连模式"
+            echo "PROXY_SERVER=" >> $GITHUB_ENV
             exit 0
           fi
-
-          echo "INFO: 配置 Hysteria2 代理"
           wget -q https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
-
           URL="${HY2_URL#hysteria2://}"
           PASSWORD="${URL%%@*}"
           SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
           SNI=$(echo "$URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
-
           cat > hy2.yaml << EOF
           server: ${SERVER}
           auth: ${PASSWORD}
@@ -62,11 +63,9 @@ jobs:
           http:
             listen: 127.0.0.1:1080
           EOF
-
           ./hysteria client -c hy2.yaml > /dev/null 2>&1 &
           sleep 3
           echo "PROXY_SERVER=http://127.0.0.1:1080" >> $GITHUB_ENV
-          echo "INFO: 代理已启动"
 
       - name: 执行 VPS8 签到
         env:
