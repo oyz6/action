@@ -1,4 +1,4 @@
-name: Lunes Host 自动重启 (WARP 路由版)
+name: Lunes Host 自动重启 (DrissionPage 版)
 
 on:
   workflow_dispatch:
@@ -28,37 +28,27 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 安装系统与 Python 依赖
+      - name: 安装系统依赖（Chrome + Xvfb + ffmpeg）
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
-          pip install -q seleniumbase speechrecognition pydub requests PyNaCl
+          sudo apt-get install -y -qq ffmpeg xvfb wget gnupg
+          # 安装 Google Chrome
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq google-chrome-stable
 
-      - name: 启用 Cloudflare WARP (路由模式)
+      - name: 安装 Python 依赖
+        run: |
+          pip install -q DrissionPage requests SpeechRecognition pydub PyNaCl
+
+      - name: 启用 WARP
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
-          mode: client   # client 模式会自动修改路由表，无需手动代理
+          mode: client
 
-      - name: 检查网络连通性
-        run: |
-          echo "等待 WARP 完成连接..."
-          sleep 10
-          echo "当前公网 IP:"
-          curl -s --max-time 10 https://api.ipify.org || echo "IP检测失败"
-          echo "WARP 状态:"
-          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc=' || echo "状态检测失败"
-          echo "DNS 解析测试:"
-          nslookup ctrl.lunes.host || dig ctrl.lunes.host +short || echo "DNS解析失败"
-
-      - name: 修复 DNS（确保使用 Cloudflare DNS）
-        run: |
-          sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
-          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
-
-      - name: 执行 Lunes Host 自动重启
+      - name: 执行 Lunes Host 自动重启 (DrissionPage)
         env:
           LUNES_ACCOUNTS: ${{ github.event.inputs.accounts }}
           LUNES_1: ${{ secrets.LUNES_1 }}
@@ -70,7 +60,6 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
-          # 重要：不设置任何 HTTP_PROXY/ALL_PROXY，让 WARP 路由表自动接管流量
           python scripts/Lunes/Lunes-warp.py
 
       - name: 上传截图 (无论成败)
