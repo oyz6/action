@@ -1,4 +1,4 @@
-name: Lunes Host 自动重启 (WARP 增强版 v2)
+name: Lunes Host 自动重启 (WARP 路由版)
 
 on:
   workflow_dispatch:
@@ -28,40 +28,37 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 安装依赖
+      - name: 安装系统与 Python 依赖
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           pip install -q seleniumbase speechrecognition pydub requests PyNaCl
 
-      - name: 启用 WARP
+      - name: 启用 Cloudflare WARP (路由模式)
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
-          mode: client
+          mode: client   # client 模式会自动修改路由表，无需手动代理
 
-      - name: 验证 WARP 代理可用性
+      - name: 检查网络连通性
         run: |
-          # 等待 WARP 完全启动
+          echo "等待 WARP 完成连接..."
           sleep 10
-          # 测试代理端口（WARP client 默认 SOCKS5 40000）
-          echo "测试 WARP SOCKS5 代理 ..."
-          curl -x socks5h://127.0.0.1:40000 -s --max-time 10 https://api.ipify.org || echo "代理测试失败"
-          # 将所有流量通过 WARP 代理
-          echo "ALL_PROXY=socks5h://127.0.0.1:40000" >> $GITHUB_ENV
-          echo "HTTP_PROXY=socks5h://127.0.0.1:40000" >> $GITHUB_ENV
-          echo "HTTPS_PROXY=socks5h://127.0.0.1:40000" >> $GITHUB_ENV
-          echo "REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt" >> $GITHUB_ENV
+          echo "当前公网 IP:"
+          curl -s --max-time 10 https://api.ipify.org || echo "IP检测失败"
+          echo "WARP 状态:"
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc=' || echo "状态检测失败"
+          echo "DNS 解析测试:"
+          nslookup ctrl.lunes.host || dig ctrl.lunes.host +short || echo "DNS解析失败"
 
-      - name: 修复 DNS
+      - name: 修复 DNS（确保使用 Cloudflare DNS）
         run: |
-          sudo systemctl stop systemd-resolved || true
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo rm -f /etc/resolv.conf
           echo -e "nameserver 1.1.1.1\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
           sudo chattr +i /etc/resolv.conf 2>/dev/null || true
-          nslookup ctrl.lunes.host 1.1.1.1
 
-      - name: 执行重启任务
+      - name: 执行 Lunes Host 自动重启
         env:
           LUNES_ACCOUNTS: ${{ github.event.inputs.accounts }}
           LUNES_1: ${{ secrets.LUNES_1 }}
@@ -72,9 +69,11 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-        run: python scripts/Lunes/Lunes-warp.py
+        run: |
+          # 重要：不设置任何 HTTP_PROXY/ALL_PROXY，让 WARP 路由表自动接管流量
+          python scripts/Lunes/Lunes-warp.py
 
-      - name: 上传截图
+      - name: 上传截图 (无论成败)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -83,7 +82,7 @@ jobs:
           retention-days: 5
           if-no-files-found: ignore
 
-      - name: 清理运行记录
+      - name: 清理旧运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
         with:
