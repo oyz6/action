@@ -28,12 +28,21 @@ jobs:
         with:
           python-version: '3.11'
 
+#      - name: 安装系统依赖
+#        env:
+#          DEBIAN_FRONTEND: noninteractive
+#        run: |
+#          sudo apt-get update -qq
+#          sudo apt-get install -y -qq xvfb ffmpeg libgl1-mesa-glx libgl1-mesa-dri p7zip-full
+#          pip install --quiet playwright requests PyNaCl
+#          python -m playwright install --with-deps chromium
+
       - name: 安装系统依赖
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb ffmpeg libgl1-mesa-glx libgl1-mesa-dri p7zip-full
+          sudo apt-get install -y -qq xvfb ffmpeg p7zip-full
           pip install --quiet playwright requests PyNaCl
           python -m playwright install --with-deps chromium
 
@@ -45,15 +54,6 @@ jobs:
 #          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
 #          echo "✅ Buster 扩展已就绪"
 #          ls extensions/buster/unpacked
-
-      - name: 下载并解压 Buster 扩展
-        run: |
-          mkdir -p extensions/buster
-          wget -q -O extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v1.3.1/buster_captcha_solver_for_humans-1.3.1-chrome.zip
-          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
-          echo "✅ Buster 扩展已就绪"
-          cat extensions/buster/unpacked/manifest.json | python3 -c "import sys,json; m=json.load(sys.stdin); print(f'版本: {m[\"version\"]}, MV: {m[\"manifest_version\"]}')"
 
       - name: 启用 WARP 代理
         uses: fscarmen/warp-on-actions@v1.3
@@ -78,9 +78,9 @@ jobs:
           LUNES_4: ${{ secrets.LUNES_4 }}
           LUNES_5: ${{ secrets.LUNES_5 }}
           LUNES_6: ${{ secrets.LUNES_6 }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           DISPLAY: :99
         run: |
           xvfb-run --auto-servernum \
