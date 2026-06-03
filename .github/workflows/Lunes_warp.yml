@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p extensions/buster
           wget -q -O extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+            https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
           7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
           echo "✅ Buster 扩展已就绪"
           ls extensions/buster/unpacked
