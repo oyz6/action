@@ -37,14 +37,23 @@ jobs:
           pip install --quiet playwright requests PyNaCl
           python -m playwright install --with-deps chromium
 
+#      - name: 下载并解压 Buster 扩展
+#        run: |
+#          mkdir -p extensions/buster
+#          wget -q -O extensions/buster/buster.zip \
+#            https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
+#          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
+#          echo "✅ Buster 扩展已就绪"
+#          ls extensions/buster/unpacked
+
       - name: 下载并解压 Buster 扩展
         run: |
           mkdir -p extensions/buster
           wget -q -O extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
+            https://github.com/dessant/buster/releases/download/v1.3.1/buster_captcha_solver_for_humans-1.3.1-chrome.zip
           7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
           echo "✅ Buster 扩展已就绪"
-          ls extensions/buster/unpacked
+          cat extensions/buster/unpacked/manifest.json | python3 -c "import sys,json; m=json.load(sys.stdin); print(f'版本: {m[\"version\"]}, MV: {m[\"manifest_version\"]}')"
 
       - name: 启用 WARP 代理
         uses: fscarmen/warp-on-actions@v1.3
