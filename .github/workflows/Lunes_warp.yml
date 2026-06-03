@@ -1,4 +1,4 @@
-name: Lunes Host 重启 (Buster 扩展)
+name: Lunes Host 重启 (Google STT)
 
 on:
   workflow_dispatch:
@@ -28,32 +28,30 @@ jobs:
         with:
           python-version: '3.11'
 
-#      - name: 安装系统依赖
-#        env:
-#          DEBIAN_FRONTEND: noninteractive
-#        run: |
-#          sudo apt-get update -qq
-#          sudo apt-get install -y -qq xvfb ffmpeg libgl1-mesa-glx libgl1-mesa-dri p7zip-full
-#          pip install --quiet playwright requests PyNaCl
-#          python -m playwright install --with-deps chromium
-
       - name: 安装系统依赖
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb ffmpeg p7zip-full speechrecognition pydub
-          pip install --quiet playwright requests PyNaCl
+          # 安装必要的系统工具
+          sudo apt-get install -y -qq \
+            xvfb \
+            ffmpeg \
+            portaudio19-dev \
+            flac \
+            libasound2-dev
+          
+          # 安装 Python 依赖
+          pip install --quiet --upgrade pip
+          pip install --quiet \
+            playwright \
+            requests \
+            PyNaCl \
+            SpeechRecognition \
+            pydub
+          
+          # 安装 Playwright 浏览器
           python -m playwright install --with-deps chromium
-
-#      - name: 下载并解压 Buster 扩展
-#        run: |
-#          mkdir -p extensions/buster
-#          wget -q -O extensions/buster/buster.zip \
-#            https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
-#          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
-#          echo "✅ Buster 扩展已就绪"
-#          ls extensions/buster/unpacked
 
       - name: 启用 WARP 代理
         uses: fscarmen/warp-on-actions@v1.3
@@ -68,6 +66,15 @@ jobs:
           echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
           sudo chattr +i /etc/resolv.conf 2>/dev/null || true
           sleep 2
+
+      - name: 验证依赖安装
+        run: |
+          echo "Python 版本："
+          python --version
+          echo -e "\n已安装的包："
+          pip list | grep -E "(playwright|requests|PyNaCl|SpeechRecognition|pydub)"
+          echo -e "\nFFmpeg 版本："
+          ffmpeg -version | head -n1
 
       - name: 执行自动重启
         env:
@@ -91,9 +98,18 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
+          name: screenshots-${{ github.run_number }}
           path: output/screenshots/*.png
           retention-days: 5
+          if-no-files-found: ignore
+
+      - name: 上传调试音频
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-debug-${{ github.run_number }}
+          path: output/audio_debug/*.mp3
+          retention-days: 3
           if-no-files-found: ignore
 
       - name: 清理运行记录
