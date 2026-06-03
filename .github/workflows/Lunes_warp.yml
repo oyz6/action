@@ -1,4 +1,4 @@
-name: Lunes Host 重启 (Whisper 音频破解)
+name: Lunes Host 重启 (Buster 扩展)
 
 on:
   workflow_dispatch:
@@ -33,20 +33,18 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb ffmpeg libgl1-mesa-glx libgl1-mesa-dri
-          pip install --quiet playwright requests SpeechRecognition pydub PyNaCl faster-whisper
+          sudo apt-get install -y -qq xvfb ffmpeg libgl1-mesa-glx libgl1-mesa-dri p7zip-full
+          pip install --quiet playwright requests PyNaCl
           python -m playwright install --with-deps chromium
 
-      - name: 下载 Whisper 模型（small 英文）
+      - name: 下载并解压 Buster 扩展
         run: |
-          mkdir -p /tmp/whisper-models
-          python -c "
-          from huggingface_hub import snapshot_download
-          snapshot_download(repo_id='Systran/faster-whisper-small.en', local_dir='/tmp/whisper-models/faster-whisper-small.en')
-          " 2>/dev/null || echo "模型下载完成（如出错忽略）"
-          # 备用：使用默认下载方式（faster-whisper 首次会自动下载）
-          # 如果不想预先下载，可跳过此步，但运行时会下载，增加耗时。
-          echo "WHISPER_MODEL_PATH=/tmp/whisper-models/faster-whisper-small.en" >> $GITHUB_ENV
+          mkdir -p extensions/buster
+          wget -q -O extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked > /dev/null
+          echo "✅ Buster 扩展已就绪"
+          ls extensions/buster/unpacked
 
       - name: 启用 WARP 代理
         uses: fscarmen/warp-on-actions@v1.3
@@ -75,7 +73,6 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
           DISPLAY: :99
-          WHISPER_MODEL_PATH: /tmp/whisper-models/faster-whisper-small.en
         run: |
           xvfb-run --auto-servernum \
             --server-args="-screen 0 1920x1080x24 -ac -noreset" \
