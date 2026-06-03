@@ -1,4 +1,4 @@
-name: Lunes Host 重启 (WARP+NopeCHA)
+name: Lunes Host 重启 (WARP+Buster)
 
 on:
   workflow_dispatch:
@@ -31,15 +31,15 @@ jobs:
         run: |
           pip install -q seleniumbase requests PyNaCl
 
-      - name: 安装并配置 NopeCHA 扩展
+      - name: 安装 Buster 扩展
         working-directory: scripts
         run: |
-          mkdir -p extensions/nopecha/unpacked
-          wget -q -O /tmp/nopecha.zip \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
-          7z x -y /tmp/nopecha.zip -oextensions/nopecha/unpacked > /dev/null
-          rm /tmp/nopecha.zip
-          python3 -c "import json; m=json.load(open('extensions/nopecha/unpacked/manifest.json')); print(f'✅ NopeCHA {m[\"version\"]} 就绪')"
+          mkdir -p extensions/buster/unpacked
+          wget -qO /tmp/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+          7z x -y /tmp/buster.zip -oextensions/buster/unpacked > /dev/null
+          rm /tmp/buster.zip
+          echo "✅ Buster 扩展已就绪"
 
       - name: 启用 WARP 代理
         uses: fscarmen/warp-on-actions@v1.3
@@ -47,7 +47,7 @@ jobs:
           stack: dual
           mode: client
 
-      - name: 修复 DNS（确保 WARP 生效）
+      - name: 修复 DNS
         run: |
           sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo rm -f /etc/resolv.conf
@@ -77,7 +77,7 @@ jobs:
           retention-days: 5
           if-no-files-found: ignore
 
-      - name: 保留最近2条运行记录
+      - name: 清理记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
         with:
