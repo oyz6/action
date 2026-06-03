@@ -67,15 +67,6 @@ jobs:
           sudo chattr +i /etc/resolv.conf 2>/dev/null || true
           sleep 2
 
-      - name: 验证依赖安装
-        run: |
-          echo "Python 版本："
-          python --version
-          echo -e "\n已安装的包："
-          pip list | grep -E "(playwright|requests|PyNaCl|SpeechRecognition|pydub)"
-          echo -e "\nFFmpeg 版本："
-          ffmpeg -version | head -n1
-
       - name: 执行自动重启
         env:
           LUNES_ACCOUNTS: ${{ github.event.inputs.accounts }}
