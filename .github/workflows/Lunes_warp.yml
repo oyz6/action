@@ -39,6 +39,8 @@ jobs:
             ffmpeg \
             portaudio19-dev \
             flac \
+            sox \
+            libsox-fmt-all \
             libasound2-dev
           
           # 安装 Python 依赖
