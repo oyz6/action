@@ -64,6 +64,8 @@ jobs:
           LUNES_4: ${{ secrets.LUNES_4 }}
           LUNES_5: ${{ secrets.LUNES_5 }}
           LUNES_6: ${{ secrets.LUNES_6 }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
           python scripts/Lunes/Lunes-warp.py
