@@ -1,4 +1,4 @@
-name: Lunes Host 重启 warp版
+name: Lunes Host 重启 (WARP+NopeCHA)
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
       actions: write
 
     steps:
-      - name: 拉取私有仓库
+      - name: 拉取脚本仓库
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
@@ -29,52 +29,33 @@ jobs:
 
       - name: 安装依赖
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg > /dev/null 2>&1
-          pip install -q seleniumbase pyvirtualdisplay requests SpeechRecognition pydub PyNaCl
+          pip install -q seleniumbase requests PyNaCl
 
-      - name: 启用 WARP 网络
+      - name: 安装并配置 NopeCHA 扩展
+        working-directory: scripts
+        run: |
+          mkdir -p extensions/nopecha/unpacked
+          wget -q -O /tmp/nopecha.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
+          7z x -y /tmp/nopecha.zip -oextensions/nopecha/unpacked > /dev/null
+          rm /tmp/nopecha.zip
+          python3 -c "import json; m=json.load(open('extensions/nopecha/unpacked/manifest.json')); print(f'✅ NopeCHA {m[\"version\"]} 就绪')"
+
+      - name: 启用 WARP 代理
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
           mode: client
 
-      - name: 修复 DNS
+      - name: 修复 DNS（确保 WARP 生效）
         run: |
-          echo "🔧 停用 systemd-resolved，直连 DNS..."
-          
-          # 停掉 systemd-resolved
           sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo systemctl disable systemd-resolved 2>/dev/null || true
-          
-          # 删掉软链接，写真实文件
           sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
-          
-          # 防止被覆盖
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
           sudo chattr +i /etc/resolv.conf 2>/dev/null || true
-          
-          # 等 DNS 生效
           sleep 2
-          
-          # 验证 DNS
-          echo "🔍 DNS 测试:"
-          echo "--- ctrl.lunes.host ---"
-          nslookup ctrl.lunes.host 1.1.1.1 || dig ctrl.lunes.host @1.1.1.1 +short || echo "⚠️ 解析失败"
-          echo "--- api.github.com ---"
-          nslookup api.github.com 1.1.1.1 || echo "⚠️ 解析失败"
-          echo "--- 系统级测试 ---"
-          getent hosts ctrl.lunes.host || echo "⚠️ getent 失败"
-          
-          echo ""
-          echo "🌍 当前 IP:"
-          curl -s --max-time 10 https://api.ipify.org && echo
-          
-          echo ""
-          echo "📄 /etc/resolv.conf:"
-          cat /etc/resolv.conf
 
-      - name: 执行任务
+      - name: 执行自动重启
         env:
           LUNES_ACCOUNTS: ${{ github.event.inputs.accounts }}
           LUNES_1: ${{ secrets.LUNES_1 }}
@@ -86,7 +67,6 @@ jobs:
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
           python scripts/Lunes/Lunes-warp.py
-          echo "完成"
 
       - name: 上传截图
         if: always()
@@ -97,7 +77,7 @@ jobs:
           retention-days: 5
           if-no-files-found: ignore
 
-      - name: 清理运行记录
+      - name: 保留最近2条运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
         with:
