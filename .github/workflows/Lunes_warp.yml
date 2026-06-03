@@ -42,7 +42,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb ffmpeg p7zip-full
+          sudo apt-get install -y -qq xvfb ffmpeg p7zip-full speechrecognition pydub
           pip install --quiet playwright requests PyNaCl
           python -m playwright install --with-deps chromium
 
