@@ -69,7 +69,7 @@ jobs:
           GODLIKE_ID_INPUT: ${{ github.event.inputs.accounts }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python renew.py
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python scripts/Godlike/renew.py
 
       - name: 上传截图
         if: always()
