@@ -41,27 +41,54 @@ jobs:
       - name: 安装 Python 依赖
         run: |
           python -m pip install --upgrade pip
-          pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
+          pip install DrissionPage requests SpeechRecognition pydub
 
-      - name: 启用 WARP 网络
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual
-          mode: client
-
-      - name: 修复 DNS
+      - name: 配置代理
+        env:
+          HY2_URL: ${{ secrets.HY2_URL }}
         run: |
-          sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo systemctl disable systemd-resolved 2>/dev/null || true
-          sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" \
-            | sudo tee /etc/resolv.conf
-          sleep 2
-          echo "[INFO] 当前出口 IP:"
-          curl -s --max-time 10 https://api.ipify.org && echo
-          echo "[INFO] WARP Trace:"
-          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
-            | grep -E 'ip=|warp=|loc=' || true
+          if [ -z "$HY2_URL" ]; then
+            echo "[INFO] 无代理配置，使用直连模式"
+            exit 0
+          fi
+
+          echo "[INFO] 配置 Hysteria2 代理"
+          wget -q https://github.com/oyz6/action/releases/download/proxy/hysteria-linux-amd64 -O hysteria
+          chmod +x hysteria
+
+          URL="${HY2_URL#hysteria2://}"
+          PASSWORD="${URL%%@*}"
+          SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
+          SNI=$(echo "$HY2_URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
+
+          cat > hy2.yaml << EOF
+          server: ${SERVER}
+          auth: ${PASSWORD}
+          tls:
+            sni: ${SNI}
+            insecure: true
+          http:
+            listen: 127.0.0.1:1080
+          EOF
+
+          ./hysteria client -c hy2.yaml > hy2.log 2>&1 &
+          sleep 5
+
+          echo "[INFO] 测试代理连接..."
+          for i in 1 2 3 4 5; do
+            PROXY_IP=$(curl -x http://127.0.0.1:1080 -s --max-time 15 https://api.ipify.org 2>/dev/null)
+            if [ -n "$PROXY_IP" ]; then
+              echo "[INFO] ✅ 代理连接成功，出口 IP: $PROXY_IP"
+              echo "PROXY_HTTP=http://127.0.0.1:1080" >> $GITHUB_ENV
+              exit 0
+            fi
+            echo "[WARN] 尝试 $i/5，等待..."
+            sleep 3
+          done
+
+          echo "[ERROR] ❌ 代理连接失败"
+          cat hy2.log
+          exit 1
 
       - name: 执行续订
         env:
@@ -69,6 +96,7 @@ jobs:
           GODLIKE_ID_INPUT: ${{ github.event.inputs.accounts }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROXY_HTTP: ${{ env.PROXY_HTTP }}
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python scripts/Godlike/renew.py
 
       - name: 上传截图
