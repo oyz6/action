@@ -53,52 +53,29 @@ jobs:
           unzip -q /tmp/buster.zip -d /tmp/buster
           echo "BUSTER_PATH=/tmp/buster" >> $GITHUB_ENV
 
-      - name: 配置代理
-        env:
-          HY2_URL: ${{ secrets.HY2_URL }}
+      - name: 配置 Cloudflare WARP 代理
         run: |
-          if [ -z "$HY2_URL" ]; then
-            echo "[INFO] 无代理配置，使用直连模式"
-            exit 0
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update && sudo apt-get install -y cloudflare-warp
+          warp-cli --accept-tos registration new
+          warp-cli --accept-tos mode proxy
+          warp-cli --accept-tos connect
+
+          echo "⏳ 等待 WARP 隧道建立（15秒）..."
+          sleep 15
+
+          # 验证代理可用性
+          echo "测试 WARP 代理..."
+          PROXY="http://127.0.0.1:40000"
+          if curl -x "$PROXY" -s --max-time 20 https://api.ipify.org; then
+            echo "✅ WARP 连接成功，出口 IP: $(curl -x $PROXY -s https://api.ipify.org)"
+            echo "PROXY_HTTP=$PROXY" >> $GITHUB_ENV
+          else
+            echo "❌ WARP 代理启动失败"
+            warp-cli status || true
+            exit 1
           fi
-
-          echo "[INFO] 配置 Hysteria2 代理"
-          wget -q https://github.com/oyz6/action/releases/download/proxy/hysteria-linux-amd64 -O hysteria
-          chmod +x hysteria
-
-          URL="${HY2_URL#hysteria2://}"
-          PASSWORD="${URL%%@*}"
-          SERVER="${URL#*@}"; SERVER="${SERVER%%\?*}"
-          SNI=$(echo "$HY2_URL" | grep -oP 'sni=\K[^&]+' || echo "${SERVER%%:*}")
-
-          cat > hy2.yaml << EOF
-          server: ${SERVER}
-          auth: ${PASSWORD}
-          tls:
-            sni: ${SNI}
-            insecure: true
-          http:
-            listen: 127.0.0.1:1080
-          EOF
-
-          ./hysteria client -c hy2.yaml > hy2.log 2>&1 &
-          sleep 5
-
-          echo "[INFO] 测试代理连接..."
-          for i in 1 2 3 4 5; do
-            PROXY_IP=$(curl -x http://127.0.0.1:1080 -s --max-time 15 https://api.ipify.org 2>/dev/null)
-            if [ -n "$PROXY_IP" ]; then
-              echo "[INFO] ✅ 代理连接成功，出口 IP: $PROXY_IP"
-              echo "PROXY_HTTP=http://127.0.0.1:1080" >> $GITHUB_ENV
-              exit 0
-            fi
-            echo "[WARN] 尝试 $i/5，等待..."
-            sleep 3
-          done
-
-          echo "[ERROR] ❌ 代理连接失败"
-          cat hy2.log
-          exit 1
 
       - name: 执行续订
         env:
