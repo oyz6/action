@@ -18,8 +18,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 拉取仓库
+      - name: 拉取私有仓库
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
 
       - name: 配置 Python 环境
         uses: actions/setup-python@v5
