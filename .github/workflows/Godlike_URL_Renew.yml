@@ -43,25 +43,201 @@ jobs:
           python -m pip install --upgrade pip
           pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
 
-      - name: 启用 WARP 网络
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual
-          mode: client
-
-      - name: 修复 DNS
+      - name: 安装并启动 SS 代理
+        env:
+          PROXY_NODE: ${{ secrets.PROXY_NODE_SS }}
         run: |
-          sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo systemctl disable systemd-resolved 2>/dev/null || true
-          sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" \
-            | sudo tee /etc/resolv.conf
-          sleep 2
-          echo "[INFO] 当前出口 IP:"
-          curl -s --max-time 10 https://api.ipify.org && echo
-          echo "[INFO] WARP Trace:"
-          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
-            | grep -E 'ip=|warp=|loc=' || true
+          if [ -z "$PROXY_NODE" ]; then
+            echo "[ERROR] 未配置 PROXY_NODE，退出"
+            exit 1
+          fi
+
+          # 下载 Xray
+          wget -q https://github.com/oyz6/action/releases/download/proxy/Xray-linux-64.zip
+          unzip -q Xray-linux-64.zip -d xray && chmod +x xray/xray
+
+          # 解析 SS 链接，生成 Xray 配置
+          python3 << 'PYEOF'
+          import os, sys, json, base64, re
+          from urllib.parse import parse_qs, unquote, urlparse
+
+          url = os.environ.get("PROXY_NODE", "").strip()
+          if not url:
+              print("[ERROR] PROXY_NODE 为空")
+              sys.exit(1)
+
+          if not url.startswith("ss://"):
+              print(f"[ERROR] 仅支持 ss:// 协议，当前: {url.split('://')[0]}")
+              sys.exit(1)
+
+          # 去掉 ss:// 前缀，保留 # 备注之前的部分
+          raw = url[5:]
+          if "#" in raw:
+              raw = raw.rsplit("#", 1)[0]
+
+          print(f"[INFO] 原始内容: {raw[:60]}...")
+
+          # ── 解析 SS URL ──────────────────────────────────────────
+          # 格式1（SIP002，带插件）:
+          #   ss://BASE64(method:pass)@host:port?plugin=...
+          # 格式2（旧格式）:
+          #   ss://BASE64(method:pass@host:port)
+
+          method = password = address = port = ""
+          plugin_opts = {}
+
+          if "@" in raw:
+              # SIP002 格式
+              encoded_part, server_part = raw.split("@", 1)
+
+              # 解码 method:password
+              # 补全 base64 padding
+              pad = 4 - len(encoded_part) % 4
+              if pad != 4:
+                  encoded_part += "=" * pad
+              try:
+                  decoded = base64.urlsafe_b64decode(encoded_part).decode()
+              except Exception:
+                  decoded = base64.b64decode(encoded_part).decode()
+
+              if ":" in decoded:
+                  method, password = decoded.split(":", 1)
+              else:
+                  print(f"[ERROR] 无法解析 method:password: {decoded}")
+                  sys.exit(1)
+
+              # 解析 host:port?plugin=...
+              parsed = urlparse("ss://" + server_part)
+              address = parsed.hostname
+              port    = str(parsed.port)
+
+              # 解析插件参数
+              qs = parse_qs(parsed.query)
+              plugin_str = qs.get("plugin", [""])[0]
+              if plugin_str:
+                  # plugin=v2ray-plugin;mode=websocket;host=...;path=/...;tls;mux=0
+                  # 注意 \; 是转义的 ;
+                  plugin_str = plugin_str.replace("\\;", ";")
+                  parts = plugin_str.split(";")
+                  plugin_name = parts[0]
+                  for p in parts[1:]:
+                      if "=" in p:
+                          k, v = p.split("=", 1)
+                          plugin_opts[k] = unquote(v)
+                      else:
+                          plugin_opts[p] = True   # 布尔标志，如 tls
+                  print(f"[INFO] 插件: {plugin_name}, 参数: {plugin_opts}")
+
+          else:
+              # 旧格式: BASE64(method:pass@host:port)
+              pad = 4 - len(raw) % 4
+              if pad != 4:
+                  raw += "=" * pad
+              try:
+                  decoded = base64.b64decode(raw).decode()
+              except Exception as e:
+                  print(f"[ERROR] BASE64 解码失败: {e}")
+                  sys.exit(1)
+              if "@" not in decoded:
+                  print(f"[ERROR] 旧格式解析失败: {decoded}")
+                  sys.exit(1)
+              user_part, server_part = decoded.split("@", 1)
+              method, password = user_part.split(":", 1)
+              address, port = server_part.rsplit(":", 1)
+
+          print(f"[INFO] SS -> {address}:{port}  method={method}")
+
+          # ── 构建 Xray 配置 ───────────────────────────────────────
+          outbound = {
+              "tag": "proxy",
+              "protocol": "shadowsocks",
+              "settings": {
+                  "servers": [{
+                      "address": address,
+                      "port": int(port),
+                      "method": method,
+                      "password": password,
+                      "uot": False
+                  }]
+              },
+              "streamSettings": {
+                  "network": "tcp"
+              }
+          }
+
+          # 有插件时改用 WebSocket + TLS 流量设置
+          # （v2ray-plugin 的 ws+tls 在 Xray 里直接用 streamSettings 实现）
+          if plugin_opts:
+              ws_host = plugin_opts.get("host", address)
+              ws_path = plugin_opts.get("path", "/")
+              use_tls = "tls" in plugin_opts
+              network  = plugin_opts.get("mode", "websocket")
+
+              if "websocket" in network or network == "ws":
+                  outbound["streamSettings"]["network"] = "ws"
+                  outbound["streamSettings"]["wsSettings"] = {
+                      "path": ws_path,
+                      "headers": {"Host": ws_host}
+                  }
+              
+              if use_tls:
+                  outbound["streamSettings"]["security"] = "tls"
+                  outbound["streamSettings"]["tlsSettings"] = {
+                      "serverName": ws_host,
+                      "allowInsecure": False
+                  }
+
+          config = {
+              "log": {"loglevel": "warning"},
+              "inbounds": [
+                  {
+                      "port": 10808,
+                      "listen": "127.0.0.1",
+                      "protocol": "socks",
+                      "settings": {"udp": True},
+                      "tag": "socks-in"
+                  },
+                  {
+                      "port": 10809,
+                      "listen": "127.0.0.1",
+                      "protocol": "http",
+                      "tag": "http-in"
+                  }
+              ],
+              "outbounds": [
+                  outbound,
+                  {"tag": "direct", "protocol": "freedom"},
+                  {"tag": "block",  "protocol": "blackhole"}
+              ]
+          }
+
+          with open("xray_config.json", "w") as f:
+              json.dump(config, f, indent=2)
+
+          print("[INFO] ✅ Xray 配置已生成")
+          PYEOF
+
+          # 启动 Xray
+          ./xray/xray run -c xray_config.json > xray.log 2>&1 &
+          echo "XRAY_PID=$!" >> $GITHUB_ENV
+          sleep 5
+
+          # 测试代理
+          echo "[INFO] 测试代理连接..."
+          for i in 1 2 3 4 5; do
+            PROXY_IP=$(curl -x socks5h://127.0.0.1:10808 -s --max-time 20 https://api.ipify.org 2>/dev/null)
+            if [ -n "$PROXY_IP" ]; then
+              echo "[INFO] ✅ 代理连接成功，出口 IP: $PROXY_IP"
+              echo "PROXY_SOCKS5=socks5h://127.0.0.1:10808" >> $GITHUB_ENV
+              exit 0
+            fi
+            echo "[WARN] 尝试 $i/5，等待..."
+            sleep 5
+          done
+
+          echo "[ERROR] ❌ 代理连接失败，Xray 日志："
+          cat xray.log
+          exit 1
 
       - name: 执行续订
         env:
@@ -69,6 +245,7 @@ jobs:
           GODLIKE_ID_INPUT: ${{ github.event.inputs.accounts }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
         run: python scripts/Godlike/renew.py
 
       - name: 上传截图
