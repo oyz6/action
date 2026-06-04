@@ -85,7 +85,7 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_HTTP: ${{ env.PROXY_HTTP }}
           BUSTER_PATH: ${{ env.BUSTER_PATH }}
-        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python scripts/Godlike/renew.py
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Godlike/renew.py
 
       - name: 上传截图
         if: always()
