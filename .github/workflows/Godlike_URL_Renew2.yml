@@ -18,14 +18,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 从私库拉取脚本
-        env:
-          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-        run: |
-          curl -H "Authorization: Bearer $REPO_TOKEN" \
-            -L -o renew.py \
-            "https://raw.githubusercontent.com/aoi675145/scripts/main/scripts/godlike/renew.py"
-          ls -la renew.py
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
 
       - name: 配置 Python 环境
         uses: actions/setup-python@v5
@@ -77,7 +75,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PYTHONUNBUFFERED: "1"
-        run: python -u renew.py
+        run: python -u scripts/Godlike/renew2.py
 
       - name: 上传截图
         if: always()
