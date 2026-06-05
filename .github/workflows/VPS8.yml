@@ -97,8 +97,8 @@ jobs:
           config = {
               "log": {"loglevel": "warning"},
               "inbounds": [
-                  {"port": 10808, "listen": "127.0.0.1", "protocol": "socks", "settings": {"udp": True}},
-                  {"port": 10809, "listen": "127.0.0.1", "protocol": "http"}
+                  {"port": 1080, "listen": "127.0.0.1", "protocol": "socks", "settings": {"udp": True}},
+                  {"port": 1089, "listen": "127.0.0.1", "protocol": "http"}
               ],
               "outbounds": []
           }
@@ -330,9 +330,9 @@ jobs:
           # 测试代理连通性
           echo "[INFO] 测试代理连接..."
           for i in 1 2 3 4 5; do
-            if curl -x socks5://127.0.0.1:10808 -s --max-time 15 https://api.ipify.org > /dev/null 2>&1; then
+            if curl -x socks5://127.0.0.1:1080 -s --max-time 15 https://api.ipify.org > /dev/null 2>&1; then
               echo "[INFO] ✅ 代理连接成功"
-              echo "PROXY_SOCKS5=socks5://127.0.0.1:10808" >> $GITHUB_ENV
+              echo "PROXY_SOCKS5=socks5://127.0.0.1:1080" >> $GITHUB_ENV
               exit 0
             fi
             echo "[WARN] 尝试 $i/5..."
