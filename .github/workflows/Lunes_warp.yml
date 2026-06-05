@@ -47,6 +47,8 @@ jobs:
           
           pip install --quiet --upgrade pip
           pip install --quiet \
+            seleniumbase \
+            pyvirtualdisplay \
             playwright \
             requests \
             PyNaCl \
@@ -73,11 +75,7 @@ jobs:
         env:
           LUNES_ACCOUNTS: ${{ github.event.inputs.accounts }}
           LUNES_1: ${{ secrets.LUNES_1 }}
-          LUNES_2: ${{ secrets.LUNES_2 }}
-          LUNES_3: ${{ secrets.LUNES_3 }}
-          LUNES_4: ${{ secrets.LUNES_4 }}
-          LUNES_5: ${{ secrets.LUNES_5 }}
-          LUNES_6: ${{ secrets.LUNES_6 }}
+          # ... 其余 LUNES_*
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
