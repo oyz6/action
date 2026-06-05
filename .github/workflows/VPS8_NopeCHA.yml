@@ -71,7 +71,7 @@ jobs:
 
           PROXY="http://127.0.0.1:1080"
           if curl -x "$PROXY" -s --max-time 20 https://api.ipify.org > /dev/null; then
-            echo "✅ HY2 连接成功，出口 IP: $(curl -x $PROXY -s --max-time 10 https://api.ipify.org)"
+            echo "✅ HY2 连接成功"
             echo "PROXY_HTTP=$PROXY" >> $GITHUB_ENV
           else
             echo "❌ HY2 代理不可用"
