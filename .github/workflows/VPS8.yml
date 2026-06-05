@@ -29,7 +29,7 @@ jobs:
 
       - name: 安装 Playwright 及 Python 库
         run: |
-          pip install -q playwright requests SpeechRecognition pydub
+          pip install -q playwright requests
           playwright install chromium
 
       - name: 下载并解压 NopeCHA 扩展
@@ -40,6 +40,15 @@ jobs:
           cd scripts/extensions/nopecha
           7z x -y chromium.zip -ounpacked
           echo "NopeCHA 扩展已解压到 $(pwd)/unpacked"
+
+      - name: 下载并解压 Buster 扩展
+        run: |
+          mkdir -p scripts/extensions/buster
+          wget -O scripts/extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
+          cd scripts/extensions/buster
+          7z x -y buster.zip -ounpacked
+          echo "Buster 扩展已解压到 $(pwd)/unpacked"
 
       - name: 安装并启动代理
         env:
