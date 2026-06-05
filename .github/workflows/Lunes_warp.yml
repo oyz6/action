@@ -62,7 +62,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main-re.py
+          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Lunes/Lunes-warp.py
 
       - name: 上传截图
         if: always()
