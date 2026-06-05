@@ -41,6 +41,24 @@ jobs:
           7z x -y chromium.zip -ounpacked
           echo "NopeCHA 扩展已解压到 $(pwd)/unpacked"
 
+      - name: 注入 NopeCHA API Key 到扩展
+        env:
+          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
+        run: |
+          EXT_DIR="scripts/extensions/nopecha/unpacked"
+          
+          echo "=== 扩展文件结构 ==="
+          find "$EXT_DIR" -type f | sort
+          
+          echo ""
+          echo "=== manifest.json ==="
+          cat "$EXT_DIR/manifest.json" | python3 -m json.tool
+          
+          # 查找包含 storage 或 key 的 JS 文件
+          echo ""
+          echo "=== 查找 key 相关代码 ==="
+          grep -rl "storage\|nopecha_key\|api_key\|\"key\"" "$EXT_DIR" --include="*.js" | head -10
+
       - name: 下载并解压 Buster 扩展
         run: |
           mkdir -p scripts/extensions/buster
