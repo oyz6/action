@@ -1,8 +1,6 @@
 name: Lunes Host 重启 warp
 
 on:
-  schedule:
-    - cron: '35 3 * * *'   # 北京时间 11:35
   workflow_dispatch:
     inputs:
       accounts:
@@ -75,7 +73,11 @@ jobs:
         env:
           LUNES_ACCOUNTS: ${{ github.event.inputs.accounts }}
           LUNES_1: ${{ secrets.LUNES_1 }}
-          # ... 其余 LUNES_*
+          LUNES_2: ${{ secrets.LUNES_2 }}
+          LUNES_3: ${{ secrets.LUNES_3 }}
+          LUNES_4: ${{ secrets.LUNES_4 }}
+          LUNES_5: ${{ secrets.LUNES_5 }}
+          LUNES_6: ${{ secrets.LUNES_6 }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
