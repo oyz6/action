@@ -377,8 +377,8 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}   # NopeCHA API Key
-        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python scripts/VPS8/main.py > /dev/null 2>&1
-#        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main.py
+#        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python scripts/VPS8/main.py > /dev/null 2>&1
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main.py
 
 #      - name: 上传截图
 #        if: always()
