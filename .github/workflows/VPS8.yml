@@ -1,8 +1,6 @@
 name: VPS8 签到 NopeCHA 扩展
 
 on:
-  schedule:
-    - cron: '35 3 * * *'  # 每天北京时间 11:35
   workflow_dispatch:
 
 jobs:
@@ -24,11 +22,15 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 安装系统依赖与 Python 库
+      - name: 安装系统依赖
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb ffmpeg google-chrome-stable fonts-noto-cjk fonts-wqy-zenhei fonts-wqy-microhei p7zip-full
-          pip install -q DrissionPage xvfbwrapper requests
+          sudo apt-get install -y xvfb ffmpeg fonts-noto-cjk fonts-wqy-zenhei fonts-wqy-microhei p7zip-full
+
+      - name: 安装 Playwright 及 Python 库
+        run: |
+          pip install -q playwright requests
+          playwright install chromium
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
@@ -365,7 +367,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
-        run: python -u scripts/VPS8/main.py
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main.py
 
       - name: 上传截图
         if: always()
