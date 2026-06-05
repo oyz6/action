@@ -63,7 +63,7 @@ jobs:
             sni: ${SNI}
             insecure: true
           http:
-            listen: 127.0.0.1:7890
+            listen: 127.0.0.1:1080
           EOF
 
           ./hysteria client -c hy2.yaml > hy2.log 2>&1 &
