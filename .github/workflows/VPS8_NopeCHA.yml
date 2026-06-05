@@ -1,0 +1,99 @@
+name: VPS8 签到 NopeCHA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sign:
+    name: 执行签到
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full
+
+      - name: 安装 Playwright 及 Python 库
+        run: |
+          pip install -q playwright requests
+          playwright install chromium
+
+      - name: 下载并解压扩展
+        run: |
+          mkdir -p scripts/extensions/nopecha scripts/extensions/buster
+
+          wget -q -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
+          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
+
+          wget -q -O scripts/extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
+          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+
+      - name: 配置 Cloudflare WARP 代理
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
+            | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] \
+            https://pkg.cloudflareclient.com/ jammy main" \
+            | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update -qq && sudo apt-get install -y cloudflare-warp
+
+          warp-cli --accept-tos registration new
+          warp-cli --accept-tos mode proxy
+          warp-cli --accept-tos connect
+
+          echo "⏳ 等待 WARP 建立（15秒）..."
+          sleep 15
+
+          PROXY="http://127.0.0.1:40000"
+          if curl -x "$PROXY" -s --max-time 20 https://api.ipify.org > /dev/null; then
+            echo "✅ WARP 连接成功，出口 IP: $(curl -x $PROXY -s --max-time 10 https://api.ipify.org)"
+            echo "PROXY_HTTP=$PROXY" >> $GITHUB_ENV
+          else
+            echo "❌ WARP 代理不可用"
+            warp-cli status || true
+            exit 1
+          fi
+
+      - name: 执行 VPS8 签到
+        env:
+          VPS8: ${{ secrets.VPS8 }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
+          PROXY_HTTP: ${{ env.PROXY_HTTP }}
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_NopeCHA.py
+
+      - name: 上传截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.run_number }}
+          path: screenshots/*.png
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: 清理历史运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 2
