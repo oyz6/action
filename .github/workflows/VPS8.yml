@@ -363,6 +363,7 @@ jobs:
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}   # 保留供脚本打印日志
           PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
         run: python -u scripts/VPS8/main-re.py
 
