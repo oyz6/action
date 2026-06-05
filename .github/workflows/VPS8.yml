@@ -40,20 +40,15 @@ jobs:
           echo "NopeCHA 扩展已解压到 $(pwd)/unpacked"
 
       - name: 注入 NopeCHA Key
-        env:
-          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
         run: |
-          if [ -n "$NOPECHA_KEY" ]; then
-            BG="scripts/extensions/nopecha/unpacked/background.js"
-            if [ -f "$BG" ]; then
-              INJECT="chrome.storage.local.set({ \"key\": \"$NOPECHA_KEY\", \"enabled\": true, \"hcaptcha_auto_open\": true, \"hcaptcha_auto_solve\": true, \"recaptcha_auto_open\": true, \"recaptcha_auto_solve\": true, \"funcaptcha_auto_open\": true, \"funcaptcha_auto_solve\": true, \"turnstile_auto_solve\": true });"
-              echo "$INJECT" | cat - "$BG" > temp && mv temp "$BG"
-              echo "✅ NopeCHA Key 已注入"
-            else
-              echo "⚠️ 未找到 background.js"
-            fi
+          BG="scripts/extensions/nopecha/unpacked/background.js"
+          if [ -f "$BG" ]; then
+            # 在 background.js 最前面插入 Key 和自动解题设置
+            INJECT='chrome.storage.local.set({ "key": "I-CX6GPNBR6YVA", "enabled": true, "hcaptcha_auto_open": true, "hcaptcha_auto_solve": true, "recaptcha_auto_open": true, "recaptcha_auto_solve": true, "funcaptcha_auto_open": true, "funcaptcha_auto_solve": true, "turnstile_auto_solve": true });'
+            echo "$INJECT" | cat - "$BG" > temp && mv temp "$BG"
+            echo "✅ NopeCHA Key 已注入"
           else
-            echo "⚠️ 未设置 NOPECHA_KEY，NopeCHA 将无法工作"
+            echo "⚠️ 未找到 background.js"
           fi
 
       - name: 安装并启动代理
@@ -363,7 +358,6 @@ jobs:
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}   # 保留供脚本打印日志
           PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
         run: python -u scripts/VPS8/main-re.py
 
