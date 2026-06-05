@@ -1,75 +1,107 @@
-name: VPS8 签到
+name: Lunes Host 重启 warp
 
 on:
   schedule:
     - cron: '35 3 * * *'   # 北京时间 11:35
   workflow_dispatch:
+    inputs:
+      accounts:
+        description: '指定账号（留空则运行所有）'
+        required: false
+        default: ''
 
 jobs:
-  sign:
-    name: 执行签到
+  restart:
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
       actions: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 拉取脚本仓库
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
+          path: .
 
-      - uses: actions/setup-python@v5
+      - name: 配置 Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: 安装系统依赖
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb ffmpeg google-chrome-stable fonts-noto-cjk fonts-wqy-zenhei fonts-wqy-microhei
-          pip install -q DrissionPage SpeechRecognition pydub requests
-
-      - name: 配置 WARP 代理
-        run: |
-          # 安装 Cloudflare WARP 客户端
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          sudo apt-get update && sudo apt-get install -y cloudflare-warp
+          sudo apt-get install -y -qq \
+            xvfb \
+            ffmpeg \
+            sox \
+            libsox-fmt-all \
+            portaudio19-dev \
+            flac \
+            libasound2-dev
           
-          # 注册并启动为代理模式 (HTTP 代理端口 40000)
-          warp-cli --accept-tos registration new
-          warp-cli --accept-tos mode proxy
-          warp-cli --accept-tos connect
+          pip install --quiet --upgrade pip
+          pip install --quiet \
+            playwright \
+            requests \
+            PyNaCl \
+            SpeechRecognition \
+            pydub
+          
+          python -m playwright install --with-deps chromium
 
-          echo "⏳ 等待 WARP 隧道建立（15秒）..."
-          sleep 15
+      - name: 启用 WARP 代理
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
 
-          # 验证代理可用性，并将代理地址写入环境文件
-          PROXY="http://127.0.0.1:40000"
-          if curl -x "$PROXY" -s --max-time 20 https://api.ipify.org; then
-            echo "✅ WARP 连接成功，出口 IP: $(curl -x $PROXY -s https://api.ipify.org)"
-            echo "PROXY_HTTP=$PROXY" >> $GITHUB_ENV
-          else
-            echo "❌ WARP 代理启动失败"
-            warp-cli status || true
-            exit 1
-          fi
+      - name: 修复 DNS
+        run: |
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
+          sleep 2
 
-      - name: 执行 VPS8 签到
+      - name: 执行自动重启
         env:
-          VPS8: ${{ secrets.VPS8 }}
+          LUNES_ACCOUNTS: ${{ github.event.inputs.accounts }}
+          LUNES_1: ${{ secrets.LUNES_1 }}
+          LUNES_2: ${{ secrets.LUNES_2 }}
+          LUNES_3: ${{ secrets.LUNES_3 }}
+          LUNES_4: ${{ secrets.LUNES_4 }}
+          LUNES_5: ${{ secrets.LUNES_5 }}
+          LUNES_6: ${{ secrets.LUNES_6 }}
+          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          DISPLAY: :99
         run: |
-          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Lunes/Lunes-warp.py
+          xvfb-run --auto-servernum \
+            --server-args="-screen 0 1920x1080x24 -ac -noreset" \
+            python -u scripts/Lunes/Lunes-warp.py
 
       - name: 上传截图
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshots-${{ github.run_number }}
-          path: screenshots/*.png
+          path: output/screenshots/*.png
+          retention-days: 5
+          if-no-files-found: ignore
+
+      - name: 上传调试音频
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-debug-${{ github.run_number }}
+          path: output/audio_debug/*.mp3
           retention-days: 3
           if-no-files-found: ignore
 
