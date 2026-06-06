@@ -15,7 +15,7 @@ jobs:
   renew:
     name: 执行脚本
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: write
       actions: write
@@ -61,16 +61,24 @@ jobs:
             wget \
             curl
 
-      - name: 安装 WARP 客户端
+      - name: 启用 WARP（系统级 VPN 模式）
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: ipv4
+          mode: client
+
+      - name: 修复 DNS
         run: |
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
-            | sudo gpg --yes --dearmor \
-              --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] \
-            https://pkg.cloudflareclient.com/ jammy main" \
-            | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          sudo apt-get update && sudo apt-get install -y cloudflare-warp
-          echo "✅ WARP 客户端安装完成"
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo systemctl disable systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+          sleep 2
+          echo "[INFO] 当前出口 IP:"
+          curl -s --max-time 10 https://api.ipify.org && echo
+          echo "[INFO] WARP Trace:"
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
+            | grep -E 'ip=|warp=|loc=' || true
 
       - name: 安装 Python 依赖
         run: |
@@ -86,7 +94,6 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           FORCE_RENEW: ${{ github.event.inputs.force_renew || 'false' }}
           USE_WARP: "true"
-          WARP_PROXY_PORT: "40000"
         run: |
           export DISPLAY=:99
           Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
