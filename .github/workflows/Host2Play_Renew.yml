@@ -76,7 +76,7 @@ jobs:
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python scripts/Host2Play/main.py
+        run: python -u scripts/Host2Play/main.py
 
       - name: 续订失败后重试一次工作流
         if: steps.renew_run.outcome == 'failure' && github.event.inputs.retry != 'true'
