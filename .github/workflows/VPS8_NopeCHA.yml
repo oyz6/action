@@ -88,14 +88,14 @@ jobs:
           PROXY_HTTP: ${{ env.PROXY_HTTP }}
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_NopeCHA.py
 
-      - name: 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots-${{ github.run_number }}
-          path: screenshots/*.png
-          retention-days: 3
-          if-no-files-found: ignore
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-${{ github.run_number }}
+#          path: screenshots/*.png
+#          retention-days: 3
+#          if-no-files-found: ignore
 
       - name: 清理历史运行记录
         if: always()
@@ -105,4 +105,4 @@ jobs:
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 2
+          keep_minimum_runs: 1
