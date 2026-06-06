@@ -5,6 +5,11 @@ on:
     - cron: '0 0,11,22 * * *'    # 触发点: 00:00, 11:00, 22:00
     - cron: '30 5,16 * * *'      # 触发点: 05:30, 16:30
   workflow_dispatch:
+    inputs:
+      retry:
+        description: '是否为重试运行'
+        required: false
+        default: 'false'
 
 permissions:
   actions: write
@@ -67,10 +72,26 @@ jobs:
           curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc=' || true
 
       - name: 执行续订
+        id: renew_run    # 用于后续判断重试工作流
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python scripts/Host2Play/main.py
+
+      - name: 续订失败后重试一次工作流
+        if: steps.renew_run.outcome == 'failure' && github.event.inputs.retry != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.REPO_TOKEN }}
+        run: |
+          gh workflow run "${{ github.workflow }}" \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.ref_name }}" \
+            -f retry=true
+          exit 1
+
+      - name: 重试后仍失败则停止
+        if: steps.renew_run.outcome == 'failure' && github.event.inputs.retry == 'true'
+        run: exit 1
 
       - name: 上传截图
         if: always()
