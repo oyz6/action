@@ -61,7 +61,7 @@ jobs:
             wget \
             curl
 
-      - name: 启用 WARP（系统级 VPN 模式）
+      - name: 启用 WARP
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: ipv4
