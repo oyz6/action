@@ -13,7 +13,8 @@ jobs:
       actions: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
@@ -43,15 +44,6 @@ jobs:
           wget -q -O scripts/extensions/buster/buster.zip \
             https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
-
-      - name: 恢复浏览器缓存
-        id: cache-restore
-        uses: actions/cache@v4
-        with:
-          path: pw_profiles
-          key: VPS8-profiles-${{ github.run_id }}
-          restore-keys: |
-            VPS8-profiles-
 
       - name: 配置 HY2 代理
         env:
@@ -88,6 +80,15 @@ jobs:
             exit 1
           fi
 
+      - name: 恢复登录状态
+        id: cache-restore
+        uses: actions/cache@v4
+        with:
+          path: pw_profiles/auth_state.json
+          key: VPS8-auth-${{ github.run_id }}
+          restore-keys: |
+            VPS8-auth-
+
       - name: 执行 VPS8 签到
         env:
           VPS8: ${{ secrets.VPS8 }}
@@ -97,12 +98,12 @@ jobs:
           PROXY_HTTP: ${{ env.PROXY_HTTP }}
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_NopeCHA.py
 
-      - name: 保存浏览器缓存
+      - name: 保存登录状态
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: pw_profiles
-          key: VPS8-profiles-${{ github.run_id }}
+          path: pw_profiles/auth_state.json
+          key: VPS8-auth-${{ github.run_id }}
         continue-on-error: true
 
       - name: 上传截图
