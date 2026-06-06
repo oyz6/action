@@ -41,12 +41,12 @@ jobs:
           7z x -y chromium.zip -ounpacked
           echo "NopeCHA 扩展已解压到 $(pwd)/unpacked"
 
-      - name: 注入 NopeCHA API Key 到扩展
-        env:
-          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
-        run: |
-          EXT_DIR="scripts/extensions/nopecha/unpacked"
-          echo "=== 扩展文件 ===" && find "$EXT_DIR" -type f | sort
+#      - name: 注入 NopeCHA API Key 到扩展
+#        env:
+#          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
+#        run: |
+#          EXT_DIR="scripts/extensions/nopecha/unpacked"
+#          echo "=== 扩展文件 ===" && find "$EXT_DIR" -type f | sort
 
       - name: 下载并解压 Buster 扩展
         run: |
@@ -383,7 +383,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
-          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}   # NopeCHA API Key
+#          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}   # NopeCHA API Key
 #        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python scripts/VPS8/main.py > /dev/null 2>&1
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main.py
 
