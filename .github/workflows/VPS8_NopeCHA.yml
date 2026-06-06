@@ -2,6 +2,8 @@ name: VPS8 签到 NopeCHA
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'   # 每天 UTC 02:00 自动执行
 
 jobs:
   sign:
@@ -13,8 +15,7 @@ jobs:
       actions: write
 
     steps:
-      - name: 检出私有仓库
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
@@ -45,15 +46,26 @@ jobs:
             https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
 
-      - name: 恢复 Profile 缓存
+      # ★ 恢复缓存（restore-keys 实现滚动命中）
+      - name: 恢复浏览器缓存
         id: cache-restore
         uses: actions/cache/restore@v4
         with:
           path: pw_profiles
-          # restore-keys 会匹配最近一次成功保存的缓存
           key: VPS8-profiles-${{ github.run_id }}
           restore-keys: |
             VPS8-profiles-
+
+      - name: 缓存状态输出
+        run: |
+          if [ "${{ steps.cache-restore.outputs.cache-hit }}" = "true" ]; then
+            echo "✅ 缓存命中，将尝试免登录"
+          else
+            echo "📭 未命中缓存，将执行完整登录"
+          fi
+          echo "--- Profile 目录内容 ---"
+          ls -la pw_profiles/ 2>/dev/null || echo "(空)"
+          ls -la pw_profiles/vps8/Default/ 2>/dev/null | head -20 || echo "(无 Default 目录)"
 
       - name: 配置 HY2 代理
         env:
@@ -99,21 +111,22 @@ jobs:
           PROXY_HTTP: ${{ env.PROXY_HTTP }}
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_NopeCHA.py
 
-      - name: 保存 Profile 缓存
+      # ★ 无论成功失败都保存缓存（保证下次可用）
+      - name: 保存浏览器缓存
         if: always()
         uses: actions/cache/save@v4
         with:
           path: pw_profiles
           key: VPS8-profiles-${{ github.run_id }}
 
-#      - name: 上传截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: screenshots-${{ github.run_number }}
-#          path: screenshots/*.png
-#          retention-days: 3
-#          if-no-files-found: ignore
+      - name: 上传截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.run_number }}
+          path: screenshots/*.png
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: 清理历史运行记录
         if: always()
