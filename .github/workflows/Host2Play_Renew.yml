@@ -79,7 +79,9 @@ jobs:
         run: python -u scripts/Host2Play/main.py
 
       - name: 续订失败后重试一次工作流
-        if: steps.renew_run.outcome == 'failure' && github.event.inputs.retry != 'true'
+        if: |
+          steps.renew_run.outcome == 'failure' && 
+          (github.event.inputs.retry == '' || github.event.inputs.retry == 'false' || github.event.inputs.retry == null)
         env:
           GH_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: |
