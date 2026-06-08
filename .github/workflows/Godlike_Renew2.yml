@@ -332,7 +332,7 @@ jobs:
       - name: 运行续期脚本
         env:
 #          GODLIKE_1: ${{ secrets.GODLIKE_1 }}
-         GODLIKE_2: ${{ secrets.GODLIKE_2 }}
+          GODLIKE_2: ${{ secrets.GODLIKE_2 }}
 #          GODLIKE_3: ${{ secrets.GODLIKE_3 }}
 #          GODLIKE_4: ${{ secrets.GODLIKE_4 }}
 #          GODLIKE_5: ${{ secrets.GODLIKE_5 }}
