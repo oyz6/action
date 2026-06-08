@@ -31,7 +31,7 @@ jobs:
 
       - name: 安装并启动代理
         env:
-          PROXY_NODE: ${{ secrets.PROXY_NODE_SG }}
+          PROXY_NODE: ${{ secrets.PROXY_NODE_SSSSSS }}  # 直连模式
         run: |
           if [ -z "$PROXY_NODE" ]; then
             echo "[INFO] 未配置代理，直连模式"
@@ -316,9 +316,9 @@ jobs:
           
           echo "[INFO] 测试代理连接..."
           for i in 1 2 3 4 5; do
-            if curl -x http://127.0.0.1:1081 -s --max-time 15 https://api.ipify.org > /dev/null 2>&1; then
+            if curl -x socks5://127.0.0.1:1080 -s --max-time 15 https://api.ipify.org > /dev/null 2>&1; then
               echo "[INFO] ✅ 代理连接成功"
-              echo "PROXY_SERVER=http://127.0.0.1:1081" >> $GITHUB_ENV
+              echo "PROXY_SERVER=socks5://127.0.0.1:1080" >> $GITHUB_ENV
               exit 0
             fi
             echo "[WARN] 尝试 $i/5..."
@@ -331,8 +331,8 @@ jobs:
 
       - name: 运行续期脚本
         env:
-#         GODLIKE_1: ${{ secrets.GODLIKE_1 }}
-          GODLIKE_2: ${{ secrets.GODLIKE_2 }}
+#          GODLIKE_1: ${{ secrets.GODLIKE_1 }}
+         GODLIKE_2: ${{ secrets.GODLIKE_2 }}
 #          GODLIKE_3: ${{ secrets.GODLIKE_3 }}
 #          GODLIKE_4: ${{ secrets.GODLIKE_4 }}
 #          GODLIKE_5: ${{ secrets.GODLIKE_5 }}
