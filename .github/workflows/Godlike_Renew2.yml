@@ -339,7 +339,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN_8 }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+#          PROXY_SERVER: ${{ env.PROXY_SERVER }}
         run: python scripts/Godlike/main.py
 
 #      - name: 上传截图
