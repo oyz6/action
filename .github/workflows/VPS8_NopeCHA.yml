@@ -81,6 +81,7 @@ jobs:
 
       - name: 执行 VPS8 签到
         env:
+          VPS8_RENEW_TEST: "0"         # 1 → 忽略剩余天数强制续费（仅测试用）
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
