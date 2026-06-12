@@ -1,6 +1,6 @@
 name: VPS8 签到 NopeCHA
 
-于:
+on:
   workflow_dispatch:
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          仓库: ${{ github.repository_owner }}/scripts
+          repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
 
       - uses: actions/setup-python@v5
