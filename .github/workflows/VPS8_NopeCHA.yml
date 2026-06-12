@@ -32,6 +32,18 @@ jobs:
           pip install -q playwright requests
           playwright install chromium
 
+#      - name: 下载并解压扩展
+#        run: |
+#          mkdir -p scripts/extensions/nopecha scripts/extensions/buster
+
+#          wget -q -O scripts/extensions/nopecha/chromium.zip \
+#            https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
+#          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
+
+#          wget -q -O scripts/extensions/buster/buster.zip \
+#            https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
+#          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+
       - name: 下载并解压扩展
         run: |
           mkdir -p scripts/extensions/nopecha scripts/extensions/buster
@@ -43,6 +55,12 @@ jobs:
           wget -q -O scripts/extensions/buster/buster.zip \
             https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+
+          # ── 验证扩展结构 ──
+          echo "=== NopeCHA 文件列表 ==="
+          ls -la scripts/extensions/nopecha/unpacked/
+          echo "=== manifest.json ==="
+          cat scripts/extensions/nopecha/unpacked/manifest.json | python3 -m json.tool
 
       - name: 配置 HY2 代理
         env:
