@@ -1,6 +1,6 @@
 name: VPS8 签到 NopeCHA
 
-on:
+于:
   workflow_dispatch:
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/scripts
+          仓库: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
 
       - uses: actions/setup-python@v5
@@ -37,7 +37,7 @@ jobs:
           mkdir -p scripts/extensions/nopecha scripts/extensions/buster
 
           wget -q -O scripts/extensions/nopecha/chromium.zip \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.0/chromium.zip
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
 
           wget -q -O scripts/extensions/buster/buster.zip \
