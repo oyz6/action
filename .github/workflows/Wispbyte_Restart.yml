@@ -62,7 +62,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           INPUT_ACCOUNTS: ${{ inputs.accounts }}
-        run: python scripts/Wispbyte/Wispbyte_Restart.py
+        run: python -u scripts/Wispbyte/Wispbyte_Restart.py
 
 #      - name: 上传截图
 #        if: always()
