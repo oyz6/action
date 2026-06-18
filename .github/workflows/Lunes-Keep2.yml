@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
-          token: ${{ secrets.REPO_TOKEN_FR }}
+          token: ${{ secrets.REPO_TOKEN }}
           path: .
 
       - name: 设置 Python
@@ -37,7 +37,7 @@ jobs:
 
       - name: 配置代理
         env:
-          HY2_URL: ${{ secrets.HY2_URL_PL }}
+          HY2_URL: ${{ secrets.HY2_URL_FR }}
         run: |
           wget -q https://github.com/oyz6/action/releases/download/proxy/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
