@@ -74,7 +74,7 @@ jobs:
       - name: 执行续订
         id: renew_run    # 用于后续判断重试工作流
         env:
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN_8 }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python -u scripts/Host2Play/main.py
 
