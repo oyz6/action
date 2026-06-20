@@ -47,6 +47,8 @@ jobs:
       - name: 配置 HY2 代理
         env:
           HY2_URL: ${{ secrets.HY2_URL_FR }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           wget -q https://github.com/oyz6/action/releases/download/proxy/hysteria-linux-amd64 -O hysteria
           chmod +x hysteria
@@ -76,12 +78,19 @@ jobs:
           else
             echo "❌ HY2 代理不可用"
             cat hy2.log
+
+            # 发送 Telegram 通知（直连，不使用代理）
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d text="❌ VPS8 签到失败：代理不可用" \
+              --max-time 10 || true
+
             exit 1
           fi
 
       - name: 执行 VPS8 签到
         env:
-          VPS8_RENEW_TEST: "0"         # 1 → 忽略剩余天数强制续费（仅测试用）
+          VPS8_RENEW_TEST: "0"
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
