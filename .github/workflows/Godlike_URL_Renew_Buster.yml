@@ -81,7 +81,7 @@ jobs:
         env:
           GODLIKE_ID: ${{ secrets.GODLIKE_ID }}
           GODLIKE_ID_INPUT: ${{ github.event.inputs.accounts }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN_8 }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_HTTP: ${{ env.PROXY_HTTP }}
           BUSTER_PATH: ${{ env.BUSTER_PATH }}
