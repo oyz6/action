@@ -86,7 +86,7 @@ jobs:
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-            python scripts/Weirdhost/WARP/weirdhost_renew.py
+            python scripts/Weirdhost/WARP1/weirdhost_renew.py
 
       - name: 清理旧运行记录
         uses: Mattraks/delete-workflow-runs@v2
