@@ -110,9 +110,8 @@ do_update() {
 
     cd "$BAIHU_HOME"
 
-    # ★★★ 关键修复：未安装时不再报错退出，而是自动安装 ★★★
     if [ ! -f "./baihu" ]; then
-        log_warn "检测到未安装白虎面板，将自动为您执行全新安装..."
+        log_warn "检测到未安装白虎面板，转到全新安装..."
         do_install
         exit 0
     fi
