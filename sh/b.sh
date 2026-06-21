@@ -5,7 +5,7 @@ set -euo pipefail
 # AlwaysData 白虎面板安装/更新/初始化/备份脚本
 # 用法:
 #   ./install.sh           → 交互菜单
-#   ./install.sh install   → 全新安装（安装后自动引导初始化）
+#   ./install.sh install   → 全新安装（含引导初始化）
 #   ./install.sh update    → 更新面板（保留数据）
 #   ./install.sh init      → 单独改密 + 备份配置
 #   ./install.sh backup    → 仅配置自动备份
@@ -128,9 +128,14 @@ change_password_api() {
 }
 
 # ------------------------------------------------------------
-# 等待面板启动（轮询 localhost:8100）
+# 等待面板启动（先触发外部访问，再轮询 localhost:8100）
 # ------------------------------------------------------------
 wait_for_panel() {
+    # 主动触发一次外部访问，激活 AlwaysData 站点
+    log_info "正在触发站点激活（访问 https://${BAIHU_USER}.alwaysdata.net）..."
+    curl -sS --connect-timeout 5 --max-time 10 "https://${BAIHU_USER}.alwaysdata.net" >/dev/null 2>&1 || true
+    sleep 3
+
     local retries=60
     local count=0
     log_info "等待白虎面板启动（最多 5 分钟）..."
@@ -143,6 +148,7 @@ wait_for_panel() {
         count=$((count + 1))
         if [ $((count % 12)) -eq 0 ]; then
             log_info "仍在等待... 请确保 AlwaysData 站点已配置为 User program 且命令正确"
+            log_info "可手动访问 https://${BAIHU_USER}.alwaysdata.net 触发启动"
         fi
     done
     log_err "面板启动超时，请检查站点配置或手动访问 https://${BAIHU_USER}.alwaysdata.net 触发启动"
@@ -406,7 +412,7 @@ post_install_setup() {
     echo "=========================================="
     echo ""
 
-    # 等待面板启动
+    # 等待面板启动（会自动触发外部访问）
     if ! wait_for_panel; then
         log_err "无法连接到面板，请手动完成初始化。"
         return 1
