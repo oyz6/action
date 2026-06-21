@@ -103,17 +103,31 @@ stop_baihu() {
 }
 
 # ------------------------------------------------------------
-# 登录面板，返回 BHToken
+# 带重试的登录函数，返回 BHToken
 # ------------------------------------------------------------
 login_panel() {
     local user="$1" pass="$2"
-    curl -s -c cookies.txt -o /dev/null \
-        "${PANEL_URL}/api/v1/auth/login" \
-        -H 'content-type: application/json' \
-        --data-raw "{\"username\":\"$user\",\"password\":\"$pass\"}"
-    local token=$(grep 'BHToken' cookies.txt | awk '{print $NF}')
+    local token=""
+
+    for i in {1..5}; do
+        curl -s -c cookies.txt -o /dev/null \
+            "${PANEL_URL}/api/v1/auth/login" \
+            -H 'content-type: application/json' \
+            --data-raw "{\"username\":\"$user\",\"password\":\"$pass\"}"
+        token=$(grep 'BHToken' cookies.txt 2>/dev/null | awk '{print $NF}')
+        if [ -n "$token" ]; then
+            rm -f cookies.txt
+            echo "$token"
+            return 0
+        fi
+        if [ $i -lt 5 ]; then
+            log_warn "登录尝试 $i/5 失败，3秒后重试..."
+            sleep 3
+        fi
+    done
     rm -f cookies.txt
-    echo "$token"
+    log_err "登录失败，请检查用户名密码是否正确"
+    return 1
 }
 
 # ------------------------------------------------------------
@@ -124,10 +138,7 @@ change_password_api() {
 
     log_info "正在登录面板（用于改密）..."
     local token=$(login_panel "$old_user" "$old_pass")
-    if [ -z "$token" ]; then
-        log_err "登录失败，无法修改密码"
-        return 1
-    fi
+    [ -z "$token" ] && return 1
 
     log_info "正在修改面板登录密码..."
     local response
@@ -155,6 +166,8 @@ wait_for_panel() {
     while [ $count -lt $retries ]; do
         if curl -sS --connect-timeout 5 --max-time 10 "${PANEL_URL}" >/dev/null 2>&1; then
             log_ok "面板已启动！"
+            # 额外等待几秒，确保API完全就绪
+            sleep 3
             return 0
         fi
         sleep 5
@@ -168,7 +181,7 @@ wait_for_panel() {
 }
 
 # ------------------------------------------------------------
-# 生成备份脚本并创建定时任务（复用已登录 token 或新建）
+# 生成备份脚本并创建定时任务
 # ------------------------------------------------------------
 create_backup_job() {
     local admin_user="$1" admin_pass="$2" backup_pass="$3"
@@ -321,13 +334,9 @@ BACKUP_SCRIPT_EOF
     [ -n "$gh_repo" ] && envs="${envs}\nGH_BACKUP_REPO=${gh_repo}"
     envs=$(echo -e "$envs")
 
-    # 登录获取 token（使用新密码）
     log_info "登录面板（用于创建备份任务）..."
     local token=$(login_panel "$admin_user" "$admin_pass")
-    if [ -z "$token" ]; then
-        log_err "登录失败，无法创建定时任务"
-        return 1
-    fi
+    [ -z "$token" ] && return 1
 
     local task_json=$(cat <<TASK_JSON_EOF
 {
@@ -373,7 +382,7 @@ TASK_JSON_EOF
 }
 
 # ------------------------------------------------------------
-# 安装后初始化（改密 + 备份配置），交互极简
+# 安装后初始化（改密 + 备份配置）
 # ------------------------------------------------------------
 post_install_setup() {
     local old_user="admin"
@@ -390,7 +399,6 @@ post_install_setup() {
         return 1
     fi
 
-    # 只需用户输入新用户名和密码
     read -p "请输入新用户名 [mc838]: " new_user
     new_user=${new_user:-mc838}
     read -sp "请输入新密码: " new_pass
@@ -404,7 +412,6 @@ post_install_setup() {
         return 1
     fi
 
-    # 备份配置（可选）
     echo ""
     log_info "接下来配置自动备份（可选 GitHub 上传）"
     read -p "ZIP 备份密码 (可选，直接回车跳过): " backup_pass
