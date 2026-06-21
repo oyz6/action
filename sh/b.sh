@@ -6,7 +6,7 @@ set -euo pipefail
 # 用法:
 #   ./install.sh           → 交互选择（安装/更新）
 #   ./install.sh install   → 直接全新安装
-#   ./install.sh update    → 直接更新面板
+#   ./install.sh update    → 直接更新面板（若未安装则自动安装）
 ########################################
 
 BAIHU_USER=$(whoami)
@@ -111,8 +111,9 @@ do_update() {
     cd "$BAIHU_HOME"
 
     if [ ! -f "./baihu" ]; then
-        log_err "当前目录未找到 baihu 程序，请先执行全新安装"
-        exit 1
+        log_warn "当前目录未找到 baihu 程序，将为您执行全新安装..."
+        do_install
+        exit 0
     fi
 
     choose_version
