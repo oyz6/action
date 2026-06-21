@@ -14,7 +14,7 @@ set -euo pipefail
 BAIHU_USER=$(whoami)
 BAIHU_HOME="/home/${BAIHU_USER}/www"
 DEFAULT_VERSION="v1.0.39"
-PANEL_URL="https://${BAIHU_USER}.alwaysdata.net"   # 外部地址
+PANEL_URL="https://${BAIHU_USER}.alwaysdata.net"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RED='\033[0;31m'; NC='\033[0m'
 
@@ -103,19 +103,38 @@ stop_baihu() {
 }
 
 # ------------------------------------------------------------
-# 通过 API 修改密码（使用外部面板地址）
+# 登录面板，返回 BHToken
+# ------------------------------------------------------------
+login_panel() {
+    local user="$1" pass="$2"
+    curl -s -c cookies.txt -o /dev/null \
+        "${PANEL_URL}/api/v1/auth/login" \
+        -H 'content-type: application/json' \
+        --data-raw "{\"username\":\"$user\",\"password\":\"$pass\"}"
+    local token=$(grep 'BHToken' cookies.txt | awk '{print $NF}')
+    rm -f cookies.txt
+    echo "$token"
+}
+
+# ------------------------------------------------------------
+# 修改密码（先登录再改密）
 # ------------------------------------------------------------
 change_password_api() {
-    local old_user="$1"
-    local old_pass="$2"
-    local new_user="$3"
-    local new_pass="$4"
+    local old_user="$1" old_pass="$2" new_user="$3" new_pass="$4"
+
+    log_info "正在登录面板（用于改密）..."
+    local token=$(login_panel "$old_user" "$old_pass")
+    if [ -z "$token" ]; then
+        log_err "登录失败，无法修改密码"
+        return 1
+    fi
 
     log_info "正在修改面板登录密码..."
     local response
     response=$(curl -s -X POST \
         "${PANEL_URL}/api/v1/settings/password" \
         -H 'Content-Type: application/json' \
+        -H "Cookie: BHToken=$token" \
         -d "{\"old_username\":\"$old_user\",\"username\":\"$new_user\",\"old_password\":\"$old_pass\",\"new_password\":\"$new_pass\"}")
 
     if echo "$response" | grep -q '"code":200'; then
@@ -128,11 +147,10 @@ change_password_api() {
 }
 
 # ------------------------------------------------------------
-# 等待面板启动（轮询外部地址直到返回 200）
+# 等待面板启动（轮询外部地址）
 # ------------------------------------------------------------
 wait_for_panel() {
-    local retries=60
-    local count=0
+    local retries=60 count=0
     log_info "等待白虎面板启动（最多 5 分钟）..."
     while [ $count -lt $retries ]; do
         if curl -sS --connect-timeout 5 --max-time 10 "${PANEL_URL}" >/dev/null 2>&1; then
@@ -143,7 +161,6 @@ wait_for_panel() {
         count=$((count + 1))
         if [ $((count % 12)) -eq 0 ]; then
             log_info "仍在等待... 请确保 AlwaysData 站点已配置为 User program 且命令正确"
-            log_info "可手动访问 ${PANEL_URL} 确认"
         fi
     done
     log_err "面板启动超时，请检查站点配置"
@@ -151,22 +168,17 @@ wait_for_panel() {
 }
 
 # ------------------------------------------------------------
-# 内部函数：生成备份脚本并创建定时任务（使用外部地址）
+# 生成备份脚本并创建定时任务（复用已登录 token 或新建）
 # ------------------------------------------------------------
 create_backup_job() {
-    local admin_user="$1"
-    local admin_pass="$2"
-    local backup_pass="$3"
-    local gh_token="$4"
-    local gh_repo="$5"
-    local gh_branch="$6"
+    local admin_user="$1" admin_pass="$2" backup_pass="$3"
+    local gh_token="$4" gh_repo="$5" gh_branch="$6"
 
     mkdir -p "$BAIHU_HOME/data/scripts"
     local BACKUP_SCRIPT="$BAIHU_HOME/data/scripts/backup.sh"
 
     log_info "生成备份脚本: $BACKUP_SCRIPT"
 
-    # 备份脚本内容：通过 PANEL_URL 环境变量获取面板地址，免去本地检测
     cat > "$BACKUP_SCRIPT" << 'BACKUP_SCRIPT_EOF'
 #!/bin/bash
 set -u
@@ -175,7 +187,6 @@ BAIHU_USER=$(whoami)
 WORK_DIR="/home/${BAIHU_USER}/www"
 cd "$WORK_DIR"
 
-# 面板地址优先使用环境变量，否则自动拼接
 PANEL_URL="${PANEL_URL:-https://${BAIHU_USER}.alwaysdata.net}"
 USERNAME="${ADMIN_USERNAME:-admin}"
 
@@ -209,7 +220,6 @@ BACKUP_FILE="$latest_file"
 
 echo "[INFO] 备份文件: $BACKUP_FILE ($BACKUP_SIZE)"
 
-# 可选加密
 if [ -n "${BACKUP_PASS:-}" ]; then
     echo "[INFO] 使用密码加密备份..."
     if command -v zip &>/dev/null; then
@@ -223,7 +233,6 @@ if [ -n "${BACKUP_PASS:-}" ]; then
     fi
 fi
 
-# 上传到 GitHub
 if [ -z "${GH_TOKEN:-}" ] || [ -z "${GH_BACKUP_REPO:-}" ]; then
     echo "[WARN] 缺少 GitHub 配置，跳过上传"
     rm -f cookies.txt
@@ -304,7 +313,7 @@ BACKUP_SCRIPT_EOF
 
     chmod +x "$BACKUP_SCRIPT"
 
-    # 构建环境变量字符串
+    # 构建环境变量
     local envs="ADMIN_USERNAME=${admin_user}\nADMIN_PASSWORD=${admin_pass}"
     [ -n "$backup_pass" ] && envs="${envs}\nBACKUP_PASS=${backup_pass}"
     [ -n "$gh_branch" ] && envs="${envs}\nGH_BACKUP_BRANCH=${gh_branch}"
@@ -312,13 +321,9 @@ BACKUP_SCRIPT_EOF
     [ -n "$gh_repo" ] && envs="${envs}\nGH_BACKUP_REPO=${gh_repo}"
     envs=$(echo -e "$envs")
 
-    # 登录并创建定时任务（使用外部地址）
-    curl -s -c cookies.txt -o /dev/null \
-        "${PANEL_URL}/api/v1/auth/login" \
-        -H 'content-type: application/json' \
-        --data-raw "{\"username\":\"$admin_user\",\"password\":\"$admin_pass\"}"
-    local token=$(grep 'BHToken' cookies.txt | awk '{print $NF}')
-    rm -f cookies.txt
+    # 登录获取 token（使用新密码）
+    log_info "登录面板（用于创建备份任务）..."
+    local token=$(login_panel "$admin_user" "$admin_pass")
     if [ -z "$token" ]; then
         log_err "登录失败，无法创建定时任务"
         return 1
@@ -368,40 +373,38 @@ TASK_JSON_EOF
 }
 
 # ------------------------------------------------------------
-# 安装后自动引导初始化（改密 + 备份配置）
+# 安装后初始化（改密 + 备份配置），交互极简
 # ------------------------------------------------------------
 post_install_setup() {
-    local old_password="$1"
+    local old_user="admin"
+    local old_pass="$1"
+
     echo ""
     echo "=========================================="
     echo "  面板初始化：改密 + 配置自动备份"
     echo "=========================================="
     echo ""
 
-    # 等待面板启动（自动通过外部地址）
     if ! wait_for_panel; then
         log_err "无法连接到面板，请手动完成初始化。"
         return 1
     fi
 
-    # 改密
-    echo ""
-    read -p "请输入旧用户名 [admin]: " old_user
-    old_user=${old_user:-admin}
+    # 只需用户输入新用户名和密码
+    read -p "请输入新用户名 [mc838]: " new_user
+    new_user=${new_user:-mc838}
     read -sp "请输入新密码: " new_pass
     echo ""
     if [ -z "$new_pass" ]; then
         log_err "密码不能为空"
         return 1
     fi
-    read -p "请输入新用户名 [mc838]: " new_user
-    new_user=${new_user:-mc838}
 
-    if ! change_password_api "$old_user" "$old_password" "$new_user" "$new_pass"; then
+    if ! change_password_api "$old_user" "$old_pass" "$new_user" "$new_pass"; then
         return 1
     fi
 
-    # 备份配置（使用新密码）
+    # 备份配置（可选）
     echo ""
     log_info "接下来配置自动备份（可选 GitHub 上传）"
     read -p "ZIP 备份密码 (可选，直接回车跳过): " backup_pass
@@ -429,7 +432,7 @@ post_install_setup() {
 }
 
 # ------------------------------------------------------------
-# 更新功能（未安装时自动跳转安装）
+# 更新功能
 # ------------------------------------------------------------
 do_update() {
     echo ""
@@ -471,7 +474,6 @@ do_update() {
     fi
 
     rm -rf "$TMP_DIR"
-
     log_ok "更新完成！baihu 已替换为 ${BAIHU_VERSION}"
     echo ""
     log_warn "请在 AlwaysData 控制台重启站点以应用新版本:"
@@ -482,7 +484,7 @@ do_update() {
 }
 
 # ------------------------------------------------------------
-# 全新安装（含引导初始化）
+# 全新安装
 # ------------------------------------------------------------
 do_install() {
     echo ""
@@ -514,7 +516,6 @@ do_install() {
     rm -f "${TAR_FILE}"
     log_ok "主程序就绪"
 
-    # 配置文件（仅全新安装时生成）
     log_info "生成配置..."
     mkdir -p configs logs
     cat > configs/config.ini << 'EOF'
@@ -534,7 +535,6 @@ table_prefix = baihu_
 EOF
     log_ok "配置已写入"
 
-    # 首次启动获取默认密码
     log_info "首次启动，获取默认密码..."
     nohup ./baihu server > logs/baihu-init.log 2>&1 &
     local BAIHU_PID=$!
@@ -577,7 +577,6 @@ EOF
     echo "------------------------------------------"
     read -p "完成后按回车键开始自动初始化面板..."
 
-    # 传入旧密码，启动初始化流程
     if [ -n "$DEFAULT_PASSWORD" ]; then
         post_install_setup "$DEFAULT_PASSWORD"
     else
@@ -594,17 +593,14 @@ do_init() {
     echo "  初始化白虎面板（改密 + 自动备份）"
     echo "=========================================="
     echo ""
-
     read -p "请输入旧用户名 [admin]: " old_user
     old_user=${old_user:-admin}
     read -sp "请输入旧密码: " old_pass
     echo ""
-
     if [ -z "$old_pass" ]; then
         log_err "密码不能为空"
         return 1
     fi
-
     post_install_setup "$old_pass"
 }
 
@@ -635,10 +631,7 @@ do_backup() {
         read -p "分支 [main]: " gh_branch; gh_branch=${gh_branch:-main}
     fi
 
-    if ! wait_for_panel; then
-        return 1
-    fi
-
+    if ! wait_for_panel; then return 1; fi
     create_backup_job "$admin_user" "$admin_pass" "$backup_pass" "$gh_token" "$gh_repo" "$gh_branch"
     log_ok "备份配置完成！"
 }
@@ -649,18 +642,10 @@ do_backup() {
 ACTION="${1:-menu}"
 
 case "$ACTION" in
-    update)
-        do_update
-        ;;
-    install)
-        do_install
-        ;;
-    init)
-        do_init
-        ;;
-    backup)
-        do_backup
-        ;;
+    update) do_update ;;
+    install) do_install ;;
+    init) do_init ;;
+    backup) do_backup ;;
     menu|"")
         echo ""
         echo "=========================================="
@@ -680,8 +665,5 @@ case "$ACTION" in
             *) log_err "无效选项" && exit 1 ;;
         esac
         ;;
-    *)
-        log_err "未知参数: $ACTION (可用: install / update / init / backup)"
-        exit 1
-        ;;
+    *) log_err "未知参数: $ACTION (可用: install / update / init / backup)" && exit 1 ;;
 esac
