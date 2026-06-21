@@ -14,6 +14,7 @@ set -euo pipefail
 BAIHU_USER=$(whoami)
 BAIHU_HOME="/home/${BAIHU_USER}/www"
 DEFAULT_VERSION="v1.0.39"
+PANEL_URL="https://${BAIHU_USER}.alwaysdata.net"   # 外部地址
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RED='\033[0;31m'; NC='\033[0m'
 
@@ -102,19 +103,18 @@ stop_baihu() {
 }
 
 # ------------------------------------------------------------
-# 通过 API 修改密码
+# 通过 API 修改密码（使用外部面板地址）
 # ------------------------------------------------------------
 change_password_api() {
     local old_user="$1"
     local old_pass="$2"
     local new_user="$3"
     local new_pass="$4"
-    local panel_url="http://localhost:8100"
 
     log_info "正在修改面板登录密码..."
     local response
     response=$(curl -s -X POST \
-        "$panel_url/api/v1/settings/password" \
+        "${PANEL_URL}/api/v1/settings/password" \
         -H 'Content-Type: application/json' \
         -d "{\"old_username\":\"$old_user\",\"username\":\"$new_user\",\"old_password\":\"$old_pass\",\"new_password\":\"$new_pass\"}")
 
@@ -128,19 +128,14 @@ change_password_api() {
 }
 
 # ------------------------------------------------------------
-# 等待面板启动（先触发外部访问，再轮询 localhost:8100）
+# 等待面板启动（轮询外部地址直到返回 200）
 # ------------------------------------------------------------
 wait_for_panel() {
-    # 主动触发一次外部访问，激活 AlwaysData 站点
-    log_info "正在触发站点激活（访问 https://${BAIHU_USER}.alwaysdata.net）..."
-    curl -sS --connect-timeout 5 --max-time 10 "https://${BAIHU_USER}.alwaysdata.net" >/dev/null 2>&1 || true
-    sleep 3
-
     local retries=60
     local count=0
     log_info "等待白虎面板启动（最多 5 分钟）..."
     while [ $count -lt $retries ]; do
-        if curl -s --connect-timeout 2 --max-time 3 http://localhost:8100/api/v1/system/status >/dev/null 2>&1; then
+        if curl -sS --connect-timeout 5 --max-time 10 "${PANEL_URL}" >/dev/null 2>&1; then
             log_ok "面板已启动！"
             return 0
         fi
@@ -148,15 +143,15 @@ wait_for_panel() {
         count=$((count + 1))
         if [ $((count % 12)) -eq 0 ]; then
             log_info "仍在等待... 请确保 AlwaysData 站点已配置为 User program 且命令正确"
-            log_info "可手动访问 https://${BAIHU_USER}.alwaysdata.net 触发启动"
+            log_info "可手动访问 ${PANEL_URL} 确认"
         fi
     done
-    log_err "面板启动超时，请检查站点配置或手动访问 https://${BAIHU_USER}.alwaysdata.net 触发启动"
+    log_err "面板启动超时，请检查站点配置"
     return 1
 }
 
 # ------------------------------------------------------------
-# 内部函数：生成备份脚本并创建定时任务
+# 内部函数：生成备份脚本并创建定时任务（使用外部地址）
 # ------------------------------------------------------------
 create_backup_job() {
     local admin_user="$1"
@@ -171,59 +166,31 @@ create_backup_job() {
 
     log_info "生成备份脚本: $BACKUP_SCRIPT"
 
-    # 写入备份脚本（所有变量运行时注入）
+    # 备份脚本内容：通过 PANEL_URL 环境变量获取面板地址，免去本地检测
     cat > "$BACKUP_SCRIPT" << 'BACKUP_SCRIPT_EOF'
 #!/bin/bash
 set -u
-
-###########################################
-#  白虎面板 GitHub 备份脚本 alwaysdata容器
-###########################################
 
 BAIHU_USER=$(whoami)
 WORK_DIR="/home/${BAIHU_USER}/www"
 cd "$WORK_DIR"
 
-PORT="${PORT:-8100}"
+# 面板地址优先使用环境变量，否则自动拼接
+PANEL_URL="${PANEL_URL:-https://${BAIHU_USER}.alwaysdata.net}"
 USERNAME="${ADMIN_USERNAME:-admin}"
 
-echo "[INFO] 正在查找白虎面板 API 地址..."
-BAIHU_PID=$(pgrep -f "baihu" 2>/dev/null | head -1)
-if [ -z "$BAIHU_PID" ]; then
-    echo "[ERROR] 未找到运行中的 baihu 进程" >&2
-    exit 1
-fi
-
-API_URL=$(ss -tlnp 2>/dev/null | awk -v pid="$BAIHU_PID" -v port="$PORT" '
-    $0 ~ pid && $0 ~ ":" port "\\>" {
-        addr = $4
-        sub(/:'"$PORT"'$/, "", addr)
-        gsub(/^\[|\]$/, "", addr)
-        if (addr ~ /:/) {
-            print "http://[" addr "]:" port
-        } else {
-            print "http://" addr ":" port
-        }
-        exit
-    }')
-
-if [ -z "$API_URL" ]; then
-    echo "[ERROR] 无法找到 baihu 进程监听的 $PORT 端口" >&2
-    exit 1
-fi
-
-echo "[INFO] API 地址: $API_URL"
+echo "[INFO] 面板地址: $PANEL_URL"
 echo "[INFO] 用户名: $USERNAME"
 echo "[INFO] 开始登录..."
 
 curl -c cookies.txt -s \
-    "$API_URL/api/v1/auth/login" \
+    "${PANEL_URL}/api/v1/auth/login" \
     -H 'content-type: application/json' \
     --data-raw "{\"username\":\"$USERNAME\",\"password\":\"$ADMIN_PASSWORD\"}"
 
 echo "[INFO] 请求生成备份..."
 curl -b cookies.txt -s -X POST \
-    "$API_URL/api/v1/settings/backup" \
+    "${PANEL_URL}/api/v1/settings/backup" \
     -H 'content-type: application/json' > /dev/null
 
 echo "[INFO] 等待备份生成..."
@@ -337,7 +304,7 @@ BACKUP_SCRIPT_EOF
 
     chmod +x "$BACKUP_SCRIPT"
 
-    # 构建环境变量字符串（每个变量一行）
+    # 构建环境变量字符串
     local envs="ADMIN_USERNAME=${admin_user}\nADMIN_PASSWORD=${admin_pass}"
     [ -n "$backup_pass" ] && envs="${envs}\nBACKUP_PASS=${backup_pass}"
     [ -n "$gh_branch" ] && envs="${envs}\nGH_BACKUP_BRANCH=${gh_branch}"
@@ -345,10 +312,9 @@ BACKUP_SCRIPT_EOF
     [ -n "$gh_repo" ] && envs="${envs}\nGH_BACKUP_REPO=${gh_repo}"
     envs=$(echo -e "$envs")
 
-    # 登录并创建任务
-    local panel_url="http://localhost:8100"
+    # 登录并创建定时任务（使用外部地址）
     curl -s -c cookies.txt -o /dev/null \
-        "$panel_url/api/v1/auth/login" \
+        "${PANEL_URL}/api/v1/auth/login" \
         -H 'content-type: application/json' \
         --data-raw "{\"username\":\"$admin_user\",\"password\":\"$admin_pass\"}"
     local token=$(grep 'BHToken' cookies.txt | awk '{print $NF}')
@@ -382,7 +348,7 @@ TASK_JSON_EOF
 )
 
     local create_resp=$(curl -s -X POST \
-        "$panel_url/api/v1/tasks" \
+        "${PANEL_URL}/api/v1/tasks" \
         -H "Content-Type: application/json" \
         -H "Cookie: BHToken=$token" \
         -d "$task_json")
@@ -391,7 +357,7 @@ TASK_JSON_EOF
         log_ok "定时备份任务已创建成功！"
         local task_id=$(echo "$create_resp" | grep -o '"id":"[^"]*' | cut -d'"' -f4)
         if [ -n "$task_id" ]; then
-            curl -s -X POST "$panel_url/api/v1/notify/bindings/batch" \
+            curl -s -X POST "${PANEL_URL}/api/v1/notify/bindings/batch" \
                 -H "Content-Type: application/json" \
                 -H "Cookie: BHToken=$token" \
                 -d "{\"type\":\"task\",\"data_id\":\"$task_id\",\"bindings\":[]}" > /dev/null
@@ -412,7 +378,7 @@ post_install_setup() {
     echo "=========================================="
     echo ""
 
-    # 等待面板启动（会自动触发外部访问）
+    # 等待面板启动（自动通过外部地址）
     if ! wait_for_panel; then
         log_err "无法连接到面板，请手动完成初始化。"
         return 1
@@ -456,7 +422,7 @@ post_install_setup() {
     echo ""
     log_ok "🎉 初始化完成！面板已就绪，每日凌晨 4:00 自动备份。"
     echo ""
-    echo "  面板地址: https://${BAIHU_USER}.alwaysdata.net"
+    echo "  面板地址: ${PANEL_URL}"
     echo "  用户名: $new_user"
     echo "  密码: ******"
     echo ""
@@ -511,7 +477,7 @@ do_update() {
     log_warn "请在 AlwaysData 控制台重启站点以应用新版本:"
     echo "  1. 打开 https://admin.alwaysdata.com/site/"
     echo "  2. 点击站点 → 齿轮(Modify) → Submit → Restart"
-    echo "  3. 访问: https://${BAIHU_USER}.alwaysdata.net"
+    echo "  3. 访问: ${PANEL_URL}"
     echo ""
 }
 
@@ -620,7 +586,7 @@ EOF
 }
 
 # ------------------------------------------------------------
-# 单独的初始化功能（以备不时之需）
+# 单独的初始化功能
 # ------------------------------------------------------------
 do_init() {
     echo ""
@@ -643,7 +609,7 @@ do_init() {
 }
 
 # ------------------------------------------------------------
-# 仅配置备份（面板需已运行且密码已知）
+# 仅配置备份
 # ------------------------------------------------------------
 do_backup() {
     echo ""
