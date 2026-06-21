@@ -3,10 +3,7 @@ set -euo pipefail
 
 ########################################
 # AlwaysData 白虎面板安装/更新脚本
-# 用法:
-#   ./baihu-install.sh           → 交互选择（安装/更新）
-#   ./baihu-install.sh install   → 直接全新安装
-#   ./baihu-install.sh update    → 直接更新面板（若未安装则自动安装）
+# 用法命令: bash <(curl -sL https://raw.githubusercontent.com/oyz8/AlwaysData-baihu/main/baihu-install.sh)
 ########################################
 
 BAIHU_USER=$(whoami)
