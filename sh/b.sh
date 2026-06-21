@@ -11,7 +11,7 @@ set -euo pipefail
 
 BAIHU_USER=$(whoami)
 BAIHU_HOME="/home/${BAIHU_USER}/www"
-DEFAULT_VERSION="v1.0.39"   # 网络失败时的兜底版本
+DEFAULT_VERSION="v1.0.39"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RED='\033[0;31m'; NC='\033[0m'
 
@@ -21,7 +21,7 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_err()  { echo -e "${RED}[ERROR]${NC} $*"; }
 
 # ------------------------------------------------------------
-# 版本选择函数（交互式）
+# 版本选择
 # ------------------------------------------------------------
 choose_version() {
     local choice
@@ -100,7 +100,7 @@ stop_baihu() {
 }
 
 # ------------------------------------------------------------
-# 更新功能：只替换 baihu 二进制（保留数据）
+# 更新功能（未安装时自动跳转安装）
 # ------------------------------------------------------------
 do_update() {
     echo ""
@@ -110,8 +110,9 @@ do_update() {
 
     cd "$BAIHU_HOME"
 
+    # ★★★ 关键修复：未安装时不再报错退出，而是自动安装 ★★★
     if [ ! -f "./baihu" ]; then
-        log_warn "当前目录未找到 baihu 程序，将为您执行全新安装..."
+        log_warn "检测到未安装白虎面板，将自动为您执行全新安装..."
         do_install
         exit 0
     fi
@@ -144,7 +145,6 @@ do_update() {
         exit 1
     fi
 
-    # 清理临时文件
     rm -rf "$TMP_DIR"
 
     log_ok "更新完成！baihu 已替换为 ${BAIHU_VERSION}"
@@ -157,7 +157,7 @@ do_update() {
 }
 
 # ------------------------------------------------------------
-# 全新安装功能
+# 全新安装
 # ------------------------------------------------------------
 do_install() {
     echo ""
@@ -175,7 +175,6 @@ do_install() {
 
     stop_baihu
 
-    # 下载
     log_info "下载白虎面板 ${BAIHU_VERSION}..."
     rm -f baihu "${TAR_FILE}" 2>/dev/null || true
     if ! wget -q --show-progress -O "${TAR_FILE}" "$DOWNLOAD_URL"; then
@@ -183,7 +182,6 @@ do_install() {
         exit 1
     fi
 
-    # 解压
     log_info "解压安装..."
     tar -xzf "${TAR_FILE}"
     mv baihu-linux-amd64 baihu
@@ -191,7 +189,7 @@ do_install() {
     rm -f "${TAR_FILE}"
     log_ok "主程序就绪"
 
-    # 配置文件
+    # 配置文件（只在全新安装时生成，更新时不覆盖）
     log_info "生成配置..."
     mkdir -p configs logs
     cat > configs/config.ini << 'EOF'
@@ -229,7 +227,6 @@ EOF
     kill "$BAIHU_PID" 2>/dev/null || true
     wait "$BAIHU_PID" 2>/dev/null || true
 
-    # 完成信息
     echo ""
     echo "=========================================="
     echo "  🎉 安装完成！"
@@ -261,7 +258,7 @@ EOF
 }
 
 # ------------------------------------------------------------
-# 主入口：支持命令行参数或交互菜单
+# 主入口
 # ------------------------------------------------------------
 ACTION="${1:-menu}"
 
