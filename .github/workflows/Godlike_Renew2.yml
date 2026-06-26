@@ -1,8 +1,7 @@
 name: Godlike 续期 2
 on:
-#  schedule:
-#    - cron: '0 */3 * * *'
-#    - cron: '30 1-23/3 * * *'
+  schedule:
+    - cron: '45 3 * * *'  # 每天北京时间 11:45 运行
   workflow_dispatch:
 
 jobs:
