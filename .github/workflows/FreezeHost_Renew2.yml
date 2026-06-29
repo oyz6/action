@@ -62,9 +62,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq bc
 
+      # ───────────────── 替换 WARP：Xray 代理 ─────────────────
       - name: 安装并启动代理
         env:
-          PROXY_NODE: ${{ secrets.PROXY_NODE_ISP }}
+          PROXY_NODE: ${{ secrets.PROXY_NODE }}
         run: |
           if [ -z "$PROXY_NODE" ]; then
             echo "[INFO] 未配置代理，直连模式"
@@ -148,7 +149,7 @@ jobs:
               pbk = params.get("pbk", [""])[0]
               host = params.get("host", [sni])[0]
               path = unquote(params.get("path", ["/"])[0])
-              sid = params.get("sid", [""])[0]
+              sid = params.get("sid", [""])[0]          # 解析 sid
 
               print(f"[INFO] VLESS -> {mask(address)}:{port} (security: {security}, network: {network})")
 
@@ -175,7 +176,7 @@ jobs:
                       "serverName": sni,
                       "fingerprint": fp,
                       "publicKey": pbk,
-                      "shortId": sid
+                      "shortId": sid                     # 必须填写 shortId
                   }
               elif security == "tls":
                   outbound["streamSettings"]["tlsSettings"] = {
@@ -554,14 +555,6 @@ jobs:
           git push
 
           echo "::notice::✅ 成功更新 workflow 文件"
-
-#      - name: 上传截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: renew-screenshots-token-${{ steps.select_token.outputs.token_number }}
-#          path: screenshots/
-#          retention-days: 7
 
       - name: 清理历史运行记录
         if: always()
