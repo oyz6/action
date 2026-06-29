@@ -148,6 +148,7 @@ jobs:
               pbk = params.get("pbk", [""])[0]
               host = params.get("host", [sni])[0]
               path = unquote(params.get("path", ["/"])[0])
+              sid = params.get("sid", [""])[0]
 
               print(f"[INFO] VLESS -> {mask(address)}:{port} (security: {security}, network: {network})")
 
@@ -173,7 +174,8 @@ jobs:
                   outbound["streamSettings"]["realitySettings"] = {
                       "serverName": sni,
                       "fingerprint": fp,
-                      "publicKey": pbk
+                      "publicKey": pbk,
+                      "shortId": sid
                   }
               elif security == "tls":
                   outbound["streamSettings"]["tlsSettings"] = {
@@ -387,6 +389,7 @@ jobs:
           FREEZEHOST_DISCORD_TOKEN: ${{ env.DISCORD_TOKEN }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
         run: |
           echo "使用 Token 编号: ${{ steps.select_token.outputs.token_number }}"
           python scripts/FreezeHost/renew.py 2>&1 | tee renew.log
@@ -399,7 +402,6 @@ jobs:
           
           MIN_DAYS=""
           
-          # 优先从 renew_result.json 读取（若存在）
           if [ -f "renew_result.json" ]; then
             MIN_DAYS=$(jq -r '.min_remaining_days // empty' renew_result.json)
             if [ -n "$MIN_DAYS" ]; then
@@ -407,7 +409,6 @@ jobs:
             fi
           fi
           
-          # 其次从 renew.log 提取所有剩余天数，取最小值
           if [ -z "$MIN_DAYS" ] && [ -f "renew.log" ]; then
             echo "📋 从 renew.log 提取所有服务器剩余天数："
             
@@ -431,7 +432,6 @@ jobs:
             fi
           fi
           
-          # 如果都没找到，退出
           if [ -z "$MIN_DAYS" ] || [ "$MIN_DAYS" = "0" ]; then
             echo "::warning::未找到有效的剩余时间，跳过 workflow 更新"
             echo "skip_update=true" >> "$GITHUB_OUTPUT"
@@ -459,7 +459,6 @@ jobs:
         run: |
           set -e
 
-          # 读取剩余天数（优先 output，其次临时文件）
           REMAINING_DAYS="${{ steps.extract_days.outputs.remaining_days }}"
           
           if [ -z "$REMAINING_DAYS" ] && [ -f "/tmp/renew_data/remaining_days.txt" ]; then
@@ -471,7 +470,6 @@ jobs:
           echo "剩余天数: $REMAINING_DAYS"
           echo "Token 编号: $TOKEN_NUM"
 
-          # 计算下次运行时间（到期前 2 天）
           if (( $(echo "$REMAINING_DAYS > 2" | bc -l) )); then
             DAYS_UNTIL_NEXT_RUN=$(echo "$REMAINING_DAYS - 2" | bc)
           else
@@ -484,7 +482,6 @@ jobs:
           NEXT_DAY=$(date -u -d "+${DAYS_INT} days" +"%-d")
           NEXT_MONTH=$(date -u -d "+${DAYS_INT} days" +"%-m")
           
-          # 根据 Token 编号设置不同的小时（保持 01/02 UTC，避免冲突）
           case "$TOKEN_NUM" in
             1) NEXT_HOUR=1 ;;
             2) NEXT_HOUR=2 ;;
@@ -498,10 +495,8 @@ jobs:
           echo "::notice::📅 下次运行: $NEXT_DATE UTC"
           echo "::notice::⏰ 新 Cron: $NEW_CRON"
 
-          # 切换到 workflow_repo 目录
           cd workflow_repo
 
-          # 从 github.workflow_ref 提取当前 workflow 文件路径
           WORKFLOW_FILE=$(echo "${{ github.workflow_ref }}" | sed -E 's|^[^/]+/[^/]+/(\.github/workflows/[^@]+)@.*|\1|')
 
           echo "::notice::📄 当前 workflow 文件: $WORKFLOW_FILE"
@@ -514,7 +509,6 @@ jobs:
             exit 1
           fi
 
-          # 查找对应 Token 的 cron 行
           TARGET_PATTERN="FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM"
           LINE_NUM=$(grep -n "$TARGET_PATTERN" "$WORKFLOW_FILE" | cut -d: -f1 | head -n1)
 
@@ -532,14 +526,12 @@ jobs:
           sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
           echo "::endgroup::"
 
-          # 替换指定行
           sed -i "${LINE_NUM}c\\    - cron: '$NEW_CRON'   # FREEZEHOST_DISCORD_TOKEN_$TOKEN_NUM - 下一次: $NEXT_DATE UTC" "$WORKFLOW_FILE"
 
           echo "::group::修改后"
           sed -n "${LINE_NUM}p" "$WORKFLOW_FILE"
           echo "::endgroup::"
 
-          # 检查是否有变化
           if git diff --quiet "$WORKFLOW_FILE"; then
             echo "::notice::没有变化需要提交"
             exit 0
@@ -549,7 +541,6 @@ jobs:
           git diff "$WORKFLOW_FILE"
           echo "::endgroup::"
 
-          # 提交并推送
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$WORKFLOW_FILE"
