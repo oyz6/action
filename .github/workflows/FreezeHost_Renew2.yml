@@ -62,10 +62,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq bc
 
-      # ───────────────── 替换 WARP：Xray 代理 ─────────────────
       - name: 安装并启动代理
         env:
-          PROXY_NODE: ${{ secrets.PROXY_NODE }}
+          PROXY_NODE: ${{ secrets.PROXY_NODE_ISP }}
         run: |
           if [ -z "$PROXY_NODE" ]; then
             echo "[INFO] 未配置代理，直连模式"
