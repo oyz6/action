@@ -1,0 +1,35 @@
+name: Auto Redeploy Every 50 Minutes
+
+on:
+  schedule:
+    - cron: '*/50 * * * *'
+  workflow_dispatch:   # 允许手动测试
+
+jobs:
+  trigger-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Back4App Manual Deployment
+        env:
+          SERVICE_ENV_ID: "f07c2ff8-32d0-4ef6-8134-19181f81e9e6"
+          COOKIE: "connect.sid=s%3AjzYuTaZg-srkNbuJNZEmN-AwudEqJI20.TOz055vR1glESsPOo5jSICEu63PKK0rYMxuT7Bnwyf4; ab-XjkrUHOQKm=N4uJ8Xre0H!0; AMP_MKTG_bf3379918c=JTdCJTIycmVmZXJyZXIlMjIlM0ElMjJodHRwcyUzQSUyRiUyRnd3dy5iYWNrNGFwcC5jb20lMkYlMjIlMkMlMjJyZWZlcnJpbmdfZG9tYWluJTIyJTNBJTIyd3d3LmJhY2s0YXBwLmNvbSUyMiU3RA==; __zlcmid=1YKod2eM94Dfrny; b4a_preview_agent=b41e2cdf-6c89-44cc-80b9-d3b77e3f15c1; AMP_bf3379918c=JTdCJTIyZGV2aWNlSWQlMjIlM0ElMjIyZWMwNzMzMS0yMjA1LTQ5N2ItYTlmMS02NGI0YzM5ZTAzMWMlMjIlMkMlMjJ1c2VySWQlMjIlM0ElMjJib29zb3l6JTQwZ21haWwuY29tJTIyJTJDJTIyc2Vzc2lvbklkJTIyJTNBMTc4Mjk5NTQxODA5NyUyQyUyMm9wdE91dCUyMiUzQWZhbHNlJTJDJTIybGFzdEV2ZW50VGltZSUyMiUzQTE3ODI5OTU1MzAzMTMlN0Q="
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST https://api.containers.back4app.com/ \
+            -H "Content-Type: application/json" \
+            -H "Cookie: ${COOKIE}" \
+            -H "Origin: https://containers.back4app.com" \
+            -H "Referer: https://containers.back4app.com/" \
+            -d '{
+              "operationName":"triggerManualDeployment",
+              "variables":{"serviceEnvironmentId":"'"${SERVICE_ENV_ID}"'"},
+              "query":"mutation triggerManualDeployment($serviceEnvironmentId: String!) {\n  triggerManualDeployment(serviceEnvironmentId: $serviceEnvironmentId) {\n    id\n    status\n    result\n    error {\n      message\n      code\n      __typename\n    }\n    __typename\n  }\n}"
+            }')
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          echo "HTTP status: $http_code"
+          echo "Response: $body"
+          if [ "$http_code" -ne 200 ]; then
+            echo "Deployment trigger failed!"
+            exit 1
+          fi
+          echo "Deployment triggered successfully."
