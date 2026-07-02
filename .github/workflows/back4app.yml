@@ -1,8 +1,6 @@
 name: back4app
 
 on:
-  schedule:
-    - cron: '*/50 * * * *'
   workflow_dispatch:   # 允许手动测试
 
 jobs:
