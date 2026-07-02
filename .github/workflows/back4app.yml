@@ -1,4 +1,4 @@
-name: Auto Redeploy Every 50 Minutes
+name: back4app
 
 on:
   schedule:
