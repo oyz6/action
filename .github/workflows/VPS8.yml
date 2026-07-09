@@ -1,4 +1,4 @@
-name: F VPS8 签到
+name: F2 VPS8 签到
 
 on:
   workflow_dispatch:
@@ -17,6 +17,13 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
+
+      - name: 恢复 Cookie 缓存
+        uses: actions/cache@v4
+        with:
+          path: cookies_vps8
+          key: vps8-cookies-vps8-${{ github.run_id }}
+          restore-keys: vps8-cookies-vps8-
 
       - uses: actions/setup-python@v5
         with:
@@ -67,10 +74,15 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}   # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
-          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}   # 自动更新 Cookie
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_NopeCHA.py
 
+      - name: 保存 Cookie 缓存
+        uses: actions/cache/save@v4
+        with:
+          path: cookies_vps8
+          key: vps8-cookies-vps8-${{ github.run_id }}
+          
 #      - name: 上传截图
 #        if: always()
 #        uses: actions/upload-artifact@v4
