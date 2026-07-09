@@ -7,7 +7,7 @@ jobs:
   sign:
     name: 执行签到
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 30  # 给 Buster 300s 足够空间
     permissions:
       contents: read
       actions: write
