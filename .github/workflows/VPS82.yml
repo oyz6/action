@@ -21,10 +21,9 @@ jobs:
       - name: 恢复 Cookie 缓存
         uses: actions/cache@v4
         with:
-          path: cookies
-          key: vps8-cookies-${{ github.run_id }}
-          restore-keys: |
-            vps8-cookies-
+          path: cookies_vps82
+          key: vps8-cookies-vps82-${{ github.run_id }}
+          restore-keys: vps8-cookies-vps82-
 
       - uses: actions/setup-python@v5
         with:
@@ -81,8 +80,8 @@ jobs:
       - name: 保存 Cookie 缓存
         uses: actions/cache/save@v4
         with:
-          path: cookies
-          key: vps8-cookies-${{ github.run_id }}
+          path: cookies_vps82
+          key: vps8-cookies-vps82-${{ github.run_id }}
 
 #      - name: 上传截图
 #        if: always()
