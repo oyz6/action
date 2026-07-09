@@ -6,7 +6,7 @@ on:
     - cron: '30 5,16 * * *'      # 触发点: 05:30, 16:30
   workflow_dispatch:
     inputs:
-      retry:
+      is_retry:
         description: '是否为重试运行'
         required: false
         default: 'false'
@@ -16,9 +16,11 @@ permissions:
   contents: read
 
 jobs:
-  run-renew:
-    name: 执行脚本
+  run-first:
+    name: 首次执行
     runs-on: ubuntu-latest
+    outputs:
+      success: ${{ steps.renew_run.outcome == 'success' && 'true' || 'false' }}
 
     steps:
       - name: 拉取私有仓库
@@ -64,62 +66,141 @@ jobs:
 
       - name: 执行续订
         id: renew_run
-        # 关键：用 continue-on-error 防止脚本失败直接终止 job
         continue-on-error: true
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN_8 }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python -u scripts/Host2Play/main.py
 
-      # ----------------------------------------------------------------
-      # 判断是否是首次失败（非重试），触发重试工作流
-      # 用 env 变量统一处理 inputs.retry 为空的情况
-      # ----------------------------------------------------------------
-      - name: 判断重试标志
-        if: steps.renew_run.outcome == 'failure'
-        id: check_retry
-        run: |
-          # schedule 触发时 inputs.retry 为空，视为 'false'
-          RETRY="${{ github.event.inputs.retry }}"
-          if [ -z "$RETRY" ]; then
-            RETRY="false"
-          fi
-          echo "retry_flag=$RETRY" >> $GITHUB_OUTPUT
-
-      - name: 首次失败 → 触发重试工作流
-        if: |
-          steps.renew_run.outcome == 'failure' &&
-          steps.check_retry.outputs.retry_flag == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.REPO_TOKEN }}
-        run: |
-          echo "[INFO] 首次失败，5秒后触发重试工作流..."
-          sleep 5
-          gh workflow run "${{ github.workflow }}" \
-            --repo "${{ github.repository }}" \
-            --ref "${{ github.ref_name }}" \
-            -f retry=true
-          echo "[INFO] 重试工作流已触发"
-          # 注意：这里不 exit 1，让当前工作流正常结束
-          # 避免父工作流失败标红影响判断
-
-      - name: 重试后仍失败 → 标记失败
-        if: |
-          steps.renew_run.outcome == 'failure' &&
-          steps.check_retry.outputs.retry_flag == 'true'
-        run: |
-          echo "[ERROR] 重试后仍然失败，任务终止"
-          exit 1
-
-      - name: 上传截图
+      - name: 上传截图（首次）
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots-${{ github.run_number }}
+          name: screenshots-first-${{ github.run_number }}
           path: output/screenshots/*.png
           retention-days: 7
           if-no-files-found: ignore
 
+      # 把结果写入文件，供重试 job 判断是否需要运行
+      - name: 写出结果标记
+        if: always()
+        run: |
+          echo "${{ steps.renew_run.outcome }}" > /tmp/first_outcome.txt
+          cat /tmp/first_outcome.txt
+
+      # 上传结果标记文件，传递给重试 job
+      - name: 上传结果标记
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outcome-${{ github.run_number }}
+          path: /tmp/first_outcome.txt
+          retention-days: 1
+
+  run-retry:
+    name: 重试执行
+    runs-on: ubuntu-latest
+    needs: run-first
+    # 无论 run-first 成功还是失败都运行此 job（但内部会判断）
+    if: always()
+
+    steps:
+      - name: 下载结果标记
+        uses: actions/download-artifact@v4
+        with:
+          name: outcome-${{ github.run_number }}
+          path: /tmp/outcome
+
+      - name: 检查是否需要重试
+        id: need_retry
+        run: |
+          OUTCOME=$(cat /tmp/outcome/first_outcome.txt 2>/dev/null || echo "unknown")
+          echo "首次运行结果: $OUTCOME"
+          if [ "$OUTCOME" = "success" ]; then
+            echo "首次成功，跳过重试"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "首次失败，执行重试"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 拉取私有仓库
+        if: steps.need_retry.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: oyz6/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
+      - name: 配置 Python 环境
+        if: steps.need_retry.outputs.skip == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 安装系统依赖
+        if: steps.need_retry.outputs.skip == 'false'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb ffmpeg unzip curl
+          wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo dpkg -i /tmp/chrome.deb || sudo apt-get install -f -y
+
+      - name: 安装 Python 依赖
+        if: steps.need_retry.outputs.skip == 'false'
+        run: |
+          python -m pip install --upgrade pip
+          pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
+
+      - name: 等待 60 秒（让 IP 封锁冷却）
+        if: steps.need_retry.outputs.skip == 'false'
+        run: |
+          echo "[INFO] 等待 60 秒后重试，让 IP 封锁冷却..."
+          sleep 60
+
+      - name: 启用 WARP 网络
+        if: steps.need_retry.outputs.skip == 'false'
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      - name: 修复 DNS
+        if: steps.need_retry.outputs.skip == 'false'
+        run: |
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo systemctl disable systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 1.0.0.1" | sudo tee /etc/resolv.conf
+          sleep 2
+          nslookup host2play.gratis 1.1.1.1 || echo "[WARN] 解析失败"
+          curl -s --max-time 10 https://api.ipify.org && echo
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc=' || true
+
+      - name: 执行续订（重试）
+        if: steps.need_retry.outputs.skip == 'false'
+        id: renew_retry
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN_8 }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python -u scripts/Host2Play/main.py
+
+      - name: 上传截图（重试）
+        if: steps.need_retry.outputs.skip == 'false' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-retry-${{ github.run_number }}
+          path: output/screenshots/*.png
+          retention-days: 7
+          if-no-files-found: ignore
+
+  cleanup:
+    name: 清理历史记录
+    runs-on: ubuntu-latest
+    needs: [run-first, run-retry]
+    if: always()
+
+    steps:
       - name: 清理历史运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
