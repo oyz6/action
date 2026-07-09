@@ -69,8 +69,8 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
-          GH_TOKEN: ${{ github.token }}            # 自动更新 Cookie
-          GITHUB_REPOSITORY: ${{ github.repository }}  # 自动更新 Cookie
+          GH_TOKEN: ${{ github.token }}            # 使用当前仓库的令牌
+          GITHUB_REPOSITORY: ${{ github.repository }}  # 自动更新前仓库的 Cookie
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_NopeCHA.py
 
 #      - name: 上传截图
