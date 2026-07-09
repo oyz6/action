@@ -1,4 +1,4 @@
-name: F2 VPS8 签到
+name: F VPS8 签到
 
 on:
   workflow_dispatch:
