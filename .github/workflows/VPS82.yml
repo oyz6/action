@@ -64,12 +64,13 @@ jobs:
         env:
           VPS8_RENEW_TEST: "0"
           VPS8: ${{ secrets.VPS82 }}
+          VPS8_SECRET_NAME: VPS82                  # ← Cookie 指定要更新的 Secret 名 默认 VPS8
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}   # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
-          GH_TOKEN: ${{ github.token }}   # 自动更新 Cookie
-          GITHUB_REPOSITORY: ${{ github.repository }}   # 自动更新 Cookie
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
+          GH_TOKEN: ${{ github.token }}            # 自动更新 Cookie
+          GITHUB_REPOSITORY: ${{ github.repository }}  # 自动更新 Cookie
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_NopeCHA.py
 
 #      - name: 上传截图
