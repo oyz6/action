@@ -71,7 +71,7 @@ jobs:
         env:
           VPS8_RENEW_TEST: "0"
           VPS8: ${{ secrets.VPS8 }}
-          COOKIE_DIR: cookies_vps8                 # 多账号隔离缓存名
+          COOKIE_DIR: cookies_vps8                # 必须与缓存路径一致
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
