@@ -46,7 +46,7 @@ jobs:
 
       - name: 设置代理 (sing-box)
         env:
-          NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名
+          NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名 （大金）双ISP - US
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
