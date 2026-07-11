@@ -7,18 +7,20 @@ jobs:
   sign:
     name: 执行签到
     runs-on: ubuntu-22.04
-    timeout-minutes: 30  # 给 Buster 300s 足够空间
+    timeout-minutes: 45     # 理论峰值约 35 分钟，设置 45 分钟留有余量
     permissions:
       contents: read
       actions: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出代码仓库
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
 
-      - uses: actions/setup-python@v5
+      - name: 配置 Python 3.11
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -44,7 +46,7 @@ jobs:
             https://github.com/dessant/buster/releases/download/v3.1.3/buster_captcha_solver_for_humans-3.1.3-chrome.zip
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
 
-      - name: 设置代理 (sing-box)
+      - name: 设置代理
         env:
           NODE_LINK: ${{ secrets.HY2_URL_FR }}  # 改为对应节点变量名
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
