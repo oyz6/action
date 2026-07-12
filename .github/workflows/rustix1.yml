@@ -1,15 +1,16 @@
-name: Rustix 保活
+name: Rustix1 重启
 
 on:
   workflow_dispatch:
     inputs:
       accounts:
-        description: '指定邮箱（留空运行全部，多个邮箱用逗号分隔）'
+        description: '指定邮箱（留空运行全部）'
         required: false
         default: ''
 
 jobs:
   keepalive:
+    name: 执行脚本
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -38,7 +39,7 @@ jobs:
             echo "❌ 代理设置失败，发送通知..."
             curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TG_CHAT_ID}" \
-              -d text="❌ Rustix 保活失败：代理不可用" \
+              -d text="❌ Rustix 重启失败：代理不可用" \
               --max-time 10 || true
             exit 1
           fi
