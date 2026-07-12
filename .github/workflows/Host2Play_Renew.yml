@@ -194,13 +194,6 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  cleanup:
-    name: 清理历史记录
-    runs-on: ubuntu-latest
-    needs: [run-first, run-retry]
-    if: always()
-
-    steps:
       - name: 清理历史运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
