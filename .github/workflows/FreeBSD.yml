@@ -1,0 +1,47 @@
+name: Build grpcio wheel on FreeBSD
+
+on:
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      grpcio-version:
+        description: 'grpcio version to build (e.g. 1.82.1)'
+        required: true
+        default: '1.82.1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (empty, just for artifacts)
+        uses: actions/checkout@v4
+
+      - name: Build wheel on FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          # 指定 FreeBSD 版本与用户环境匹配
+          release: "14.2"   # 也可用 14.1, 14.0 等
+          prepare: |
+            # 安装编译依赖
+            pkg install -y python311 py311-pip cmake gcc git bash
+            # 升级 pip 并使用 setuptools wheel
+            python3.11 -m pip install --upgrade pip setuptools wheel
+          run: |
+            # 设置单线程编译，降低内存消耗（避免云端资源限制）
+            export GRPC_PYTHON_BUILD_EXT_COMPILER_JOBS=2
+            # 开始编译 grpcio
+            python3.11 -m pip wheel \
+              --wheel-dir /tmp/wheels \
+              --no-cache-dir \
+              --verbose \
+              grpcio==${{ github.event.inputs.grpcio-version }}
+            # 复制生成的 wheel 到工作目录
+            cp /tmp/wheels/*.whl .
+            echo "Built wheel:"
+            ls -l *.whl
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: grpcio-freebsd-wheel
+          path: "*.whl"
