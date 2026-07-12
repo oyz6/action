@@ -20,28 +20,27 @@ jobs:
         with:
           usesh: true
           release: "14.2"
-          run: |
-            set -x          # 打印每条命令
-            set -e          # 遇错即停
-
-            echo "===== 1. Update pkg and install dependencies ====="
-            pkg update -f   # 强制更新仓库索引，确保包能找到
+          # 全部操作放在 prepare 中（虚拟机已准备好，代码已同步到 /home/runner/work）
+          prepare: |
+            set -e
+            echo "===== 1. Update pkg and install build tools ====="
+            pkg update -f
             pkg install -y python311 cmake gcc git bash openssl pkgconf
 
-            echo "===== 2. Upgrade pip/setuptools/wheel ====="
+            echo "===== 2. Upgrade pip, setuptools, wheel ====="
             python3.11 -m pip install --upgrade pip setuptools wheel
 
             echo "===== 3. Build grpcio wheel ====="
             export GRPC_PYTHON_BUILD_EXT_COMPILER_JOBS=2
+            # 编译到 /tmp/wheels（或者直接到 GITHUB_WORKSPACE）
             python3.11 -m pip wheel \
-              --wheel-dir /tmp/wheels \
+              --wheel-dir "$GITHUB_WORKSPACE" \
               --no-cache-dir \
               --verbose \
               grpcio==${{ github.event.inputs.grpcio-version }}
 
-            cp /tmp/wheels/*.whl .
-            echo "===== 4. Wheel built successfully ====="
-            ls -l *.whl
+            echo "===== 4. Done, wheel is in $GITHUB_WORKSPACE ====="
+            ls -l "$GITHUB_WORKSPACE"/*.whl
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
