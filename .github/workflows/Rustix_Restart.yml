@@ -1,4 +1,4 @@
-name: Rustix 保活
+name: Rustix 重启
 
 on:
   workflow_dispatch:
