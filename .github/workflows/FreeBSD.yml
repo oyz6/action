@@ -22,13 +22,12 @@ jobs:
           release: "14.2"
           prepare: |
             set -e
-
-            # 关键：强制忽略 OS 版本不匹配
             export IGNORE_OSVERSION=yes
 
             echo "===== 1. Update pkg and install build tools ====="
             pkg update -f
-            pkg install -y python311 cmake gcc git bash openssl pkgconf
+            # 关键：python311 解释器 + pip 包
+            pkg install -y python311 py311-pip cmake gcc git bash openssl pkgconf
 
             echo "===== 2. Upgrade pip, setuptools, wheel ====="
             python3.11 -m pip install --upgrade pip setuptools wheel
