@@ -21,9 +21,11 @@ jobs:
           usesh: true
           release: "14.2"
           run: |
-            set -e
+            set -x          # 打印每条命令
+            set -e          # 遇错即停
 
-            echo "===== 1. Install dependencies ====="
+            echo "===== 1. Update pkg and install dependencies ====="
+            pkg update -f   # 强制更新仓库索引，确保包能找到
             pkg install -y python311 cmake gcc git bash openssl pkgconf
 
             echo "===== 2. Upgrade pip/setuptools/wheel ====="
