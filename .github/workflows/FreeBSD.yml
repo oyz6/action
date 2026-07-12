@@ -1,4 +1,4 @@
-name: 预编译 FreeBSD wheel
+name: 预编译 grpcio wheel FreeBSD
 
 on:
   workflow_dispatch:
@@ -20,15 +20,26 @@ jobs:
         with:
           usesh: true
           release: "14.2"
+          # prepare 阶段：安装编译工具和系统库
           prepare: |
-            # 安装编译工具，python311 自带 pip
-            pkg install -y python311 cmake gcc git bash
-            # 升级 pip（可选，但推荐）
+            set -e  # 遇到错误立即退出
+            echo "=== Prepare: start ==="
+            # 安装 python、编译器、及 grpcio 编译所需的系统库
+            pkg install -y python311 cmake gcc git bash openssl c-ares re2 pkgconf
+            # 验证安装
+            python3.11 --version
+            gcc --version
+            cmake --version
+            # 升级 pip / setuptools / wheel
             python3.11 -m pip install --upgrade pip setuptools wheel
+            echo "=== Prepare: done ==="
+          # run 阶段：编译 wheel
           run: |
-            # 限制并行编译数，避免资源不足
+            set -e
+            echo "=== Run: start ==="
+            # 限制并行线程数，降低内存峰值
             export GRPC_PYTHON_BUILD_EXT_COMPILER_JOBS=2
-            # 编译并生成 wheel
+            # 编译（注意：某些依赖可能需要设置环境变量，不过多数情况默认即可）
             python3.11 -m pip wheel \
               --wheel-dir /tmp/wheels \
               --no-cache-dir \
@@ -36,7 +47,7 @@ jobs:
               grpcio==${{ github.event.inputs.grpcio-version }}
             # 复制 wheel 到工作目录
             cp /tmp/wheels/*.whl .
-            echo "=== Built wheel ==="
+            echo "=== Built wheel: ==="
             ls -l *.whl
 
       - name: Upload wheel artifact
