@@ -23,7 +23,7 @@ jobs:
 
       - name: 安装 Playwright 及依赖
         run: |
-          pip install playwright requests
+          pip install playwright "requests[socks]"
           playwright install chromium
           playwright install-deps chromium
 
