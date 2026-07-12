@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       accounts:
-        description: '指定邮箱账号（留空运行全部）'
+        description: '指定邮箱（留空运行全部）'
         required: false
         default: ''
 
 jobs:
   keepalive:
+    name: 执行脚本
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -21,30 +22,59 @@ jobs:
           token: ${{ secrets.REPO_TOKEN }}
           path: .
 
-      - name: 安装 Playwright 及依赖
+      - name: 安装系统依赖
         run: |
-          pip install playwright "requests[socks]"
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 libxss1 libasound2 libxtst6 xauth fonts-liberation \
+            libgbm1 libxkbcommon0 libatk1.0-0 libatk-bridge2.0-0 \
+            libcups2 libdrm2 libxcomposite1 libxdamage1 libxrandr2 \
+            libpango-1.0-0 libcairo2
+
+      - name: 启用 WARP
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: ipv4
+          mode: client
+
+      - name: 修复 DNS
+        run: |
+          sudo systemctl stop systemd-resolved 2>/dev/null || true
+          sudo systemctl disable systemd-resolved 2>/dev/null || true
+          sudo rm -f /etc/resolv.conf
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+          sleep 2
+          echo "[INFO] 当前出口 IP:"
+          curl -s --max-time 10 https://api.ipify.org && echo
+          echo "[INFO] WARP Trace:"
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
+            | grep -E 'ip=|warp=|loc=' || true
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install requests playwright
           playwright install chromium
           playwright install-deps chromium
 
-      - name: 配置代理
-        env:
-          NODE_LINK: ${{ secrets.PROXY_NODE }}
-        run: |
-          chmod +x scripts/setup_proxy.sh
-          bash scripts/setup_proxy.sh
-
-      - name: 执行保活任务
+      - name: 执行保活
         env:
           RUSTIX: ${{ secrets.RUSTIX }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           TARGET_ACCOUNTS: ${{ github.event.inputs.accounts }}
-          PROXY_SERVER: socks5://127.0.0.1:1080   # 由 setup_proxy.sh 输出
-        run: python scripts/Rustix/Rustix.py
+          USE_WARP: "true"
+        run: |
+          python scripts/Rustix/Rustix.py
 
-      - name: 清理运行记录
+      - name: 上传截图
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustix-screenshots
+          path: screenshots/*.png
+          retention-days: 3
+
+      - name: 清理旧运行
         uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ github.token }}
