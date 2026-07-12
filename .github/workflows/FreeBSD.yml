@@ -20,9 +20,12 @@ jobs:
         with:
           usesh: true
           release: "14.2"
-          # 全部操作放在 prepare 中（虚拟机已准备好，代码已同步到 /home/runner/work）
           prepare: |
             set -e
+
+            # 关键：强制忽略 OS 版本不匹配
+            export IGNORE_OSVERSION=yes
+
             echo "===== 1. Update pkg and install build tools ====="
             pkg update -f
             pkg install -y python311 cmake gcc git bash openssl pkgconf
@@ -32,14 +35,13 @@ jobs:
 
             echo "===== 3. Build grpcio wheel ====="
             export GRPC_PYTHON_BUILD_EXT_COMPILER_JOBS=2
-            # 编译到 /tmp/wheels（或者直接到 GITHUB_WORKSPACE）
             python3.11 -m pip wheel \
               --wheel-dir "$GITHUB_WORKSPACE" \
               --no-cache-dir \
               --verbose \
               grpcio==${{ github.event.inputs.grpcio-version }}
 
-            echo "===== 4. Done, wheel is in $GITHUB_WORKSPACE ====="
+            echo "===== 4. Done ====="
             ls -l "$GITHUB_WORKSPACE"/*.whl
 
       - name: Upload wheel artifact
