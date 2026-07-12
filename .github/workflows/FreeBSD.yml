@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       grpcio-version:
-        description: 'grpcio version (e.g. 1.82.1)'
+        description: 'grpcio version to build (e.g. 1.82.1)'
         required: true
         default: '1.82.1'
 
@@ -20,34 +20,27 @@ jobs:
         with:
           usesh: true
           release: "14.2"
-          # prepare 阶段：安装编译工具和系统库
-          prepare: |
-            set -e  # 遇到错误立即退出
-            echo "=== Prepare: start ==="
-            # 安装 python、编译器、及 grpcio 编译所需的系统库
-            pkg install -y python311 cmake gcc git bash openssl c-ares re2 pkgconf
-            # 验证安装
-            python3.11 --version
-            gcc --version
-            cmake --version
-            # 升级 pip / setuptools / wheel
-            python3.11 -m pip install --upgrade pip setuptools wheel
-            echo "=== Prepare: done ==="
-          # run 阶段：编译 wheel
+          # 不用 prepare，全部放到 run 中
           run: |
             set -e
-            echo "=== Run: start ==="
-            # 限制并行线程数，降低内存峰值
+            echo "===== 1. Install dependencies ====="
+            # 安装 Python、编译器及 grpcio 编译所需的库
+            sudo pkg install -y python311 cmake gcc git bash openssl c-ares re2 pkgconf
+
+            echo "===== 2. Upgrade pip/setuptools/wheel ====="
+            python3.11 -m pip install --upgrade pip setuptools wheel
+
+            echo "===== 3. Build grpcio wheel ====="
             export GRPC_PYTHON_BUILD_EXT_COMPILER_JOBS=2
-            # 编译（注意：某些依赖可能需要设置环境变量，不过多数情况默认即可）
             python3.11 -m pip wheel \
               --wheel-dir /tmp/wheels \
               --no-cache-dir \
               --verbose \
               grpcio==${{ github.event.inputs.grpcio-version }}
-            # 复制 wheel 到工作目录
+
+            # 复制 wheel 到当前工作目录（用于 artifact 上传）
             cp /tmp/wheels/*.whl .
-            echo "=== Built wheel: ==="
+            echo "===== 4. Wheel built successfully ====="
             ls -l *.whl
 
       - name: Upload wheel artifact
