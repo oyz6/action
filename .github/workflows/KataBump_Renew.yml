@@ -39,7 +39,6 @@ jobs:
           sudo apt-get install -y \
             xvfb \
             libgtk-3-0 \
-            libnotify-dev \
             libnss3 \
             libxss1 \
             libasound2t64 \
@@ -48,7 +47,6 @@ jobs:
             fonts-liberation \
             libgbm1 \
             libxkbcommon0 \
-            libvulkan1 \
             libatk1.0-0 \
             libatk-bridge2.0-0 \
             libcups2 \
@@ -57,9 +55,7 @@ jobs:
             libxdamage1 \
             libxrandr2 \
             libpango-1.0-0 \
-            libcairo2 \
-            wget \
-            curl
+            libcairo2
 
       - name: 启用 WARP
         uses: fscarmen/warp-on-actions@v1.3
@@ -100,13 +96,13 @@ jobs:
           sleep 2
           python scripts/KataBump/main.py
 
-      - name: 上传截图
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: screenshots-${{ github.run_number }}
-          path: "*.png"
-          retention-days: 7
+#      - name: 上传截图
+#        uses: actions/upload-artifact@v4
+#        if: always()
+#        with:
+#          name: screenshots-${{ github.run_number }}
+#          path: "*.png"
+#          retention-days: 7
 
       - name: 清理旧的工作流运行记录
         uses: Mattraks/delete-workflow-runs@v2
