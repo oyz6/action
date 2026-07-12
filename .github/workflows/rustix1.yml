@@ -1,9 +1,12 @@
 name: Rustix 保活
 
 on:
-#  schedule:
-#    - cron: '*/30 * * * *'  # 每30分钟执行一次
-  workflow_dispatch:          # 支持手动触发
+  workflow_dispatch:
+    inputs:
+      accounts:
+        description: '指定邮箱（留空运行全部，多个邮箱用逗号分隔）'
+        required: false
+        default: ''
 
 jobs:
   keepalive:
@@ -20,7 +23,7 @@ jobs:
 
       - name: 安装 Python 依赖
         run: |
-          pip install requests playwright "requests[socks]"
+          pip install requests[socks] playwright
           playwright install chromium
           playwright install-deps chromium
 
@@ -46,8 +49,17 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          TARGET_ACCOUNTS: ${{ github.event.inputs.accounts }}
         run: |
           python scripts/Rustix/rustix1.py
+
+      - name: 上传截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustix-screenshots
+          path: screenshots/*.png
+          retention-days: 3
 
       - name: 清理旧运行
         uses: Mattraks/delete-workflow-runs@v2
