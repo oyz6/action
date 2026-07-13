@@ -198,7 +198,7 @@ EOF
 
     # 主动触发一次保活，确保 Uptime Kuma 被立刻拉起来
     info "触发一次即时保活..."
-    curl -s -o /dev/null http://${KEEP_DOMAIN}/666 || true
+    curl -s -o /dev/null http://${KEEP_DOMAIN}/oyz8 || true
 }
 
 # ================== 输出信息 ==================
@@ -216,7 +216,7 @@ print_info() {
     echo "🛡️ 保活控制面板:"
     echo "   - 访问地址: http://${KEEP_DOMAIN}/control"
     echo "   - 登录账号: ${KEEPER_USER} / ${KEEPER_PASS}"
-    echo "   - 保活注册接口: http://${KEEP_DOMAIN}/666"
+    echo "   - 保活注册接口: http://${KEEP_DOMAIN}/oyz8"
     echo ""
     echo "📌 已自动使用保活服务：https://trans.ct8.pl"
     echo "   你的站点会通过上述地址保持活跃"
