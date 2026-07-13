@@ -334,7 +334,7 @@ app.post('/api/config', validateCSRFToken, (req, res) => {
 function registerKeepAlive() {
   const USERNAME = os.userInfo().username;
   const host = `auto-keep.${USERNAME}.${config.domain}`;   // auto-keep.<user>.ct8.pl 或 serv00.net
-  const postData = JSON.stringify({ url: `https://${host}/666` });
+  const postData = JSON.stringify({ url: `http://${host}/666` });
 
   const urlObj = new URL('https://trans.ct8.pl/add-url');
   const options = {
@@ -365,7 +365,7 @@ function registerKeepAlive() {
   req.write(postData);
   req.end();
 
-  console.log(`✓ 已向保活服务注册: https://${host}/666`);
+  console.log(`✓ 已向保活服务注册: http://${host}/666`);
 }
 
 // ========== 进程守护逻辑 ==========
