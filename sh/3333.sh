@@ -14,7 +14,7 @@ fi
 
 MAIN_DOMAIN="${USERNAME_LOWER}.${DOMAIN_SUFFIX}"
 KUMA_DIR="${HOME}/domains/${MAIN_DOMAIN}/uptime-kuma"
-KUMA_REPO="https://github.com/oyz8/Uptime_Kuma/releases/download/v2.3.2-2/uptime-kuma.zip"
+KUMA_REPO="https://github.com/oyz8/Uptime_Kuma/releases/download/v2.4.0-3/uptime-kuma.zip"
 
 # 保活服务配置
 KEEP_SUBDOMAIN="auto-keep"
