@@ -6,7 +6,7 @@ const { exec } = require('child_process');
 const crypto = require('crypto');
 const auth = require('basic-auth');
 const fs = require('fs');
-const https = require('https'); // 用于保活注册请求
+const https = require('https');
 
 const app = express();
 const csrfTokens = new Map();
@@ -17,7 +17,7 @@ const DEFAULT_CONFIG = {
   username: 'admin',
   password: 'admin',
   serverPort: 3000,
-  domain: 'ct8.pl',         // 可改为 serv00.net
+  domain: 'ct8.pl',
   checkInterval: 10,
   processes: [
     {
@@ -95,9 +95,9 @@ setInterval(cleanExpiredTokens, 5 * 60 * 1000);
 // ========== 中间件 ==========
 app.use(express.json());
 
-// 认证中间件（/666 和 CSRF 令牌接口无需认证）
+// 认证中间件（/oyz8 和 CSRF 令牌接口无需认证）
 app.use((req, res, next) => {
-  if (req.path === '/666' || req.path === '/api/csrf-token') return next();
+  if (req.path === '/oyz8' || req.path === '/api/csrf-token') return next();
   
   const user = auth(req);
   if (user && user.name === config.username && user.pass === config.password) {
@@ -120,8 +120,8 @@ app.get('/api/csrf-token', (req, res) => {
   res.json({ token });
 });
 
-// 保活探测端点 /666
-app.get('/666', (req, res) => {
+// 保活探测端点 /oyz8
+app.get('/oyz8', (req, res) => {
   res.type('html').send(`<!DOCTYPE html>
 <html><head><title>Welcome to nginx!</title>
 <style>body{width:35em;margin:0 auto;font-family:Tahoma,Verdana,Arial,sans-serif}</style>
@@ -334,7 +334,7 @@ app.post('/api/config', validateCSRFToken, (req, res) => {
 function registerKeepAlive() {
   const USERNAME = os.userInfo().username;
   const host = `auto-keep.${USERNAME}.${config.domain}`;   // auto-keep.<user>.ct8.pl 或 serv00.net
-  const postData = JSON.stringify({ url: `http://${host}/666` });
+  const postData = JSON.stringify({ url: `http://${host}/oyz8` });
 
   const urlObj = new URL('https://trans.ct8.pl/add-url');
   const options = {
@@ -365,7 +365,7 @@ function registerKeepAlive() {
   req.write(postData);
   req.end();
 
-  console.log(`✓ 已向保活服务注册: http://${host}/666`);
+  console.log(`✓ 已向保活服务注册: http://${host}/oyz8`);
 }
 
 // ========== 进程守护逻辑 ==========
