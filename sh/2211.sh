@@ -52,6 +52,14 @@ auto_port() {
 # ================== 反向代理（Uptime Kuma 用） ==================
 setup_kuma_proxy() {
     local port=$1
+
+    # 删除默认的 index.html 占位文件，避免干扰反向代理
+    local default_index="${HOME}/domains/${MAIN_DOMAIN}/public_html/index.html"
+    if [ -f "$default_index" ]; then
+        info "删除默认 index.html ..."
+        rm -f "$default_index"
+    fi
+
     if devil www list "$MAIN_DOMAIN" 2>/dev/null | grep -q "proxy.*:${port}"; then
         info "Uptime Kuma 反向代理已存在，跳过。"
         return
@@ -60,7 +68,7 @@ setup_kuma_proxy() {
     sleep 1
     for i in {1..3}; do
         info "添加反向代理 (尝试 $i): ${MAIN_DOMAIN} -> localhost:${port}"
-        if devil www add "$MAIN_DOMAIN" proxy localhost "$port" https >/dev/null 2>&1; then
+        if devil www add "$MAIN_DOMAIN" proxy localhost "$port" >/dev/null 2>&1; then
             info "反向代理设置成功。"
             return
         fi
@@ -206,7 +214,7 @@ print_info() {
     echo "   - 启动命令已加入保活守护"
     echo ""
     echo "🛡️ 保活控制面板:"
-    echo "   - 访问地址: https://${KEEP_DOMAIN}/control"
+    echo "   - 访问地址: http://${KEEP_DOMAIN}/control"
     echo "   - 登录账号: ${KEEPER_USER} / ${KEEPER_PASS}"
     echo "   - 保活注册接口: http://${KEEP_DOMAIN}/666"
     echo ""
