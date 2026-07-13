@@ -20,7 +20,7 @@ KUMA_REPO="https://github.com/oyz8/Uptime_Kuma/releases/download/v2.4.0-3/uptime
 KEEP_SUBDOMAIN="auto-keep"
 KEEP_DOMAIN="${KEEP_SUBDOMAIN}.${USERNAME_LOWER}.${DOMAIN_SUFFIX}"
 KEEP_DIR="${HOME}/domains/${KEEP_DOMAIN}/public_nodejs"
-APP_JS_URL="https://github.com/oyz6/action/releases/download/grpcio/app.js"
+APP_JS_URL="https://raw.githubusercontent.com/oyz6/action/main/sh/app.js"
 
 # 颜色
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
