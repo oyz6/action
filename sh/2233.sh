@@ -100,6 +100,15 @@ install_uptime_kuma() {
 install_keeper() {
     info "===== 2/2 安装保活服务 ====="
 
+    # ---- 交互输入保活面板账号密码 ----
+    echo ""
+    echo "配置保活控制面板登录信息 (直接回车使用默认值):"
+    read -p "用户名 (默认: admin): " KEEPER_USER
+    KEEPER_USER=${KEEPER_USER:-admin}
+    read -p "密码   (默认: admin): " KEEPER_PASS
+    KEEPER_PASS=${KEEPER_PASS:-admin}
+    echo ""
+
     # 启用二进制执行权限
     devil binexec on
 
@@ -152,12 +161,12 @@ install_keeper() {
         npm install express basic-auth
     fi
 
-    # 生成 config.json（包含 Uptime Kuma 进程监控）
+    # 生成 config.json（使用交互输入的账号密码）
     info "生成保活配置（含 Uptime Kuma 守护）..."
     cat > config.json << EOF
 {
-  "username": "admin",
-  "password": "admin",
+  "username": "${KEEPER_USER}",
+  "password": "${KEEPER_PASS}",
   "serverPort": 3000,
   "domain": "${DOMAIN_SUFFIX}",
   "checkInterval": 10,
@@ -178,6 +187,10 @@ EOF
     info "启动保活服务..."
     devil www restart "$KEEP_DOMAIN"
     sleep 5
+
+    # 主动触发一次保活，确保 Uptime Kuma 被立刻拉起来
+    info "触发一次即时保活..."
+    curl -s -o /dev/null http://${KEEP_DOMAIN}/666 || true
 }
 
 # ================== 输出信息 ==================
@@ -194,14 +207,13 @@ print_info() {
     echo ""
     echo "🛡️ 保活控制面板:"
     echo "   - 访问地址: https://${KEEP_DOMAIN}/control"
-    echo "   - 默认账号: admin / admin"
-    echo "   - 保活注册接口: https://${KEEP_DOMAIN}/666"
+    echo "   - 登录账号: ${KEEPER_USER} / ${KEEPER_PASS}"
+    echo "   - 保活注册接口: http://${KEEP_DOMAIN}/666"
     echo ""
     echo "⚠️  重要提示:"
     echo "   1. DNS 生效可能需要几分钟"
-    echo "   2. 请立即登录保活控制面板修改默认密码"
-    echo "   3. Uptime Kuma 首次打开需注册管理员账户"
-    echo "   4. 若 Uptime Kuma 意外停止，保活服务会在 10 秒内自动重启"
+    echo "   2. Uptime Kuma 首次打开需注册管理员账户"
+    echo "   3. 若 Uptime Kuma 意外停止，保活服务会在 10 秒内自动重启"
 }
 
 # ================== 主流程 ==================
