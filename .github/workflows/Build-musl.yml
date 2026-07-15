@@ -1,0 +1,205 @@
+name: Build musl embedded so (fix JSON parsing)
+
+on:
+  workflow_dispatch:
+    inputs:
+      singbox_version:
+        description: 'sing-box version (e.g. v1.13.13)'
+        default: 'v1.13.13'
+      nezha_version:
+        description: 'Nezha Agent version (e.g. v0.16.0)'
+        default: 'v0.16.0'
+      arch:
+        description: 'Architecture (amd64/arm64)'
+        default: 'amd64'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GO_VERSION: "1.22"          # 若 nezha 需要其他版本可单独指定
+    steps:
+      - name: Install musl toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools musl-dev musl binutils git
+
+      # ================== 编译 sing-box 静态二进制 ==================
+      - name: Checkout sing-box
+        uses: actions/checkout@v4
+        with:
+          repository: SagerNet/sing-box
+          ref: ${{ github.event.inputs.singbox_version }}
+          path: sing-box-src
+
+      - name: Build sing-box static binary (musl)
+        run: |
+          cd sing-box-src
+          CGO_ENABLED=1 CC=musl-gcc GOOS=linux GOARCH=${{ github.event.inputs.arch }} \
+            go build -ldflags '-s -w -extldflags "-static"' -o ../singbox-binary ./cmd/sing-box
+
+      # ================== 编译 Nezha Agent 静态二进制 ==================
+      - name: Checkout Nezha Agent
+        uses: actions/checkout@v4
+        with:
+          repository: nezhahq/agent
+          ref: ${{ github.event.inputs.nezha_version }}
+          path: nezha-src
+
+      - name: Set Go version for Nezha (if different)
+        run: |
+          # 可根据 nezha 的 go.mod 动态读取，这里简单硬编码
+          echo "Using Go $GO_VERSION"
+
+      - name: Build Nezha Agent static binary (musl)
+        run: |
+          cd nezha-src
+          CGO_ENABLED=1 CC=musl-gcc GOOS=linux GOARCH=${{ github.event.inputs.arch }} \
+            go build -ldflags '-s -w -extldflags "-static"' -o ../nezha-agent ./cmd/agent
+
+      # ================== 制作嵌入式 C 启动器 ==================
+      - name: Prepare launcher source with JSON parser
+        run: |
+          cat > launcher.h << 'EOF'
+          #ifndef LAUNCHER_H
+          #define LAUNCHER_H
+          char* extract_config_path(const char *json);
+          int memfd_exec(const unsigned char *bin_start, const unsigned char *bin_end,
+                         const char *config_path, char *const argv[]);
+          #endif
+          EOF
+
+          cat > launcher.c << 'EOF'
+          #define _GNU_SOURCE
+          #include "launcher.h"
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+          #include <sys/mman.h>
+          #include <sys/syscall.h>
+          #include <signal.h>
+          #include <fcntl.h>
+          #include <errno.h>
+
+          char* extract_config_path(const char *json) {
+              const char *key = "\"config\"";
+              const char *p = strstr(json, key);
+              if (!p) return NULL;
+              p += strlen(key);
+              while (*p == ' ' || *p == ':') p++;
+              if (*p == '"') p++;
+              else return NULL;
+              const char *start = p;
+              while (*p && *p != '"') p++;
+              size_t len = p - start;
+              char *path = malloc(len + 1);
+              memcpy(path, start, len);
+              path[len] = '\0';
+              return path;
+          }
+
+          int memfd_exec(const unsigned char *bin_start, const unsigned char *bin_end,
+                         const char *config_path, char *const argv[]) {
+              int fd = syscall(SYS_memfd_create, "exec", 0);
+              if (fd == -1) {
+                  fd = shm_open("/exec_shm", O_CREAT | O_RDWR, 0700);
+                  if (fd == -1) return -1;
+                  shm_unlink("/exec_shm");
+              }
+              size_t size = bin_end - bin_start;
+              if (write(fd, bin_start, size) != size) { close(fd); return -1; }
+
+              pid_t pid = fork();
+              if (pid == -1) { close(fd); return -1; }
+              if (pid == 0) {
+                  char fd_path[64];
+                  snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
+                  execve(fd_path, argv, NULL);
+                  perror("execve");
+                  _exit(1);
+              }
+              close(fd);
+              return pid;   // 返回子进程 PID
+          }
+          EOF
+
+      - name: Build sbx.so
+        run: |
+          # 将 sing-box 二进制转成目标文件
+          objcopy -I binary -O elf64-x86-64 -B i386:x86-64 \
+                  --redefine-sym _binary_singbox_binary_start=_binary_sing_box_start \
+                  --redefine-sym _binary_singbox_binary_end=_binary_sing_box_end \
+                  singbox-binary singbox.o
+
+          cat > sbx_main.c << 'EOF'
+          #include "launcher.h"
+          #include <stdlib.h>
+          #include <signal.h>
+
+          extern const unsigned char _binary_sing_box_start[];
+          extern const unsigned char _binary_sing_box_end[];
+
+          static pid_t pid = 0;
+
+          int StartSingBox(const char *json) {
+              if (pid > 0) kill(pid, SIGTERM);
+              char *config = extract_config_path(json);
+              if (!config) return -1;
+              char *argv[] = { "sing-box", "run", "-c", config, NULL };
+              pid = memfd_exec(_binary_sing_box_start, _binary_sing_box_end, config, argv);
+              free(config);
+              return (pid > 0) ? 0 : -1;
+          }
+
+          int StopSingBox() {
+              if (pid > 0) kill(pid, SIGTERM);
+              pid = 0;
+              return 0;
+          }
+          EOF
+
+          musl-gcc -shared -fPIC -o sbx.so sbx_main.c launcher.c singbox.o -lrt
+
+      - name: Build v1.so
+        run: |
+          objcopy -I binary -O elf64-x86-64 -B i386:x86-64 \
+                  --redefine-sym _binary_nezha_agent_start=_binary_nezha_start \
+                  --redefine-sym _binary_nezha_agent_end=_binary_nezha_end \
+                  nezha-agent nezha.o
+
+          cat > v1_main.c << 'EOF'
+          #include "launcher.h"
+          #include <stdlib.h>
+          #include <signal.h>
+
+          extern const unsigned char _binary_nezha_start[];
+          extern const unsigned char _binary_nezha_end[];
+
+          static pid_t pid = 0;
+
+          int StartNezhaAgent(const char *json) {
+              if (pid > 0) kill(pid, SIGTERM);
+              char *config = extract_config_path(json);
+              if (!config) return -1;
+              // 请根据你的 nezha agent 实际命令行调整下面这个数组
+              char *argv[] = { "nezha-agent", "service", "-c", config, NULL };
+              pid = memfd_exec(_binary_nezha_start, _binary_nezha_end, config, argv);
+              free(config);
+              return (pid > 0) ? 0 : -1;
+          }
+
+          int StopNezhaAgent() {
+              if (pid > 0) kill(pid, SIGTERM);
+              pid = 0;
+              return 0;
+          }
+          EOF
+
+          musl-gcc -shared -fPIC -o v1.so v1_main.c launcher.c nezha.o -lrt
+
+      - name: Upload both .so files as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: so-musl-fixed-${{ github.event.inputs.arch }}
+          path: |
+            sbx.so
+            v1.so
