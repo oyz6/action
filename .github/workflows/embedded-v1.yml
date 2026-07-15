@@ -11,7 +11,7 @@ jobs:
         arch: [amd64]
     env:
       GO_VERSION: "1.21"      # Nezha Agent 要求的 Go 版本（以官方 go.mod 为准）
-      AGENT_VERSION: "v0.16.0"  # 请根据需要修改版本
+      AGENT_VERSION: "v2.2.3"  # 请根据需要修改版本
 
     steps:
       - name: Checkout Nezha Agent source
