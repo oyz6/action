@@ -1,4 +1,4 @@
-name: 编译 musl 版本 sbx.so (sing-box v1.13.13)
+name: 编译 embedded 版本 sbx.so (sing-box v1.13.13)
 
 on:
   workflow_dispatch:
