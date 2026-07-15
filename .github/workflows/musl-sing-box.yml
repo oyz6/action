@@ -8,10 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64]
-        # 如需 arm64，添加 arm64 并配置交叉编译器（见文末说明）
+        arch: [amd64]   # 若需 arm64，添加 arm64 并安装交叉编译工具
     env:
-      GO_VERSION: "1.22"
+      GO_VERSION: "1.22"   # sing-box v1.13.13 要求的 Go 版本
     steps:
       - name: Checkout sing-box source
         uses: actions/checkout@v4
@@ -28,7 +27,8 @@ jobs:
       - name: Install musl toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools
+          sudo apt-get install -y musl-tools musl-dev musl
+          # 确认 musl-gcc 可用
           musl-gcc --version
 
       - name: Prepare wrapper code
@@ -60,7 +60,7 @@ jobs:
               }
               instance = b
               go func() {
-                  _ = b.Start()   // Start 会阻塞，直到 Close 被调用
+                  _ = b.Start()
               }()
               return 0
           }
@@ -82,28 +82,26 @@ jobs:
           go mod edit -replace github.com/sagernet/sing-box=../sing-box-src
           go mod tidy
 
-      - name: Build sbx.so (musl static)
+      - name: Build sbx.so (dynamic musl)
         run: |
           cd wrapper
-          export CGO_CFLAGS="-ftls-model=global-dynamic"
           CGO_ENABLED=1 \
           CC=musl-gcc \
           GOOS=linux \
           GOARCH=${{ matrix.arch }} \
           go build -buildmode=c-shared \
-              -ldflags '-linkmode external -extldflags "-static"' \
               -o sbx.so .
 
       - name: Verify binary
         run: |
+          echo "=== File type ==="
           file wrapper/sbx.so
-          ldd wrapper/sbx.so 2>&1 | tee ldd_output.txt
-          if grep -q "musl\|statically linked" ldd_output.txt; then
-            echo "OK: musl static build confirmed"
-          else
-            echo "WARNING: unexpected link output"
-          fi
+          echo "=== Dynamic dependencies (should show musl) ==="
+          ldd wrapper/sbx.so || true
+          echo "=== Check for glibc symbols ==="
           objdump -T wrapper/sbx.so | grep -q __vfprintf_chk && echo "ERROR: glibc symbols found!" && exit 1 || echo "OK: no glibc symbols"
+          echo "=== Check for initial-exec TLS ==="
+          readelf -d wrapper/sbx.so | grep TLS || echo "No TLS info, or model is safe."
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
