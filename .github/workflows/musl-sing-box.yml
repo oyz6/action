@@ -19,7 +19,7 @@ jobs:
         with:
           repository: SagerNet/sing-box
           ref: ${{ env.SING_BOX_VERSION }}
-          path: sing-box
+          path: sing-box-src    # 使用独立目录，避免与输出文件冲突
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -33,20 +33,20 @@ jobs:
 
       - name: Build sing-box static binary (musl)
         run: |
-          cd sing-box
+          cd sing-box-src
           CGO_ENABLED=1 CC=musl-gcc GOOS=linux GOARCH=${{ matrix.arch }} \
-            go build -ldflags '-s -w -extldflags "-static"' -o ../sing-box ./cmd/sing-box
+            go build -ldflags '-s -w -extldflags "-static"' -o ../singbox-binary ./cmd/sing-box
           cd ..
-          file sing-box
+          file singbox-binary
           # 确认是静态链接
-          ldd sing-box 2>&1 | grep -q "not a dynamic executable" || echo "Warning: not static"
+          ldd singbox-binary 2>&1 | grep -q "not a dynamic executable" || echo "Warning: not static"
 
       - name: Create C launcher and embed binary
         run: |
-          # 将 sing-box 二进制转换为目标文件
-          objcopy -I binary -O elf64-x86-64 -B i386:x86-64 sing-box sing-box.o
+          # 将二进制文件转换为 ELF 目标文件
+          objcopy -I binary -O elf64-x86-64 -B i386:x86-64 singbox-binary singbox-binary.o
 
-          # 生成 C 启动器代码
+          # 编写 C 启动器（注意符号名匹配 objcopy 生成的名字）
           cat > launcher.c << 'EOF'
           #define _GNU_SOURCE
           #include <stdio.h>
@@ -57,33 +57,32 @@ jobs:
           #include <sys/syscall.h>
           #include <signal.h>
           #include <errno.h>
+          #include <fcntl.h>
+          #include <sys/stat.h>
 
-          extern const unsigned char _binary_sing_box_start[];
-          extern const unsigned char _binary_sing_box_end[];
+          extern const unsigned char _binary_singbox_binary_start[];
+          extern const unsigned char _binary_singbox_binary_end[];
 
           static pid_t child_pid = 0;
 
           int StartSingBox(const char *config_path) {
               if (child_pid > 0) {
-                  // 已经运行，可先停止旧的
                   kill(child_pid, SIGTERM);
                   child_pid = 0;
               }
 
               int fd = syscall(SYS_memfd_create, "singbox", 0);
               if (fd == -1) {
-                  // 尝试使用 shm_open 作为备选
                   fd = shm_open("/singbox_exec", O_CREAT | O_RDWR, 0700);
                   if (fd == -1) {
                       perror("memfd_create/shm_open");
                       return -1;
                   }
-                  // 立即删除，以便其他进程可以重用名称
                   shm_unlink("/singbox_exec");
               }
 
-              size_t size = _binary_sing_box_end - _binary_sing_box_start;
-              if (write(fd, _binary_sing_box_start, size) != size) {
+              size_t size = _binary_singbox_binary_end - _binary_singbox_binary_start;
+              if (write(fd, _binary_singbox_binary_start, size) != size) {
                   perror("write");
                   close(fd);
                   return -1;
@@ -96,10 +95,8 @@ jobs:
                   return -1;
               }
               if (pid == 0) {
-                  // 子进程：构造 /proc/self/fd/... 路径并执行
                   char fd_path[64];
                   snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
-                  // 关闭不需要的文件描述符
                   close(0); close(1); close(2);
                   execl(fd_path, "sing-box", "run", "-c", config_path, NULL);
                   perror("execl");
@@ -121,9 +118,8 @@ jobs:
           EOF
 
           # 编译共享库
-          musl-gcc -shared -fPIC -o sbx.so launcher.c sing-box.o -lrt
+          musl-gcc -shared -fPIC -o sbx.so launcher.c singbox-binary.o -lrt
           file sbx.so
-          # 确认导出函数
           nm -D sbx.so | grep -E "StartSingBox|StopSingBox"
 
       - name: Upload artifact
