@@ -85,6 +85,7 @@ jobs:
       - name: Build sbx.so (musl static)
         run: |
           cd wrapper
+          export CGO_CFLAGS="-ftls-model=global-dynamic"
           CGO_ENABLED=1 \
           CC=musl-gcc \
           GOOS=linux \
