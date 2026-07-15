@@ -1,23 +1,25 @@
 name: 编译 musl 版本 sbx.so (sing-box v1.13.13)
 
 on:
-  workflow_dispatch:   # 手动触发
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64]   # 若需 arm64，添加 arm64 并安装交叉编译工具
+        arch: [amd64]          # 如需 arm64 可扩展
     env:
-      GO_VERSION: "1.22"   # sing-box v1.13.13 要求的 Go 版本
+      GO_VERSION: "1.22"      # sing-box v1.13.13 要求的 Go 版本
+      SING_BOX_VERSION: "v1.13.13"
+
     steps:
       - name: Checkout sing-box source
         uses: actions/checkout@v4
         with:
           repository: SagerNet/sing-box
-          ref: v1.13.13
-          path: sing-box-src
+          ref: ${{ env.SING_BOX_VERSION }}
+          path: sing-box
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -27,84 +29,105 @@ jobs:
       - name: Install musl toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev musl
-          # 确认 musl-gcc 可用
-          musl-gcc --version
+          sudo apt-get install -y musl-tools musl-dev musl binutils
 
-      - name: Prepare wrapper code
+      - name: Build sing-box static binary (musl)
         run: |
-          mkdir -p wrapper
-          cat > wrapper/main.go << 'EOF'
-          package main
+          cd sing-box
+          CGO_ENABLED=1 CC=musl-gcc GOOS=linux GOARCH=${{ matrix.arch }} \
+            go build -ldflags '-s -w -extldflags "-static"' -o ../sing-box ./cmd/sing-box
+          cd ..
+          file sing-box
+          # 确认是静态链接
+          ldd sing-box 2>&1 | grep -q "not a dynamic executable" || echo "Warning: not static"
 
-          import "C"
-          import (
-              "encoding/json"
+      - name: Create C launcher and embed binary
+        run: |
+          # 将 sing-box 二进制转换为目标文件
+          objcopy -I binary -O elf64-x86-64 -B i386:x86-64 sing-box sing-box.o
 
-              box "github.com/sagernet/sing-box"
-              "github.com/sagernet/sing-box/option"
-          )
+          # 生成 C 启动器代码
+          cat > launcher.c << 'EOF'
+          #define _GNU_SOURCE
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+          #include <sys/mman.h>
+          #include <sys/syscall.h>
+          #include <signal.h>
+          #include <errno.h>
 
-          var instance *box.Box
+          extern const unsigned char _binary_sing_box_start[];
+          extern const unsigned char _binary_sing_box_end[];
 
-          //export StartSingBox
-          func StartSingBox(configJson *C.char) C.int {
-              var opt option.Options
-              err := json.Unmarshal([]byte(C.GoString(configJson)), &opt)
-              if err != nil {
-                  return -1
+          static pid_t child_pid = 0;
+
+          int StartSingBox(const char *config_path) {
+              if (child_pid > 0) {
+                  // 已经运行，可先停止旧的
+                  kill(child_pid, SIGTERM);
+                  child_pid = 0;
               }
-              b, err := box.New(box.Options{Options: opt})
-              if err != nil {
-                  return -1
+
+              int fd = syscall(SYS_memfd_create, "singbox", 0);
+              if (fd == -1) {
+                  // 尝试使用 shm_open 作为备选
+                  fd = shm_open("/singbox_exec", O_CREAT | O_RDWR, 0700);
+                  if (fd == -1) {
+                      perror("memfd_create/shm_open");
+                      return -1;
+                  }
+                  // 立即删除，以便其他进程可以重用名称
+                  shm_unlink("/singbox_exec");
               }
-              instance = b
-              go func() {
-                  _ = b.Start()
-              }()
-              return 0
+
+              size_t size = _binary_sing_box_end - _binary_sing_box_start;
+              if (write(fd, _binary_sing_box_start, size) != size) {
+                  perror("write");
+                  close(fd);
+                  return -1;
+              }
+
+              pid_t pid = fork();
+              if (pid == -1) {
+                  perror("fork");
+                  close(fd);
+                  return -1;
+              }
+              if (pid == 0) {
+                  // 子进程：构造 /proc/self/fd/... 路径并执行
+                  char fd_path[64];
+                  snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
+                  // 关闭不需要的文件描述符
+                  close(0); close(1); close(2);
+                  execl(fd_path, "sing-box", "run", "-c", config_path, NULL);
+                  perror("execl");
+                  _exit(1);
+              }
+
+              close(fd);
+              child_pid = pid;
+              return 0;
           }
 
-          //export StopSingBox
-          func StopSingBox() C.int {
-              if instance != nil {
-                  instance.Close()
-                  instance = nil
+          int StopSingBox() {
+              if (child_pid > 0) {
+                  kill(child_pid, SIGTERM);
+                  child_pid = 0;
               }
-              return 0
+              return 0;
           }
-
-          func main() {}
           EOF
 
-          cd wrapper
-          go mod init sbx
-          go mod edit -replace github.com/sagernet/sing-box=../sing-box-src
-          go mod tidy
-
-      - name: Build sbx.so (dynamic musl)
-        run: |
-          cd wrapper
-          CGO_ENABLED=1 \
-          CC=musl-gcc \
-          GOOS=linux \
-          GOARCH=${{ matrix.arch }} \
-          go build -buildmode=c-shared \
-              -o sbx.so .
-
-      - name: Verify binary
-        run: |
-          echo "=== File type ==="
-          file wrapper/sbx.so
-          echo "=== Dynamic dependencies (should show musl) ==="
-          ldd wrapper/sbx.so || true
-          echo "=== Check for glibc symbols ==="
-          objdump -T wrapper/sbx.so | grep -q __vfprintf_chk && echo "ERROR: glibc symbols found!" && exit 1 || echo "OK: no glibc symbols"
-          echo "=== Check for initial-exec TLS ==="
-          readelf -d wrapper/sbx.so | grep TLS || echo "No TLS info, or model is safe."
+          # 编译共享库
+          musl-gcc -shared -fPIC -o sbx.so launcher.c sing-box.o -lrt
+          file sbx.so
+          # 确认导出函数
+          nm -D sbx.so | grep -E "StartSingBox|StopSingBox"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sbx-musl-${{ matrix.arch }}
-          path: wrapper/sbx.so
+          name: sbx-embedded-${{ matrix.arch }}
+          path: sbx.so
