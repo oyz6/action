@@ -1,0 +1,125 @@
+name: 编译 musl 版本 sbx.so (sing-box v1.13.13)
+
+on:
+  workflow_dispatch:   # 手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]   # 需要交叉编译 arm64 时，要额外配置 QEMU 和交叉工具链
+    env:
+      GO_VERSION: "1.22"       # sing-box 1.13.13 要求的 Go 版本（以官方 go.mod 为准）
+    steps:
+      - name: Checkout sing-box source
+        uses: actions/checkout@v4
+        with:
+          repository: SagerNet/sing-box
+          ref: v1.13.13
+          path: sing-box-src
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          # 确认 musl-gcc 可用
+          musl-gcc --version
+
+      - name: Prepare wrapper code
+        run: |
+          mkdir -p wrapper
+          cat > wrapper/main.go << 'EOF'
+          package main
+
+          import "C"
+          import (
+              "context"
+              "os"
+              "os/signal"
+              "syscall"
+
+              box "github.com/sagernet/sing-box"
+              "github.com/sagernet/sing-box/option"
+          )
+
+          var (
+              instance *box.Box
+              cancel   context.CancelFunc
+          )
+
+          //export StartSingBox
+          func StartSingBox(configJson *C.char) C.int {
+              var opt option.Options
+              err := opt.UnmarshalJSON([]byte(C.GoString(configJson)))
+              if err != nil {
+                  return -1
+              }
+              ctx, cancelFn := context.WithCancel(context.Background())
+              cancel = cancelFn
+              b, err := box.New(box.Options{Options: opt})
+              if err != nil {
+                  cancel = nil
+                  return -1
+              }
+              instance = b
+              go func() {
+                  if err := b.Start(ctx); err != nil {
+                      os.Exit(1)
+                  }
+              }()
+              return 0
+          }
+
+          //export StopSingBox
+          func StopSingBox() C.int {
+              if cancel != nil {
+                  cancel()
+              }
+              if instance != nil {
+                  instance.Close()
+              }
+              return 0
+          }
+
+          func main() {}
+          EOF
+
+          # 创建 go.mod（指向本地的 sing-box-src）
+          cd wrapper
+          go mod init sbx
+          go mod edit -replace github.com/sagernet/sing-box=../sing-box-src
+          # 拉取依赖（这一步会下载 sing-box 所需的所有模块）
+          go mod tidy
+
+      - name: Build sbx.so (musl static)
+        run: |
+          cd wrapper
+          CGO_ENABLED=1 \
+          CC=musl-gcc \
+          GOOS=linux \
+          GOARCH=${{ matrix.arch }} \
+          go build -buildmode=c-shared \
+              -ldflags '-linkmode external -extldflags "-static"' \
+              -o sbx.so .
+        env:
+          # 如果需要交叉编译 arm64，需提前安装 aarch64 的 musl 工具链，
+          # 这里仅展示 amd64 的普通流程，arm64 配置见下文说明
+          CC: musl-gcc
+
+      - name: Verify binary
+        run: |
+          file wrapper/sbx.so
+          ldd wrapper/sbx.so || true
+          objdump -T wrapper/sbx.so | grep -q __vfprintf_chk && echo "ERROR: still links glibc!" && exit 1 || echo "OK: no glibc symbols"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbx-musl-${{ matrix.arch }}
+          path: wrapper/sbx.so
