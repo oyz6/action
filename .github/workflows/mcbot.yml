@@ -50,12 +50,14 @@ jobs:
       - name: 安装依赖
         run: npm install --omit=dev --no-audit --no-fund
 
-      - name: 打包整个项目
+      - name: 清理缓存并打包
         run: |
+          rm -rf node_modules/.cache   # 清理可能动态变化的缓存
           tar -czf app-bundle.tar.gz \
             --exclude='.git' \
             --exclude='node_modules/.cache' \
             --exclude='.github' \
+            --warning=no-file-changed \
             .
 
       - name: 上传制品
