@@ -30,8 +30,8 @@ const mcDataCache = new Map();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-const LOGIN_USER = 'wbxl0';
-const LOGIN_PASS = '0wbxl';
+const LOGIN_USER = process.env.LOGIN_USER || 'wbxl0';
+const LOGIN_PASS = process.env.LOGIN_PASS || '0wbxl';
 const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 
 function createSessionToken() {
