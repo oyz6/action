@@ -3,6 +3,7 @@
  * 项目名称：Pathfinder PRO (2025 安全精简版)
  * 核心增强：拟人词库、错别字模拟、智能回嘴、进服问候
  * 机器人增强：翼龙守护进程 (每3分钟自动检测开机)
+ * 修复：IPv6 监听 / 环境变量登录 / 底层错误捕获 / 重连限制
  * ============================================================
  */
 const fs = require('fs').promises;
@@ -11,8 +12,14 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-// process.on('uncaughtException', () => {});
-// process.on('unhandledRejection', () => {});
+// === 全局错误处理（防止未捕获异常导致进程退出） ===
+process.on('uncaughtException', (err) => {
+    console.error('【未捕获异常】', err.message);
+    // 不退出进程，保持 HTTP 服务可用
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('【未处理的Promise拒绝】', reason);
+});
 
 const mineflayer = require("mineflayer");
 const express = require("express");
@@ -25,21 +32,30 @@ const upload = multer({ storage: multer.memoryStorage() });
 const app = express();
 const activeBots = new Map();
 const CONFIG_FILE = path.join(__dirname, 'bots_config.json');
-const mcDataCache = new Map(); 
+const mcDataCache = new Map();
+const retryCountMap = new Map();  // 记录重连次数，防止无限重连
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// === 登录认证（优先使用环境变量） ===
 const LOGIN_USER = process.env.LOGIN_USER || 'wbxl0';
 const LOGIN_PASS = process.env.LOGIN_PASS || '0wbxl';
 const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 
 function createSessionToken() {
-    return crypto.createHmac('sha256', SESSION_SECRET).update(`${LOGIN_USER}:${LOGIN_PASS}`).digest('hex');
+    return crypto.createHmac('sha256', SESSION_SECRET)
+        .update(`${LOGIN_USER}:${LOGIN_PASS}`)
+        .digest('hex');
 }
 
 function parseCookies(req) {
-    return Object.fromEntries((req.headers.cookie || '').split(';').map(v => v.trim().split('=').map(decodeURIComponent)).filter(v => v[0]));
+    return Object.fromEntries(
+        (req.headers.cookie || '')
+            .split(';')
+            .map(v => v.trim().split('=').map(decodeURIComponent))
+            .filter(v => v[0])
+    );
 }
 
 function isAuthenticated(req) {
@@ -76,32 +92,390 @@ app.use((req, res, next) => {
 });
 
 // --- [ 1. 拟人化深度词库矩阵 ] ---
-const CHAT_DB = { idle: ["有人吗", "2333", "啧", "挂机中", "emm", "好无聊啊", "这服人怎么这么少", "有点卡啊", "这延迟绝了", "我先挂会机", "刷点东西真累", "有人带带萌新吗", "woc刚才那个怪", "有人在不", "又是努力挂机的一天", "这天气不错", "有人聊天吗", "刚才卡了一下", "我去倒杯水", "先眯一会", "草（一种植物）", "害"], interaction: ["？", "你说啥", "没注意看", "哦哦", "搜嘎", "确实", "我也是这么想的", "哈哈哈哈", "666", "强啊大佬", "nb", "可以的", "羡慕了", "别cue我", "在呢"], suffixes: ["~", "...", "捏", "哈", "呀", "！", "？", "w"], typos: { "挂机": ["刮机", "挂机机"], "有人": ["友谊", "有仁"], "怎么": ["咋"], "没有": ["木有"] } };
-function generateNaturalChat(type = 'idle') { let pool = CHAT_DB[type]; let msg = pool[Math.floor(Math.random() * pool.length)]; if (Math.random() > 0.9) { for (let key in CHAT_DB.typos) { if (msg.includes(key)) { msg = msg.replace(key, CHAT_DB.typos[key][Math.floor(Math.random() * CHAT_DB.typos[key].length)]); break; } } } if (Math.random() > 0.7) msg += CHAT_DB.suffixes[Math.floor(Math.random() * CHAT_DB.suffixes.length)]; if (Math.random() > 0.8) msg = (Math.random() > 0.5 ? " " : "") + msg + (Math.random() > 0.5 ? " " : ""); return msg; }
+const CHAT_DB = {
+    idle: ["有人吗", "2333", "啧", "挂机中", "emm", "好无聊啊", "这服人怎么这么少", "有点卡啊", "这延迟绝了", "我先挂会机", "刷点东西真累", "有人带带萌新吗", "woc刚才那个怪", "有人在不", "又是努力挂机的一天", "这天气不错", "有人聊天吗", "刚才卡了一下", "我去倒杯水", "先眯一会", "草（一种植物）", "害"],
+    interaction: ["？", "你说啥", "没注意看", "哦哦", "搜嘎", "确实", "我也是这么想的", "哈哈哈哈", "666", "强啊大佬", "nb", "可以的", "羡慕了", "别cue我", "在呢"],
+    suffixes: ["~", "...", "捏", "哈", "呀", "！", "？", "w"],
+    typos: { "挂机": ["刮机", "挂机机"], "有人": ["友谊", "有仁"], "怎么": ["咋"], "没有": ["木有"] }
+};
+
+function generateNaturalChat(type = 'idle') {
+    let pool = CHAT_DB[type];
+    let msg = pool[Math.floor(Math.random() * pool.length)];
+    if (Math.random() > 0.9) {
+        for (let key in CHAT_DB.typos) {
+            if (msg.includes(key)) {
+                msg = msg.replace(key, CHAT_DB.typos[key][Math.floor(Math.random() * CHAT_DB.typos[key].length)]);
+                break;
+            }
+        }
+    }
+    if (Math.random() > 0.7) msg += CHAT_DB.suffixes[Math.floor(Math.random() * CHAT_DB.suffixes.length)];
+    if (Math.random() > 0.8) msg = (Math.random() > 0.5 ? " " : "") + msg + (Math.random() > 0.5 ? " " : "");
+    return msg;
+}
 
 // --- [ 2. 内存监控与自愈逻辑 ] ---
-function getMemoryStatus() { const used = process.memoryUsage().rss; let total = os.totalmem(); if (process.env.SERVER_MEMORY) { total = parseInt(process.env.SERVER_MEMORY) * 1024 * 1024; } else { try { if (fsSync.existsSync('/sys/fs/cgroup/memory/memory.limit_in_bytes')) { const limit = parseInt(fsSync.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8').trim()); if (limit < 9223372036854771712) total = limit; } else if (fsSync.existsSync('/sys/fs/cgroup/memory.max')) { const limit = fsSync.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim(); if (limit !== 'max') total = parseInt(limit); } } catch (e) {} } const percent = ((used / total) * 100).toFixed(1); return { used: (used / 1024 / 1024).toFixed(1), total: (total / 1024 / 1024).toFixed(0), percent }; }
-setInterval(() => { const status = getMemoryStatus(); if (parseFloat(status.percent) >= 80) { mcDataCache.clear(); activeBots.forEach(bot => { bot.logs = bot.logs.slice(0, 10); bot.pushLog(`⚠️ 内存占用 (${status.percent}%) 触发自愈`, 'text-red-400 font-bold'); }); if (parseFloat(status.percent) > 92) process.exit(1); } }, 30000);
+function getMemoryStatus() {
+    const used = process.memoryUsage().rss;
+    let total = os.totalmem();
+    if (process.env.SERVER_MEMORY) {
+        total = parseInt(process.env.SERVER_MEMORY) * 1024 * 1024;
+    } else {
+        try {
+            if (fsSync.existsSync('/sys/fs/cgroup/memory/memory.limit_in_bytes')) {
+                const limit = parseInt(fsSync.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8').trim());
+                if (limit < 9223372036854771712) total = limit;
+            } else if (fsSync.existsSync('/sys/fs/cgroup/memory.max')) {
+                const limit = fsSync.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
+                if (limit !== 'max') total = parseInt(limit);
+            }
+        } catch (e) {}
+    }
+    const percent = ((used / total) * 100).toFixed(1);
+    return { used: (used / 1024 / 1024).toFixed(1), total: (total / 1024 / 1024).toFixed(0), percent };
+}
+
+// 定时清理，并限制机器人数量
+setInterval(() => {
+    const status = getMemoryStatus();
+    if (parseFloat(status.percent) >= 70) {
+        mcDataCache.clear();
+        activeBots.forEach(bot => {
+            bot.logs = bot.logs.slice(0, 5);
+        });
+        // 内存紧张时，只保留第一个机器人，其余断开
+        if (parseFloat(status.percent) >= 80 && activeBots.size > 1) {
+            const botsArray = Array.from(activeBots.entries());
+            for (let i = 1; i < botsArray.length; i++) {
+                const [bid, bm] = botsArray[i];
+                if (bm.instance) {
+                    bm.instance.removeAllListeners();
+                    bm.instance.end();
+                }
+                activeBots.delete(bid);
+                retryCountMap.delete(bid);
+                bm.pushLog('🛑 内存紧急，已强制断开', 'text-red-600');
+            }
+        }
+    }
+}, 15000);
 
 // --- [ 3. 重启指令序列核心逻辑 ] ---
-function executeRestartSequence(botInstance, botMeta) { if (!botInstance || !botInstance.entity) return; botInstance.chat('/restart'); botMeta.pushLog(`⚡ 重启序列(1/2): /restart`, 'text-red-400 font-bold'); setTimeout(() => { if (botInstance && botInstance.entity) { botInstance.chat('restart'); botMeta.pushLog(`⚡ 重启序列(2/2): restart`, 'text-red-500 font-bold'); } }, 800); botMeta.lastRestartTick = Date.now(); }
+function executeRestartSequence(botInstance, botMeta) {
+    if (!botInstance || !botInstance.entity) return;
+    botInstance.chat('/restart');
+    botMeta.pushLog(`⚡ 重启序列(1/2): /restart`, 'text-red-400 font-bold');
+    setTimeout(() => {
+        if (botInstance && botInstance.entity) {
+            botInstance.chat('restart');
+            botMeta.pushLog(`⚡ 重启序列(2/2): restart`, 'text-red-500 font-bold');
+        }
+    }, 800);
+    botMeta.lastRestartTick = Date.now();
+}
 
 // --- [ 4. 核心持久化与机器人工厂 ] ---
-async function saveBotsConfig() { try { const config = Array.from(activeBots.values()).map(b => ({ host: b.targetHost, port: b.targetPort, username: b.username, serverName: b.serverName, settings: b.settings, logs: b.logs.slice(0, 30) })); await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2)); } catch (err) {} }
-async function createSmartBot(id, host, port, username, existingLogs = [], settings = null, serverName = '') { let finalHost = host.trim(), finalPort = parseInt(port) || 25565; if (finalHost.includes(':')) { const parts = finalHost.split(':'); finalHost = parts[0]; finalPort = parseInt(parts[1]) || 25565; } const displayName = (serverName || '').trim(); const defaultSettings = { walk: false, ai: true, chat: false, restartInterval: 0, pterodactyl: { url: '', key: '', id: '', defaultDir: '/', guard: false } }; const botMeta = { id, serverName: displayName, username, targetHost: finalHost, targetPort: finalPort, status: "连接中", logs: Array.isArray(existingLogs) ? existingLogs.slice(0, 30) : [], settings: settings || defaultSettings, instance: null, afkTimer: null, isRepairing: false, lastRestartTick: Date.now(), isMoving: false }; activeBots.set(id, botMeta); const pushLog = (msg, colorClass = '') => { const time = new Date().toLocaleTimeString('zh-CN', { hour12: false }); botMeta.logs.unshift({ time, msg, color: colorClass }); if (botMeta.logs.length > 30) botMeta.logs = botMeta.logs.slice(0, 30); }; botMeta.pushLog = pushLog; try { const bot = mineflayer.createBot({ host: finalHost, port: finalPort, username: username, auth: 'offline', hideErrors: true, physicsEnabled: botMeta.settings.walk, connectTimeout: 20000 }); bot.loadPlugin(pathfinder); botMeta.instance = bot; bot.once('spawn', () => { botMeta.status = "在线"; botMeta.centerPos = bot.entity.position.clone(); pushLog(`✅ 成功进入服务器`, 'text-emerald-400 font-bold'); let mcData; try { mcData = mcDataCache.get(bot.version) || require('minecraft-data')(bot.version); if (mcData) mcDataCache.set(bot.version, mcData); } catch (e) { pushLog(`❌ 协议不支持`, 'text-red-500'); return bot.end(); } const movements = new Movements(bot, mcData); movements.canDig = false; bot.pathfinder.setMovements(movements); setTimeout(() => { if (bot.entity) { bot.chat("Hello everyone, glad to be here!"); pushLog(`📣 Join greeting: Hello everyone, glad to be here!`, 'text-purple-400 font-bold'); } }, 2000); bot.on('chat', (sender, message) => { if (sender === bot.username) return; if (botMeta.settings.ai && Math.random() > 0.75) { setTimeout(() => { if (bot.entity) { const reply = generateNaturalChat('interaction'); bot.chat(reply); pushLog(`💬 回复 ${sender}: ${reply}`, 'text-cyan-400'); } }, 1000 + Math.random() * 4000); } }); botMeta.afkTimer = setInterval(() => { if (!bot.entity) return; if (botMeta.settings.chat && Math.random() > 0.65) { const msg = generateNaturalChat('idle'); bot.chat(msg); pushLog(`🗣️ 自动喊话: ${msg}`, 'text-yellow-400'); } if (botMeta.settings.restartInterval > 0 && Date.now() - botMeta.lastRestartTick > botMeta.settings.restartInterval * 60000) executeRestartSequence(bot, botMeta); if (botMeta.settings.walk && botMeta.centerPos && !botMeta.isMoving) { botMeta.isMoving = true; const r = 3 + Math.random() * 6, a = Math.random() * Math.PI * 2; bot.pathfinder.setGoal(new goals.GoalNear(botMeta.centerPos.x + Math.cos(a)*r, botMeta.centerPos.y, botMeta.centerPos.z + Math.sin(a)*r, 1)); setTimeout(() => { botMeta.isMoving = false; }, 8000); } }, 20000); }); bot.on('end', () => attemptRepair(id, botMeta, '断开')); bot.on('error', () => attemptRepair(id, botMeta, '错误')); } catch (err) { botMeta.status = "创建失败"; pushLog(`❌ 创建失败: ${err.message}`, 'text-red-500'); } saveBotsConfig(); }
-function attemptRepair(id, botMeta, reason) { if (!activeBots.has(id) || botMeta.isRepairing) return; botMeta.isRepairing = true; botMeta.status = "重连中"; if (botMeta.instance) { botMeta.instance.removeAllListeners(); try { botMeta.instance.end(); } catch(e) {} botMeta.instance = null; } if (botMeta.afkTimer) clearInterval(botMeta.afkTimer); setTimeout(() => { if (!activeBots.has(id)) return; botMeta.isRepairing = false; createSmartBot(id, botMeta.targetHost, botMeta.targetPort, botMeta.username, botMeta.logs, botMeta.settings, botMeta.serverName); }, 10000); }
+async function saveBotsConfig() {
+    try {
+        const config = Array.from(activeBots.values()).map(b => ({
+            host: b.targetHost,
+            port: b.targetPort,
+            username: b.username,
+            serverName: b.serverName,
+            settings: b.settings,
+            logs: b.logs.slice(0, 30)
+        }));
+        await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
+    } catch (err) {}
+}
+
+async function createSmartBot(id, host, port, username, existingLogs = [], settings = null, serverName = '') {
+    let finalHost = host.trim(),
+        finalPort = parseInt(port) || 25565;
+    if (finalHost.includes(':')) {
+        const parts = finalHost.split(':');
+        finalHost = parts[0];
+        finalPort = parseInt(parts[1]) || 25565;
+    }
+    const displayName = (serverName || '').trim();
+    const defaultSettings = {
+        walk: false,
+        ai: true,
+        chat: false,
+        restartInterval: 0,
+        pterodactyl: { url: '', key: '', id: '', defaultDir: '/', guard: false }
+    };
+    const botMeta = {
+        id,
+        serverName: displayName,
+        username,
+        targetHost: finalHost,
+        targetPort: finalPort,
+        status: "连接中",
+        logs: Array.isArray(existingLogs) ? existingLogs.slice(0, 30) : [],
+        settings: settings || defaultSettings,
+        instance: null,
+        afkTimer: null,
+        isRepairing: false,
+        lastRestartTick: Date.now(),
+        isMoving: false
+    };
+    activeBots.set(id, botMeta);
+
+    const pushLog = (msg, colorClass = '') => {
+        const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        botMeta.logs.unshift({ time, msg, color: colorClass });
+        if (botMeta.logs.length > 30) botMeta.logs = botMeta.logs.slice(0, 30);
+    };
+    botMeta.pushLog = pushLog;
+
+    try {
+        const bot = mineflayer.createBot({
+            host: finalHost,
+            port: finalPort,
+            username: username,
+            auth: 'offline',
+            hideErrors: true,
+            physicsEnabled: botMeta.settings.walk,
+            connectTimeout: 20000
+        });
+        bot.loadPlugin(pathfinder);
+        botMeta.instance = bot;
+
+        // === 捕获底层 socket 错误，防止进程崩溃 ===
+        bot.once('login', () => {
+            if (bot._client) {
+                bot._client.on('error', (err) => {
+                    pushLog(`❌ 连接底层错误: ${err.message}`, 'text-red-500');
+                    attemptRepair(id, botMeta, '底层错误');
+                });
+            }
+        });
+
+        bot.once('spawn', () => {
+            // 成功上线，重置重试计数
+            retryCountMap.set(id, 0);
+            botMeta.status = "在线";
+            botMeta.centerPos = bot.entity.position.clone();
+            pushLog(`✅ 成功进入服务器`, 'text-emerald-400 font-bold');
+
+            let mcData;
+            try {
+                mcData = mcDataCache.get(bot.version) || require('minecraft-data')(bot.version);
+                if (mcData) mcDataCache.set(bot.version, mcData);
+            } catch (e) {
+                pushLog(`❌ 协议不支持`, 'text-red-500');
+                return bot.end();
+            }
+
+            const movements = new Movements(bot, mcData);
+            movements.canDig = false;
+            bot.pathfinder.setMovements(movements);
+
+            // 进服问候
+            setTimeout(() => {
+                if (bot.entity) {
+                    bot.chat("Hello everyone, glad to be here!");
+                    pushLog(`📣 Join greeting: Hello everyone, glad to be here!`, 'text-purple-400 font-bold');
+                }
+            }, 2000);
+
+            bot.on('chat', (sender, message) => {
+                if (sender === bot.username) return;
+                if (botMeta.settings.ai && Math.random() > 0.75) {
+                    setTimeout(() => {
+                        if (bot.entity) {
+                            const reply = generateNaturalChat('interaction');
+                            bot.chat(reply);
+                            pushLog(`💬 回复 ${sender}: ${reply}`, 'text-cyan-400');
+                        }
+                    }, 1000 + Math.random() * 4000);
+                }
+            });
+
+            botMeta.afkTimer = setInterval(() => {
+                if (!bot.entity) return;
+                if (botMeta.settings.chat && Math.random() > 0.65) {
+                    const msg = generateNaturalChat('idle');
+                    bot.chat(msg);
+                    pushLog(`🗣️ 自动喊话: ${msg}`, 'text-yellow-400');
+                }
+                if (botMeta.settings.restartInterval > 0 && Date.now() - botMeta.lastRestartTick > botMeta.settings.restartInterval * 60000) {
+                    executeRestartSequence(bot, botMeta);
+                }
+                if (botMeta.settings.walk && botMeta.centerPos && !botMeta.isMoving) {
+                    botMeta.isMoving = true;
+                    const r = 3 + Math.random() * 6,
+                        a = Math.random() * Math.PI * 2;
+                    bot.pathfinder.setGoal(new goals.GoalNear(
+                        botMeta.centerPos.x + Math.cos(a) * r,
+                        botMeta.centerPos.y,
+                        botMeta.centerPos.z + Math.sin(a) * r,
+                        1
+                    ));
+                    setTimeout(() => { botMeta.isMoving = false; }, 8000);
+                }
+            }, 20000);
+        });
+
+        bot.on('end', () => attemptRepair(id, botMeta, '断开'));
+        bot.on('error', (err) => {
+            pushLog(`❌ 机器人错误: ${err.message}`, 'text-red-500');
+            attemptRepair(id, botMeta, '错误');
+        });
+    } catch (err) {
+        botMeta.status = "创建失败";
+        pushLog(`❌ 创建失败: ${err.message}`, 'text-red-500');
+    }
+    saveBotsConfig();
+}
+
+// 重试逻辑，限制次数，指数退避
+function attemptRepair(id, botMeta, reason) {
+    if (!activeBots.has(id) || botMeta.isRepairing) return;
+
+    let retries = retryCountMap.get(id) || 0;
+    const MAX_RETRIES = 5;
+    if (retries >= MAX_RETRIES) {
+        botMeta.status = "重连失败(已达上限)";
+        botMeta.pushLog(`⛔ 连续重连失败 ${MAX_RETRIES} 次，已停止`, 'text-red-600 font-bold');
+        retryCountMap.delete(id);
+        return;
+    }
+    retries++;
+    retryCountMap.set(id, retries);
+
+    botMeta.isRepairing = true;
+    botMeta.status = "重连中";
+    if (botMeta.instance) {
+        botMeta.instance.removeAllListeners();
+        try { botMeta.instance.end(); } catch (e) {}
+        botMeta.instance = null;
+    }
+    if (botMeta.afkTimer) clearInterval(botMeta.afkTimer);
+
+    const delay = Math.min(10000 * Math.pow(2, retries - 1), 300000);
+    botMeta.pushLog(`⏳ ${retries}/${MAX_RETRIES} 次重试，${delay/1000}s 后重连`, 'text-yellow-400');
+    setTimeout(() => {
+        if (!activeBots.has(id)) {
+            retryCountMap.delete(id);
+            return;
+        }
+        botMeta.isRepairing = false;
+        createSmartBot(id, botMeta.targetHost, botMeta.targetPort, botMeta.username, botMeta.logs, botMeta.settings, botMeta.serverName);
+    }, delay);
+}
 
 // --- [ 5. API 接口逻辑 - 机器人 ] ---
-app.post("/api/bots/:id/restart-now", (req, res) => { const b = activeBots.get(req.params.id); if (b && b.instance) { executeRestartSequence(b.instance, b); res.json({ success: true }); } else res.status(404).json({ success: false }); });
-app.post("/api/bots/:id/toggle", (req, res) => { const b = activeBots.get(req.params.id); if (b) { const type = req.body.type; b.settings[type] = !b.settings[type]; const statusText = b.settings[type] ? '开启' : '关闭'; const label = type === 'ai' ? '👁️ AI视角' : (type === 'walk' ? '👣 物理巡逻' : '💬 拟人喊话'); b.pushLog(`⚙️ 手动操作: ${label} 已${statusText}`, b.settings[type] ? 'text-blue-400' : 'text-slate-400'); if (type === 'walk' && b.instance) { b.instance.physicsEnabled = b.settings.walk; if (!b.settings.walk) { b.instance.pathfinder.setGoal(null); b.isMoving = false; } } saveBotsConfig(); res.json({ success: true }); } });
-app.post("/api/bots/:id/upload", upload.single('file'), async (req, res) => { const b = activeBots.get(req.params.id); if (!b || !b.settings.pterodactyl.url || !req.file) return res.status(400).json({ success: false }); const { url, key, id, defaultDir } = b.settings.pterodactyl; b.pushLog(`🚀 同步文件: ${req.file.originalname} -> 翼龙`, 'text-blue-400 font-bold'); try { const getUrlResp = await axios.get(`${url}/api/client/servers/${id}/files/upload`, { headers: { 'Authorization': `Bearer ${key}` } }); const uploadUrl = getUrlResp.data.attributes.url; const form = new FormData(); form.append('files', req.file.buffer, req.file.originalname); await axios.post(`${uploadUrl}&directory=${encodeURIComponent(defaultDir)}`, form, { headers: { ...form.getHeaders() } }); b.pushLog(`✅ 翼龙文件同步成功`, 'text-emerald-400 font-bold'); res.json({ success: true }); } catch (err) { b.pushLog(`❌ 翼龙同步失败: ${err.message}`, 'text-red-500'); res.status(500).json({ success: false }); } });
+app.post("/api/bots/:id/restart-now", (req, res) => {
+    const b = activeBots.get(req.params.id);
+    if (b && b.instance) { executeRestartSequence(b.instance, b); res.json({ success: true }); }
+    else res.status(404).json({ success: false });
+});
+app.post("/api/bots/:id/toggle", (req, res) => {
+    const b = activeBots.get(req.params.id);
+    if (b) {
+        const type = req.body.type;
+        b.settings[type] = !b.settings[type];
+        const statusText = b.settings[type] ? '开启' : '关闭';
+        const label = type === 'ai' ? '👁️ AI视角' : (type === 'walk' ? '👣 物理巡逻' : '💬 拟人喊话');
+        b.pushLog(`⚙️ 手动操作: ${label} 已${statusText}`, b.settings[type] ? 'text-blue-400' : 'text-slate-400');
+        if (type === 'walk' && b.instance) {
+            b.instance.physicsEnabled = b.settings.walk;
+            if (!b.settings.walk) { b.instance.pathfinder.setGoal(null); b.isMoving = false; }
+        }
+        saveBotsConfig();
+        res.json({ success: true });
+    }
+});
+app.post("/api/bots/:id/upload", upload.single('file'), async (req, res) => {
+    const b = activeBots.get(req.params.id);
+    if (!b || !b.settings.pterodactyl.url || !req.file) return res.status(400).json({ success: false });
+    const { url, key, id, defaultDir } = b.settings.pterodactyl;
+    b.pushLog(`🚀 同步文件: ${req.file.originalname} -> 翼龙`, 'text-blue-400 font-bold');
+    try {
+        const getUrlResp = await axios.get(`${url}/api/client/servers/${id}/files/upload`, {
+            headers: { 'Authorization': `Bearer ${key}` }
+        });
+        const uploadUrl = getUrlResp.data.attributes.url;
+        const form = new FormData();
+        form.append('files', req.file.buffer, req.file.originalname);
+        await axios.post(`${uploadUrl}&directory=${encodeURIComponent(defaultDir)}`, form, {
+            headers: { ...form.getHeaders() }
+        });
+        b.pushLog(`✅ 翼龙文件同步成功`, 'text-emerald-400 font-bold');
+        res.json({ success: true });
+    } catch (err) {
+        b.pushLog(`❌ 翼龙同步失败: ${err.message}`, 'text-red-500');
+        res.status(500).json({ success: false });
+    }
+});
 app.get("/api/system/status", (req, res) => res.json(getMemoryStatus()));
-app.get("/api/bots", (req, res) => res.json({ bots: Array.from(activeBots.values()).map(b => ({ id: b.id, serverName: b.serverName, username: b.username, host: b.targetHost, port: b.targetPort, status: b.status, logs: b.logs, settings: b.settings, nextRestart: b.settings.restartInterval > 0 ? new Date(b.lastRestartTick + b.settings.restartInterval * 60000).toLocaleTimeString() : '未开启' })) }));
-app.post("/api/bots", (req, res) => { createSmartBot('bot_'+Math.random().toString(36).substr(2,7), req.body.host, 25565, req.body.username, [], null, req.body.serverName); res.json({ success: true }); });
-app.post("/api/bots/:id/set-timer", (req, res) => { const b = activeBots.get(req.params.id); if (b) { const val = parseFloat(req.body.value) || 0; b.settings.restartInterval = req.body.unit === 'hour' ? Math.round(val * 60) : Math.round(val); b.lastRestartTick = Date.now(); b.pushLog(`⏰ 设定: 每 ${val}${req.body.unit==='hour'?'小时':'分钟'} 重启`, 'text-cyan-400 font-bold'); saveBotsConfig(); res.json({ success: true }); } });
-app.post("/api/bots/:id/pto-config", (req, res) => { const b = activeBots.get(req.params.id); if (b) { b.settings.pterodactyl = { ...b.settings.pterodactyl, url: (req.body.url || "").replace(/\/$/, ""), key: req.body.key || "", id: req.body.id || "", defaultDir: req.body.defaultDir || '/' }; b.pushLog(`🔑 翼龙凭据已更新`, 'text-purple-400'); saveBotsConfig(); res.json({ success: true }); } });
-app.post("/api/bots/:id/toggle-guard", (req, res) => { const b = activeBots.get(req.params.id); if (b) { b.settings.pterodactyl.guard = !b.settings.pterodactyl.guard; const status = b.settings.pterodactyl.guard ? '开启' : '关闭'; b.pushLog(`🛡️ 翼龙守护已${status}`, b.settings.pterodactyl.guard ? 'text-blue-400' : 'text-slate-400'); saveBotsConfig(); res.json({ success: true }); } });
-app.delete("/api/bots/:id", (req, res) => { const b = activeBots.get(req.params.id); if (b) { if(b.afkTimer) clearInterval(b.afkTimer); if(b.instance) b.instance.end(); activeBots.delete(req.params.id); saveBotsConfig(); } res.json({ success: true }); });
+app.get("/api/bots", (req, res) => res.json({
+    bots: Array.from(activeBots.values()).map(b => ({
+        id: b.id,
+        serverName: b.serverName,
+        username: b.username,
+        host: b.targetHost,
+        port: b.targetPort,
+        status: b.status,
+        logs: b.logs,
+        settings: b.settings,
+        nextRestart: b.settings.restartInterval > 0 ? new Date(b.lastRestartTick + b.settings.restartInterval * 60000).toLocaleTimeString() : '未开启'
+    }))
+}));
+app.post("/api/bots", (req, res) => {
+    createSmartBot('bot_' + Math.random().toString(36).substr(2, 7), req.body.host, 25565, req.body.username, [], null, req.body.serverName);
+    res.json({ success: true });
+});
+app.post("/api/bots/:id/set-timer", (req, res) => {
+    const b = activeBots.get(req.params.id);
+    if (b) {
+        const val = parseFloat(req.body.value) || 0;
+        b.settings.restartInterval = req.body.unit === 'hour' ? Math.round(val * 60) : Math.round(val);
+        b.lastRestartTick = Date.now();
+        b.pushLog(`⏰ 设定: 每 ${val}${req.body.unit === 'hour' ? '小时' : '分钟'} 重启`, 'text-cyan-400 font-bold');
+        saveBotsConfig();
+        res.json({ success: true });
+    }
+});
+app.post("/api/bots/:id/pto-config", (req, res) => {
+    const b = activeBots.get(req.params.id);
+    if (b) {
+        b.settings.pterodactyl = {
+            ...b.settings.pterodactyl,
+            url: (req.body.url || "").replace(/\/$/, ""),
+            key: req.body.key || "",
+            id: req.body.id || "",
+            defaultDir: req.body.defaultDir || '/'
+        };
+        b.pushLog(`🔑 翼龙凭据已更新`, 'text-purple-400');
+        saveBotsConfig();
+        res.json({ success: true });
+    }
+});
+app.post("/api/bots/:id/toggle-guard", (req, res) => {
+    const b = activeBots.get(req.params.id);
+    if (b) {
+        b.settings.pterodactyl.guard = !b.settings.pterodactyl.guard;
+        const status = b.settings.pterodactyl.guard ? '开启' : '关闭';
+        b.pushLog(`🛡️ 翼龙守护已${status}`, b.settings.pterodactyl.guard ? 'text-blue-400' : 'text-slate-400');
+        saveBotsConfig();
+        res.json({ success: true });
+    }
+});
+app.delete("/api/bots/:id", (req, res) => {
+    const b = activeBots.get(req.params.id);
+    if (b) {
+        if (b.afkTimer) clearInterval(b.afkTimer);
+        if (b.instance) b.instance.end();
+        activeBots.delete(req.params.id);
+        retryCountMap.delete(req.params.id);
+        saveBotsConfig();
+    }
+    res.json({ success: true });
+});
 
 // --- [ 6. 翼龙守护核心逻辑 ] ---
 setInterval(async () => {
@@ -109,14 +483,19 @@ setInterval(async () => {
         if (botMeta.settings.pterodactyl.guard && botMeta.settings.pterodactyl.url && botMeta.settings.pterodactyl.key && botMeta.settings.pterodactyl.id) {
             try {
                 const { url, key, id: sid } = botMeta.settings.pterodactyl;
-                const r = await axios.get(`${url}/api/client/servers/${sid}/resources`, { headers: { 'Authorization': `Bearer ${key}` }, timeout: 5000 });
+                const r = await axios.get(`${url}/api/client/servers/${sid}/resources`, {
+                    headers: { 'Authorization': `Bearer ${key}` },
+                    timeout: 5000
+                });
                 const state = r.data.attributes.current_state;
                 if (state !== 'running' && state !== 'starting') {
                     botMeta.pushLog(`🛡️ 守护触发: 服务器 [${state}], 正在发送开机指令...`, 'text-yellow-500 font-bold');
-                    await axios.post(`${url}/api/client/servers/${sid}/power`, { signal: 'start' }, { headers: { 'Authorization': `Bearer ${key}` } });
+                    await axios.post(`${url}/api/client/servers/${sid}/power`, { signal: 'start' }, {
+                        headers: { 'Authorization': `Bearer ${key}` }
+                    });
                 }
             } catch (err) {
-                // 静默失败，避免刷屏
+                // 静默失败
             }
         }
     }
@@ -344,12 +723,26 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 8100;
 const HOST = process.env.IP || '::';
+
 app.listen(PORT, HOST, () => {
     console.log(`✅ HTTP 服务器已启动: http://[${HOST}]:${PORT}`);
+    // 恢复之前保存的机器人配置
     if (fsSync.existsSync(CONFIG_FILE)) {
         try {
             const saved = JSON.parse(fsSync.readFileSync(CONFIG_FILE));
-            saved.forEach(b => createSmartBot('bot_'+Math.random().toString(36).substr(2,5), b.host, b.port, b.username, b.logs || [], b.settings, b.serverName));
-        } catch (e) {}
+            saved.forEach(b => {
+                createSmartBot(
+                    'bot_' + Math.random().toString(36).substr(2, 5),
+                    b.host,
+                    b.port,
+                    b.username,
+                    b.logs || [],
+                    b.settings,
+                    b.serverName
+                );
+            });
+        } catch (e) {
+            console.error('配置文件读取失败，跳过自动恢复');
+        }
     }
 });
