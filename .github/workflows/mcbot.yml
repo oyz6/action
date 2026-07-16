@@ -1,9 +1,6 @@
 name: 预打包 node_modules
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -11,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20]   # 使用 20 更稳定，避免 18 即将停止维护
+        node-version: [20]
 
     steps:
       - name: 检出代码
@@ -21,11 +18,37 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          # 移除 cache 配置，因为没有 lock 文件
+
+      - name: 生成 package.json（如仓库中不存在）
+        run: |
+          cat > package.json << 'JSONEOF'
+          {
+            "name": "pathfinder-pro-2025-taskcenter",
+            "version": "3.0.0",
+            "description": "Pathfinder PRO 2025 旗舰版 - 网页可视化续期 + 游戏挂机双引擎 + 应用中心",
+            "main": "index.js",
+            "scripts": {
+              "start": "node index.js"
+            },
+            "dependencies": {
+              "mineflayer": "latest",
+              "mineflayer-pathfinder": "latest",
+              "minecraft-data": "latest",
+              "express": "^4.21.2",
+              "axios": "^1.7.9",
+              "multer": "^1.4.5-lts.1",
+              "form-data": "^4.0.1"
+            },
+            "engines": {
+              "node": ">=18.0.0"
+            },
+            "author": "Pathfinder-Team",
+            "license": "MIT"
+          }
+          JSONEOF
 
       - name: 安装依赖
-        run: |
-          npm install --omit=dev --no-audit --no-fund
+        run: npm install --omit=dev --no-audit --no-fund
 
       - name: 打包整个项目
         run: |
