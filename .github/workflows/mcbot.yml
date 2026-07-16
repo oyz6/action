@@ -1,0 +1,40 @@
+name: 预打包 node_modules
+
+on:
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18]   # 与你的 engines 要求一致
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'        # 缓存加速后续构建
+
+      - name: 安装依赖（尽量减小体积）
+        run: |
+          npm ci --omit=dev --prefer-offline --no-audit --no-fund 2>/dev/null || npm install --omit=dev
+
+      - name: 打包整个项目
+        run: |
+          tar -czf app-bundle.tar.gz \
+            --exclude='.git' \
+            --exclude='node_modules/.cache' \
+            --exclude='.github' \
+            .
+
+      - name: 上传制品
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-bundle-${{ github.run_id }}
+          path: app-bundle.tar.gz
+          retention-days: 7   # 保留7天，足够下载
