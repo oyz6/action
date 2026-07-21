@@ -1,0 +1,78 @@
+name: x10hosting 保活2
+
+on:
+#  schedule:
+#    - cron: '30 2 * * *'       # 每天 UTC 2:30（北京时间 10:30）
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb fonts-noto-cjk p7zip-full
+
+      - name: 安装 Playwright 及 Python 库
+        run: |
+          pip install -q playwright requests
+          playwright install chromium
+
+      - name: 下载 Buster 扩展
+        run: |
+          mkdir -p scripts/extensions/buster
+          wget -q -O scripts/extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip
+          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+
+      - name: 设置代理
+        env:
+          NODE_LINK: ${{ secrets.NODE_LINK }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          chmod +x scripts/setup_proxy.sh
+          if ! bash scripts/setup_proxy.sh; then
+            echo "代理设置失败，发送通知..."
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d text="❌ x10hosting 保活失败：代理不可用" \
+              --max-time 10 || true
+            exit 1
+          fi
+
+      - name: 运行保活脚本
+        env:
+          X10HOSTING: ${{ secrets.X10HOSTING }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive.py
+
+      - name: 上传截图（调试用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x10-screenshots-${{ github.run_number }}
+          path: screenshots/*.png
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: 清理历史运行记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 1
