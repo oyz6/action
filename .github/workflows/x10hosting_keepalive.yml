@@ -36,13 +36,13 @@ jobs:
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.NODE_LINK }}
+          NODE_LINK: ${{ secrets.PROXY_NODE_ISP }}  # 改为对应节点变量名 美国 加利福尼亚州 洛杉矶 - ISP
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           chmod +x scripts/setup_proxy.sh
           if ! bash scripts/setup_proxy.sh; then
-            echo "代理设置失败，发送通知..."
+            echo "❌ 代理设置失败，发送通知..."
             curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TG_CHAT_ID}" \
               -d text="❌ x10hosting 保活失败：代理不可用" \
