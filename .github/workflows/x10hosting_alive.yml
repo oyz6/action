@@ -46,7 +46,7 @@ jobs:
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.NODE_LINK }}
+          NODE_LINK: ${{ secrets.PROXY_NODE_ISP }}  # 改为对应节点变量名 美国 加利福尼亚州 洛杉矶 - ISP
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
