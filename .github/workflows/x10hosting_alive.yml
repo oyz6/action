@@ -1,49 +1,46 @@
 name: x10hosting 保活
 
 on:
-#  schedule:
-#    - cron: '0 8 * * *'
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'  # 北京时间 10:00
 
 jobs:
   keepalive:
     name: 执行保活
     runs-on: ubuntu-22.04
     timeout-minutes: 60
-    permissions:
-      contents: read
-      actions: write
 
     steps:
-      - name: 检出代码仓库
+      - name: 检出仓库
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
 
-      - name: 配置 Python 3.11
+      - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 安装系统依赖
+      - name: 安装系统依赖与 Python 包
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
+          set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y \
-            xvfb \
-            fonts-noto-cjk fonts-wqy-zenhei \
-            ffmpeg \
-            flac
+          sudo apt-get install -y -qq \
+            xvfb ffmpeg mesa-utils \
+            libgl1-mesa-glx libgl1-mesa-dri \
+            flac sox
 
-      - name: 安装 Python 依赖
-        run: |
-          pip install -q \
+          pip install --quiet \
             playwright \
             requests \
             SpeechRecognition \
-            pydub \
-            requests[socks]
-          playwright install chromium
+            pydub
+
+          python -m playwright install --with-deps chromium
 
       - name: 设置代理
         env:
@@ -53,6 +50,7 @@ jobs:
         run: |
           chmod +x scripts/setup_proxy.sh
           if ! bash scripts/setup_proxy.sh; then
+            echo "❌ 代理设置失败，发送通知..."
             curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TG_CHAT_ID}" \
               -d text="❌ x10hosting 保活失败：代理不可用" \
@@ -60,26 +58,20 @@ jobs:
             exit 1
           fi
 
-      - name: 执行 x10hosting 保活
+      - name: 执行保活脚本
         env:
           X10HOSTING: ${{ secrets.X10HOSTING }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          DISPLAY: :99
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: "llvmpipe"
         run: |
-          xvfb-run -a --server-args="-screen 0 1280x900x24" \
-            python -u scripts/x10hosting/main.py
+          xvfb-run --auto-servernum \
+            --server-args="-screen 0 1920x1080x24 -ac -noreset +extension GLX +render" \
+            python scripts/x10hosting/main.py
 
-      - name: 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: x10hosting-screenshots-${{ github.run_number }}
-          path: screenshots/*.png
-          retention-days: 3
-          if-no-files-found: ignore
-
-      - name: 清理历史运行记录
+      - name: 清理旧工作流运行记录
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
         with:
@@ -87,4 +79,4 @@ jobs:
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 1
+          keep_minimum_runs: 2
