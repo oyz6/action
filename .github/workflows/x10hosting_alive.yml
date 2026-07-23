@@ -2,8 +2,8 @@ name: x10hosting 保活
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * *'  # 北京时间 10:00
+#  schedule:
+#    - cron: '0 2 * * *'  # 北京时间 10:00
 
 jobs:
   keepalive:
