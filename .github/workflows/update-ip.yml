@@ -2,7 +2,6 @@ name: 更新全球 IP 数据库
 
 on:
   schedule:
-    # 每天 UTC 02:00（北京时间 10:00）自动执行
     - cron: '0 2 * * *'
   workflow_dispatch:
 
@@ -11,8 +10,8 @@ jobs:
     name: 更新全球 IP 数据库
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # 允许创建/更新 Release 和上传资产
-      actions: write       # 允许清理工作流记录
+      contents: write
+      actions: write
 
     steps:
       - name: 拉取仓库
@@ -23,19 +22,23 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'      # 使用当前 LTS 版本，避免 Node 20 弃用警告
+          node-version: '22'
 
       - name: 缓存 npm 依赖
         uses: actions/cache@v4
         with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          path: |
+            ~/.npm
+            scripts/ip/node_modules
+          key: npm-${{ runner.os }}-${{ hashFiles('scripts/ip/package.json') }}
           restore-keys: npm-${{ runner.os }}-
 
       - name: 安装依赖
-        run: npm ci
+        working-directory: scripts/ip
+        run: npm install
 
       - name: 执行更新脚本
+        # 从项目根目录运行脚本，这样 data/ 目录在根目录下
         run: node scripts/ip/update-db.js
 
       - name: 检查生成文件
@@ -45,7 +48,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 如果 Release 不存在则创建（tag 固定为 ip-database）
           if ! gh release view ip-database > /dev/null 2>&1; then
             echo "Release 不存在，正在创建..."
             gh release create ip-database \
@@ -55,8 +57,6 @@ jobs:
           else
             echo "Release 已存在，将覆盖同名资产"
           fi
-
-          # 上传文件并覆盖同名资产
           gh release upload ip-database data/ip-database.json --clobber
 
       - name: 失败时通知
