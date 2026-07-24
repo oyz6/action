@@ -1,8 +1,0 @@
-{
-  "name": "ip-database-updater",
-  "version": "1.0.0",
-  "private": true,
-  "dependencies": {
-    "@ip-location-db/dbip-country": "^2.3.20250701"
-  }
-}
