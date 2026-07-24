@@ -26,7 +26,7 @@ jobs:
           node-version: '20'
 
       - name: 执行更新脚本
-        run: node update-db.js
+        run: node scripts/update-db.js
 
       - name: 提交并推送更改
         run: |
