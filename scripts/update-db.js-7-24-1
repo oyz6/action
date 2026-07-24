@@ -25,6 +25,13 @@ jobs:
         with:
           node-version: '20'
 
+      - name: 缓存 DB-IP 数据库
+        uses: actions/cache@v3
+        with:
+          path: dbip-cache.csv
+          key: dbip-${{ runner.os }}-${{ github.run_date }}
+          restore-keys: dbip-${{ runner.os }}
+
       - name: 执行更新脚本
         run: node scripts/update-db.js
 
