@@ -1,3 +1,76 @@
+name: 更新全球 IP 数据库
+
+on:
+  schedule:
+    # 每天 UTC 02:00（北京时间 10:00）自动执行
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    name: 更新全球 IP 数据库
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # 允许创建/更新 Release 和上传资产
+      actions: write       # 允许清理工作流记录
+
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 执行更新脚本
+        run: node scripts/update-db.js
+
+      - name: 检查生成文件
+        run: ls -la data/ip-database.json
+
+      - name: 上传到 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 1. 如果 Release 不存在，则创建一个（tag 固定为 ip-database）
+          if ! gh release view ip-database > /dev/null 2>&1; then
+            echo "Release 不存在，正在创建..."
+            gh release create ip-database \
+              --title "IP Database" \
+              --notes "每日自动更新的全球 IP 数据库（196个国家）" \
+              --latest
+          else
+            echo "Release 已存在，将覆盖同名资产"
+          fi
+
+          # 2. 上传文件并覆盖同名资产（gh 2.21.0+ 支持 --clobber）
+          gh release upload ip-database data/ip-database.json --clobber
+
+      - name: 失败时通知
+        if: failure()
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            -d parse_mode="HTML" \
+            -d text="❌ <b>IP 数据库更新失败</b>%0A%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: 清理工作流记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
+
+
 // scripts/update-db.js
 const fs = require('fs');
 const path = require('path');
