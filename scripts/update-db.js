@@ -175,12 +175,12 @@ async function verifyWithMaxMind(ipList) {
 }
 
 // =============================================
-// mra8-api 单 IP 查询
+// ipinfo.io 单 IP 查询
 // =============================================
 
 async function queryMRA8(ip) {
   try {
-    const resp = await fetch(`https://mra8-api.hf.space/${ip}`, {
+    const resp = await fetch(`https://ipinfo.io/${ip}`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!resp.ok) return null;
