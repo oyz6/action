@@ -1,0 +1,62 @@
+name: 更新全球 IP 数据库
+
+on:
+  schedule:
+    # 每天 UTC 02:00（北京时间 10:00）自动执行
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    name: 更新全球 IP 数据库
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # 允许推送 JSON 文件
+      actions: write       # 允许清理工作流记录
+
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 执行更新脚本
+        run: node update-db.js
+
+      - name: 提交并推送更改
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/ip-database.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update IP database $(date -u +'%Y-%m-%d')"
+            git push
+          fi
+
+      - name: 失败时通知
+        if: failure()
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            -d parse_mode="HTML" \
+            -d text="❌ <b>IP 数据库更新失败</b>%0A%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: 清理工作流记录
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
