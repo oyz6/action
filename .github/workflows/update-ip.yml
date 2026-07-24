@@ -37,15 +37,14 @@ jobs:
           EOF
           npm install
 
-      - name: 下载 MaxMind GeoLite2 数据库
-        env:
-          MAXMIND_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+      - name: 下载 GeoLite2 国家数据库（P3TERX 镜像，无需密钥）
         run: |
           mkdir -p data
-          curl -s -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=${MAXMIND_KEY}&suffix=tar.gz" -o geoip.tar.gz
-          tar -xzf geoip.tar.gz --strip-components=1
-          mv GeoLite2-Country.mmdb data/
-          rm geoip.tar.gz
+          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/P3TERX/GeoLite.mmdb/releases/latest \
+            | grep -o 'https://.*GeoLite2-Country.mmdb"' \
+            | tr -d '"')
+          echo "下载地址: $DOWNLOAD_URL"
+          curl -s -L "$DOWNLOAD_URL" -o data/GeoLite2-Country.mmdb
 
       - name: 执行更新脚本
         run: node scripts/update-db.js
