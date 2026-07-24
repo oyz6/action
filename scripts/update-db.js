@@ -1,9 +1,9 @@
-// update-db.js
+// scripts/update-db.js
 const fs = require('fs');
 const path = require('path');
 
 // =============================================
-// 全球195国种子IP数据（与原Worker完全一致）
+// 全球195国种子IP数据
 // =============================================
 const SEED = {
   // 北美
@@ -252,7 +252,7 @@ const LACNIC_COUNTRIES = [
 ];
 
 // =============================================
-// 工具函数（完全移植自 Worker，无改动）
+// 工具函数
 // =============================================
 
 function isPublicIP(ip) {
@@ -368,12 +368,12 @@ function chunk(arr, size) {
 }
 
 // =============================================
-// 数据抓取（无 Worker 子请求限制，可自由调整并发）
+// 数据抓取
 // =============================================
 
 async function fetchRIPE() {
   const results = {};
-  // 分批请求，每批 10 个国家，避免瞬时并发过高
+  // 分批请求，每批 10 个国家
   const batches = chunk(RIPE_COUNTRIES, 10);
   for (const batch of batches) {
     await Promise.all(batch.map(async (cc) => {
@@ -404,18 +404,23 @@ async function fetchRIPE() {
 }
 
 async function fetchAPNIC() {
+  console.log('[APNIC] 开始抓取 delegated-apnic-latest ...');
   const results = {};
   try {
     const resp = await fetch(
       "https://ftp.apnic.net/stats/apnic/delegated-apnic-latest",
       {
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000), // 增加超时到30秒
         headers: { "User-Agent": "GH-IPCollector/3.0" },
       }
     );
-    if (!resp.ok) { await resp.body?.cancel(); return results; }
+    if (!resp.ok) {
+      console.log(`[APNIC] 响应状态码: ${resp.status}`);
+      return results;
+    }
 
     const text = await resp.text();
+    console.log(`[APNIC] 获取到文本长度: ${text.length}`);
     const pool = {};
 
     for (const line of text.split("\n")) {
@@ -429,6 +434,8 @@ async function fetchAPNIC() {
       if (pool[cc].length < 20) pool[cc].push(ip);
     }
 
+    console.log(`[APNIC] 候选池国家数: ${Object.keys(pool).length}`);
+
     for (const cc of APNIC_COUNTRIES) {
       const cands = pool[cc];
       if (!cands?.length) continue;
@@ -439,24 +446,29 @@ async function fetchAPNIC() {
       }
     }
   } catch (e) {
-    console.error("[APNIC]", e.message);
+    console.error("[APNIC] 错误:", e.message);
   }
   return results;
 }
 
 async function fetchLACNIC() {
+  console.log('[LACNIC] 开始抓取 delegated-lacnic-latest ...');
   const results = {};
   try {
     const resp = await fetch(
       "https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest",
       {
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000),
         headers: { "User-Agent": "GH-IPCollector/3.0" },
       }
     );
-    if (!resp.ok) { await resp.body?.cancel(); return results; }
+    if (!resp.ok) {
+      console.log(`[LACNIC] 响应状态码: ${resp.status}`);
+      return results;
+    }
 
     const text = await resp.text();
+    console.log(`[LACNIC] 获取到文本长度: ${text.length}`);
     const pool = {};
 
     for (const line of text.split("\n")) {
@@ -470,6 +482,8 @@ async function fetchLACNIC() {
       if (pool[cc].length < 20) pool[cc].push(ip);
     }
 
+    console.log(`[LACNIC] 候选池国家数: ${Object.keys(pool).length}`);
+
     for (const cc of LACNIC_COUNTRIES) {
       const cands = pool[cc];
       if (!cands?.length) continue;
@@ -480,7 +494,7 @@ async function fetchLACNIC() {
       }
     }
   } catch (e) {
-    console.error("[LACNIC]", e.message);
+    console.error("[LACNIC] 错误:", e.message);
   }
   return results;
 }
@@ -510,9 +524,10 @@ async function main() {
     country_count: Object.keys(limited).length,
   };
 
-  // 写入 data/ip-database.json
-  const outputPath = path.join(__dirname, 'data', 'ip-database.json');
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  // 确保输出到仓库根目录的 data 文件夹
+  const outputDir = path.join(process.cwd(), 'data');
+  fs.mkdirSync(outputDir, { recursive: true });
+  const outputPath = path.join(outputDir, 'ip-database.json');
   fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2), 'utf8');
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
