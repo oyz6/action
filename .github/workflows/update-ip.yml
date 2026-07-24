@@ -24,12 +24,10 @@ jobs:
         with:
           node-version: '22'
 
-      - name: 缓存 npm 依赖
+      - name: 缓存 npm 依赖（仅缓存 ~/.npm 加速下载）
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.npm
-            scripts/ip/node_modules
+          path: ~/.npm
           key: npm-${{ runner.os }}-${{ hashFiles('scripts/ip/package.json') }}
           restore-keys: npm-${{ runner.os }}-
 
@@ -38,7 +36,6 @@ jobs:
         run: npm install
 
       - name: 执行更新脚本
-        # 从项目根目录运行脚本，这样 data/ 目录在根目录下
         run: node scripts/ip/update-db.js
 
       - name: 检查生成文件
