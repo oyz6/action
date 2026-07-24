@@ -34,31 +34,27 @@ const LACNIC_COUNTRIES = [
   "BR","AR","CL","CO","PE","VE","EC","BO","PY","UY","GY","SR",
   "MX","GT","BZ","HN","SV","NI","CR","PA",
   "CU","JM","HT","DO","TT","BB","LC","VC","GD","AG","DM","KN","BS",
-  // 波多黎各（美国领土，但有独立 IP 池）
   "PR",
 ];
 
 const ARIN_COUNTRIES = ["US","CA"];
 
-// AFRINIC 作为补充，抓取一些可能只在 AFRINIC 出现的非洲国家
-// 注意：所有非洲国家已包含在 RIPE_COUNTRIES 中，本列表可为空
-const AFRINIC_COUNTRIES = [
-  // 仅包含那些可能未被 RIPE 覆盖的，可留空
-];
+// AFRINIC 仅作补充，失败不影响结果
+const AFRINIC_COUNTRIES = [];
 
 const ALL_COUNTRIES = [...new Set([
   ...RIPE_COUNTRIES, ...APNIC_COUNTRIES, ...LACNIC_COUNTRIES,
   ...ARIN_COUNTRIES, ...AFRINIC_COUNTRIES,
 ])];
 
-// 特殊地区映射（ARIN 下非主权实体，但拥有独立 IP 段）
+// 特殊地区映射（非 ISO 实体）
 const TERRITORIES_FALLBACK = {
   "PR": ["66.98.224.0/21","209.6.0.0/18","64.125.0.0/19"],
   "GU": ["168.123.0.0/18","202.128.0.0/17"],
   "VI": ["208.84.136.0/22"],
 };
 
-// 科索沃硬编码（RIPE 中以 RS 名义分配）
+// 科索沃备用硬编码（会在 bypass 流程中被二次验证）
 const XK_HARDCODED = ["217.198.64.1", "77.74.64.1", "188.120.148.1"];
 
 // =============================================
@@ -101,14 +97,17 @@ function chunk(arr, size) {
   return out;
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // =============================================
-// 解析 delegated 文件（通用）
+// 解析 delegated 文件
 // =============================================
 
 function parseDelegatedFile(text, targetCountries) {
   const pool = {};
   const targetSet = new Set(targetCountries);
-
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -126,7 +125,7 @@ function parseDelegatedFile(text, targetCountries) {
     if (!cc || cc.length !== 2) continue;
     if (!targetSet.has(cc)) continue;
     if (!isPublicIP(startIP)) continue;
-    if (count < 256) continue;   // 候选时仍只取 /24 以上块
+    if (count < 256) continue;
 
     if (!pool[cc]) pool[cc] = [];
     if (pool[cc].length < 50) {
@@ -170,13 +169,59 @@ async function verifyWithMaxMind(ipList) {
       if (geo?.country?.iso_code) {
         result[ip] = geo.country.iso_code.toUpperCase();
       }
-    } catch (e) { /* 忽略单条错误 */ }
+    } catch (e) { /* ignore */ }
   }
   return result;
 }
 
 // =============================================
-// 自动 Bypass：从已缓存的 RIR 原始文本中提取缺失国家的 IP
+// mra8-api 单 IP 查询
+// =============================================
+
+async function queryMRA8(ip) {
+  try {
+    const resp = await fetch(`https://mra8-api.hf.space/${ip}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data?.country?.code?.toUpperCase() || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// =============================================
+// 从 RIPE 缓存中提取 XK 大量候选 IP
+// =============================================
+
+function getXKCandidatesFromRIPE() {
+  const ripeText = RIR_RAW_TEXT["RIPE"];
+  if (!ripeText) return [];
+  const ips = [];
+  const lines = ripeText.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('#') || line.trim() === '') continue;
+    const p = line.split('|');
+    if (p.length < 7 || p[1] !== "XK" || p[2] !== "ipv4") continue;
+    const status = p[6]?.split('#')[0].trim();
+    if (status === "summary") continue;
+    const startIP = p[3];
+    const count = parseInt(p[4]) || 0;
+    if (!isPublicIP(startIP) || count < 256) continue;
+    // 取段内首、中、尾三个地址
+    const first = addOffset(startIP, 1);
+    const mid = addOffset(startIP, Math.floor(count / 2));
+    const last = addOffset(startIP, count - 2);
+    for (const ip of [first, mid, last]) {
+      if (ip && !ips.includes(ip)) ips.push(ip);
+    }
+  }
+  return ips.slice(0, 30);
+}
+
+// =============================================
+// 自动 Bypass：从已缓存的 RIR 原始文本提取 IP
 // =============================================
 
 let RIR_RAW_TEXT = {};
@@ -188,12 +233,12 @@ function getAutoBypassIPs(cc) {
     for (const line of lines) {
       if (line.startsWith('#') || line.trim() === '') continue;
       const p = line.split('|');
-      if (p.length < 7 || p[1] !== cc || p[2] !== 'ipv4') continue;
+      if (p.length < 7 || p[1] !== cc || p[2] !== "ipv4") continue;
       const status = p[6]?.split('#')[0].trim();
-      if (status === 'summary') continue;
+      if (status === "summary") continue;
       const startIP = p[3];
       const count = parseInt(p[4]) || 0;
-      if (!isPublicIP(startIP) || count < 8) continue;   // 放宽到 /29
+      if (!isPublicIP(startIP) || count < 8) continue;
       const mid = addOffset(startIP, Math.floor(count / 2));
       if (mid && !ips.includes(mid)) ips.push(mid);
     }
@@ -214,7 +259,7 @@ function getTerritoryFallbackIPs(cc) {
 }
 
 // =============================================
-// 抓取 RIR 候选（统一使用 delegated 文件）
+// 抓取 RIR 候选
 // =============================================
 
 async function fetchFromRIR(url, targetCountries, name) {
@@ -230,10 +275,7 @@ async function fetchFromRIR(url, targetCountries, name) {
     }
     const text = await resp.text();
     console.log(`[${name}] ${(text.length / 1024).toFixed(0)} KB`);
-
-    // 缓存原始文本供 bypass 使用
     RIR_RAW_TEXT[name] = text;
-
     const pool = parseDelegatedFile(text, targetCountries);
     console.log(`[${name}] ${Object.keys(pool).length} 个国家`);
     const candidates = {};
@@ -263,18 +305,15 @@ async function verifyIPs(candidates, label = "") {
       }
     }
   }
-
   if (allIPs.length === 0) return {};
   console.log(`[Verify${label}] 共 ${allIPs.length} 个IP待验证...`);
 
   const verified = {};
   const batches = chunk(allIPs, 100);
-
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i];
     console.log(`[Verify${label}] 批次 ${i + 1}/${batches.length} (${batch.length}个IP)...`);
     const result = await verifyWithMaxMind(batch);
-
     for (const [ip, actualCC] of Object.entries(result)) {
       const expectedCC = ipToCC[ip];
       if (actualCC === expectedCC) {
@@ -329,11 +368,9 @@ function buildFinal(verified) {
 async function main() {
   console.log("=== IP数据库更新开始 ===");
   const start = Date.now();
-
-  // 初始化 MaxMind 数据库
   await initMaxMind();
 
-  // Step 1: 并行抓取所有 RIR delegated 文件
+  // Step 1: 抓取各 RIR
   console.log("\n--- Step 1: 抓取各 RIR 候选IP ---");
   const rirFetchers = [
     fetchFromRIR("https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-latest",
@@ -344,7 +381,6 @@ async function main() {
                  LACNIC_COUNTRIES, "LACNIC"),
     fetchFromRIR("https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest",
                  ARIN_COUNTRIES, "ARIN"),
-    // AFRINIC 作为补充，失败不影响流程
     fetchFromRIR("https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-latest",
                  AFRINIC_COUNTRIES, "AFRINIC").catch(e => {
                    console.log('[AFRINIC] 抓取失败，将跳过');
@@ -354,7 +390,7 @@ async function main() {
 
   const rirResults = await Promise.all(rirFetchers);
 
-  // 合并所有候选 IP（用于验证）
+  // 合并候选
   const allCandidates = {};
   for (const { candidates } of rirResults) {
     for (const [cc, ips] of Object.entries(candidates)) {
@@ -370,12 +406,12 @@ async function main() {
   const totalCandidates = Object.values(allCandidates).reduce((s, a) => s + a.length, 0);
   console.log(`\n候选汇总: ${Object.keys(allCandidates).length} 国, ${totalCandidates} 个IP待验证`);
 
-  // Step 2: 使用 MaxMind 验证
+  // Step 2: MaxMind 验证
   console.log("\n--- Step 2: MaxMind 验证 ---");
   const verified = await verifyIPs(allCandidates);
   console.log(`验证通过: ${Object.keys(verified).length} 个国家`);
 
-  // Step 3: 自动 Bypass 缺失国家（含特殊地区及科索沃）
+  // Step 3: 自动 Bypass 并二次验证
   let missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
   for (const cc of Object.keys(TERRITORIES_FALLBACK)) {
     if (!verified[cc]) missing.push(cc);
@@ -385,21 +421,49 @@ async function main() {
   if (missing.length > 0) {
     console.log(`\n--- Step 3: 自动 Bypass 处理 (${missing.length} 国) ---`);
     for (const cc of missing) {
-      // 优先从 RIR 原始文本提取
       let bypassIPs = getAutoBypassIPs(cc);
       if (bypassIPs.length === 0) {
-        // 尝试特殊地区后备
         bypassIPs = getTerritoryFallbackIPs(cc);
       }
       if (bypassIPs.length === 0 && cc === "XK") {
-        // 科索沃硬编码兜底
         bypassIPs = XK_HARDCODED.filter(isPublicIP);
       }
+
+      // 二次验证：使用 mra8-api 过滤
+      if (bypassIPs.length > 0) {
+        const confirmedIPs = [];
+        for (const ip of bypassIPs) {
+          const apiCountry = await queryMRA8(ip);
+          if (apiCountry === cc) {
+            confirmedIPs.push(ip);
+          } else {
+            console.log(`[BYPASS] 🔍 ${cc} ${ip} 实际归属 ${apiCountry}，丢弃`);
+          }
+        }
+        bypassIPs = confirmedIPs;
+      }
+
+      // 科索沃特殊扫描：如果二次验证后仍为空，从 RIPE 中搜索更多 IP
+      if (cc === "XK" && bypassIPs.length === 0) {
+        console.log("[BYPASS] XK 所有候选均未通过，启动增强扫描...");
+        const candidates = getXKCandidatesFromRIPE();
+        const found = [];
+        for (const ip of candidates) {
+          const apiCountry = await queryMRA8(ip);
+          if (apiCountry === "XK") {
+            found.push(ip);
+            console.log(`[BYPASS] XK 找到有效IP: ${ip}`);
+            if (found.length >= 2) break;
+          }
+        }
+        bypassIPs = found;
+      }
+
       if (bypassIPs.length > 0) {
         verified[cc] = bypassIPs;
         console.log(`[BYPASS] ${cc}: ${bypassIPs.join(', ')}`);
       } else {
-        console.log(`[BYPASS] ${cc}: ❌ 无法获取任何IP，该地区将缺失`);
+        console.log(`[BYPASS] ${cc}: ❌ 无法获取任何有效IP，该地区将缺失`);
       }
     }
   }
@@ -425,11 +489,11 @@ async function main() {
     console.log(`${cc}: ${ips ? ips.join(", ") : "❌ 无数据"}`);
   }
 
-  // Step 5: 写入文件
+  // 写入文件
   const payload = {
     ips: final,
     updated_at: new Date().toISOString(),
-    source: "rir-delegated-files verified-by-maxmind-geolite2",
+    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification",
     country_count: covered,
     coverage_rate: `${covered}/${totalExpected}`,
     missing: finalMissing,
