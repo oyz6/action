@@ -11,7 +11,7 @@ jobs:
     name: 更新全球 IP 数据库
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # 允许推送 JSON 文件
+      contents: write      # 允许创建/更新 Release 和上传资产
       actions: write       # 允许清理工作流记录
 
     steps:
@@ -31,17 +31,23 @@ jobs:
       - name: 检查生成文件
         run: ls -la data/ip-database.json
 
-      - name: 提交并推送更改
+      - name: 上传到 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/ip-database.json
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
+          # 1. 如果 Release 不存在，则创建一个（tag 固定为 ip-database）
+          if ! gh release view ip-database > /dev/null 2>&1; then
+            echo "Release 不存在，正在创建..."
+            gh release create ip-database \
+              --title "IP Database" \
+              --notes "每日自动更新的全球 IP 数据库（196个国家）" \
+              --latest
           else
-            git commit -m "Update IP database $(date -u +'%Y-%m-%d')"
-            git push
+            echo "Release 已存在，将覆盖同名资产"
           fi
+
+          # 2. 上传文件并覆盖同名资产（gh 2.21.0+ 支持 --clobber）
+          gh release upload ip-database data/ip-database.json --clobber
 
       - name: 失败时通知
         if: failure()
