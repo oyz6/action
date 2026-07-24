@@ -12,13 +12,11 @@ const RIPE_COUNTRIES = [
   "PL","CZ","SK","HU","RO","BG","HR","SI","BA","RS","ME","MK","AL","GR",
   "RU","UA","BY","MD","GE","AM","AZ","KZ","UZ","TM","KG","TJ",
   "TR","IL","AE","SA","QA","KW","BH","OM","YE","JO","LB","SY","IQ","IR",
-  // 非洲国家（大部分在 RIPE 有分配记录）
   "EG","LY","TN","DZ","MA","MR","SD",
   "NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
   "ZA","ZW","ZM","MZ","BW","NA","LS","SZ","AO","MW","MG","MU","SC","KM","ST",
   "ET","KE","TZ","UG","RW","BI","SO","DJ","ER","SS",
   "CD","CG","GA","GQ","CF",
-  // 科索沃（特殊）
   "XK",
 ];
 
@@ -39,7 +37,6 @@ const LACNIC_COUNTRIES = [
 
 const ARIN_COUNTRIES = ["US","CA"];
 
-// AFRINIC 仅作补充，失败不影响结果
 const AFRINIC_COUNTRIES = [];
 
 const ALL_COUNTRIES = [...new Set([
@@ -47,14 +44,12 @@ const ALL_COUNTRIES = [...new Set([
   ...ARIN_COUNTRIES, ...AFRINIC_COUNTRIES,
 ])];
 
-// 特殊地区映射（非 ISO 实体）
 const TERRITORIES_FALLBACK = {
   "PR": ["66.98.224.0/21","209.6.0.0/18","64.125.0.0/19"],
   "GU": ["168.123.0.0/18","202.128.0.0/17"],
   "VI": ["208.84.136.0/22"],
 };
 
-// 科索沃备用硬编码（会在 bypass 流程中被二次验证）
 const XK_HARDCODED = ["217.198.64.1", "77.74.64.1", "188.120.148.1"];
 
 // =============================================
@@ -95,10 +90,6 @@ function chunk(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // =============================================
@@ -175,12 +166,12 @@ async function verifyWithMaxMind(ipList) {
 }
 
 // =============================================
-// ipinfo.io 单 IP 查询
+// mra8-api 单 IP 查询
 // =============================================
 
 async function queryMRA8(ip) {
   try {
-    const resp = await fetch(`https://ipinfo.io/${ip}`, {
+    const resp = await fetch(`https://mra8-api.hf.space/${ip}`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!resp.ok) return null;
@@ -209,7 +200,6 @@ function getXKCandidatesFromRIPE() {
     const startIP = p[3];
     const count = parseInt(p[4]) || 0;
     if (!isPublicIP(startIP) || count < 256) continue;
-    // 取段内首、中、尾三个地址
     const first = addOffset(startIP, 1);
     const mid = addOffset(startIP, Math.floor(count / 2));
     const last = addOffset(startIP, count - 2);
@@ -411,7 +401,7 @@ async function main() {
   const verified = await verifyIPs(allCandidates);
   console.log(`验证通过: ${Object.keys(verified).length} 个国家`);
 
-  // Step 3: 自动 Bypass 并二次验证
+  // Step 3: 自动 Bypass 并二次验证（仅丢弃明确错误的国家代码）
   let missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
   for (const cc of Object.keys(TERRITORIES_FALLBACK)) {
     if (!verified[cc]) missing.push(cc);
@@ -429,12 +419,15 @@ async function main() {
         bypassIPs = XK_HARDCODED.filter(isPublicIP);
       }
 
-      // 二次验证：使用 mra8-api 过滤
+      // 二次验证：仅当 API 明确返回不同国家时才丢弃
       if (bypassIPs.length > 0) {
         const confirmedIPs = [];
         for (const ip of bypassIPs) {
           const apiCountry = await queryMRA8(ip);
-          if (apiCountry === cc) {
+          if (apiCountry === null) {
+            // API 无结果，信任 RIR 来源，保留
+            confirmedIPs.push(ip);
+          } else if (apiCountry === cc) {
             confirmedIPs.push(ip);
           } else {
             console.log(`[BYPASS] 🔍 ${cc} ${ip} 实际归属 ${apiCountry}，丢弃`);
@@ -443,7 +436,7 @@ async function main() {
         bypassIPs = confirmedIPs;
       }
 
-      // 科索沃特殊扫描：如果二次验证后仍为空，从 RIPE 中搜索更多 IP
+      // 科索沃特殊扫描：如果仍为空，尝试从 RIPE 大量候选
       if (cc === "XK" && bypassIPs.length === 0) {
         console.log("[BYPASS] XK 所有候选均未通过，启动增强扫描...");
         const candidates = getXKCandidatesFromRIPE();
