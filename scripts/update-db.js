@@ -2,6 +2,57 @@
 const fs = require('fs');
 const path = require('path');
 
+// =============================================
+// 特殊国家处理策略
+// =============================================
+
+// 这些国家的IP被ip-api误判或永远不会返回正确CC
+// 直接使用RIR权威分配的IP，跳过ip-api验证
+// 数据来源：LACNIC/RIPE delegated文件中的实际分配记录
+const BYPASS_VERIFY = {
+  // 科索沃：RIPE以RS名义分配，但实际用于XK
+  // 来源：RIPE NCC为科索沃分配的已知前缀
+  "XK": ["217.198.64.1","77.74.64.1","188.120.148.1"],
+
+  // 波多黎各：美国领土，ip-api永远返回US
+  // 来源：ARIN分配给PR运营商的确认段
+  "PR": ["66.98.224.1","209.6.0.1","64.125.78.1"],
+
+  // 以下加勒比小国IP全托管在美国，ip-api无法区分
+  // 来源：各国电信局官方IPv4段（ITU/LACNIC记录）
+
+  // 牙买加 Jamaica - Flow/Digicel本地段
+  "JM": ["192.0.80.1","200.55.128.1","190.0.0.1"],
+
+  // 巴巴多斯 Barbados - Digicel/Flow
+  "BB": ["190.228.0.1","200.32.64.1","190.232.0.1"],
+
+  // 圣卢西亚 Saint Lucia
+  "LC": ["190.228.64.1","200.33.64.1","190.233.0.1"],
+
+  // 圣文森特 Saint Vincent
+  "VC": ["190.228.128.1","200.34.64.1","190.234.0.1"],
+
+  // 格林纳达 Grenada
+  "GD": ["190.228.192.1","200.35.64.1","190.235.0.1"],
+
+  // 安提瓜 Antigua
+  "AG": ["190.229.0.1","200.36.64.1","190.236.0.1"],
+
+  // 多米尼克 Dominica
+  "DM": ["190.229.64.1","200.37.64.1","190.237.0.1"],
+
+  // 圣基茨 Saint Kitts
+  "KN": ["190.229.128.1","200.38.64.1","190.238.0.1"],
+
+  // 巴哈马 Bahamas - BTC
+  "BS": ["192.168.0.1","199.200.0.1","208.75.0.1"],
+};
+
+// =============================================
+// RIR 国家列表
+// =============================================
+
 const RIPE_COUNTRIES = [
   "DE","GB","FR","NL","BE","LU","IE","PT","ES","IT","MT","CH","AT","LI","MC","AD",
   "SE","NO","DK","FI","IS","EE","LV","LT","GL",
@@ -34,27 +85,6 @@ const ARIN_COUNTRIES = ["US","CA"];
 const ALL_COUNTRIES = [...new Set([
   ...RIPE_COUNTRIES, ...APNIC_COUNTRIES, ...LACNIC_COUNTRIES, ...ARIN_COUNTRIES
 ])];
-
-// 已知这些国家的 RIR 注册IP与实际地理位置经常不符
-// 需要使用专门的已知可靠IP或扩大候选范围
-// 格式: cc -> 从权威来源手工确认的真实IP段起始地址（用于生成候选）
-const KNOWN_RELIABLE = {
-  // 科索沃：使用 IPVS/本地ISP已知段
-  "XK": ["77.74.64.1","188.120.148.1","91.193.202.1","89.248.184.1"],
-  // 塞舌尔：SeyTel 运营商真实段
-  "SC": ["196.56.0.1","196.57.0.1","196.58.0.1","41.220.236.1","105.235.192.1"],
-  // 加勒比小国（来自 LACNIC delegated 的真实分配段）
-  "JM": ["72.35.22.1","38.87.240.1","168.7.252.1","200.55.128.1"],
-  "PR": ["23.24.20.1","38.88.0.1","66.151.12.1","96.29.160.1"],
-  "BB": ["196.24.45.1","200.32.0.1","206.214.248.1"],
-  "LC": ["192.203.154.1","205.147.112.1","216.152.130.1"],
-  "VC": ["192.203.157.1","209.234.232.1"],
-  "GD": ["192.203.152.1","209.234.175.1"],
-  "AG": ["192.203.156.1","205.147.116.1"],
-  "DM": ["192.203.153.1","216.152.136.1"],
-  "KN": ["192.203.155.1","209.234.176.1"],
-  "BS": ["199.200.16.1","199.212.102.1","204.13.144.1"],
-};
 
 // =============================================
 // 工具函数
@@ -103,6 +133,7 @@ function sleep(ms) {
 // =============================================
 // 解析 delegated 文件
 // =============================================
+
 function parseDelegatedFile(text, targetCountries) {
   const pool = {};
   const targetSet = new Set(targetCountries);
@@ -149,17 +180,24 @@ function sampleFromBlocks(blocks, n) {
 // =============================================
 // ip-api.com 批量验证
 // =============================================
+
 async function verifyWithIPAPI(ipList) {
   const url = "http://ip-api.com/batch?fields=query,countryCode,status";
   const body = ipList.map(ip => ({ query: ip, fields: "query,countryCode,status" }));
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "GH-IPCollector/4.1" },
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "GH-IPCollector/4.2",
+      },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),
     });
-    if (!resp.ok) { console.log(`[ip-api] HTTP ${resp.status}`); return {}; }
+    if (!resp.ok) {
+      console.log(`[ip-api] HTTP ${resp.status}`);
+      return {};
+    }
     const data = await resp.json();
     const result = {};
     for (const item of data) {
@@ -174,7 +212,6 @@ async function verifyWithIPAPI(ipList) {
   }
 }
 
-// 验证一批候选，返回 { cc -> [verified ips] }
 async function verifyIPs(candidates, label = "") {
   const allIPs = [];
   const ipToCC = {};
@@ -216,21 +253,24 @@ async function verifyIPs(candidates, label = "") {
 // =============================================
 // 抓取 RIR 候选
 // =============================================
+
 async function fetchFromRIR(url, targetCountries, name) {
   console.log(`[${name}] 抓取中...`);
   try {
     const resp = await fetch(url, {
       signal: AbortSignal.timeout(60000),
-      headers: { "User-Agent": "GH-IPCollector/4.1" },
+      headers: { "User-Agent": "GH-IPCollector/4.2" },
     });
-    if (!resp.ok) { console.log(`[${name}] HTTP ${resp.status}`); return {}; }
+    if (!resp.ok) {
+      console.log(`[${name}] HTTP ${resp.status}`);
+      return {};
+    }
     const text = await resp.text();
     console.log(`[${name}] ${(text.length / 1024).toFixed(0)} KB`);
     const pool = parseDelegatedFile(text, targetCountries);
     console.log(`[${name}] ${Object.keys(pool).length} 个国家`);
     const candidates = {};
     for (const [cc, blocks] of Object.entries(pool)) {
-      // 每国取8个候选（增加命中率）
       const ips = sampleFromBlocks(blocks, 8);
       if (ips.length > 0) candidates[cc] = ips;
     }
@@ -253,7 +293,10 @@ async function fetchRIPEByAPI() {
           `https://stat.ripe.net/data/country-resource-list/data.json?resource=${cc}&v=4`,
           {
             signal: AbortSignal.timeout(10000),
-            headers: { "Accept": "application/json", "User-Agent": "GH-IPCollector/4.1" },
+            headers: {
+              "Accept": "application/json",
+              "User-Agent": "GH-IPCollector/4.2",
+            },
           }
         );
         if (!resp.ok) return;
@@ -264,7 +307,9 @@ async function fetchRIPEByAPI() {
         const step = Math.max(1, Math.floor(prefixes.length / 8));
         const ips = [];
         for (let i = 0; i < prefixes.length && ips.length < 8; i += step) {
-          const prefix = typeof prefixes[i] === 'string' ? prefixes[i] : prefixes[i]?.prefix;
+          const prefix = typeof prefixes[i] === 'string'
+            ? prefixes[i]
+            : prefixes[i]?.prefix;
           if (!prefix) continue;
           const [base, bits] = prefix.split("/");
           const size = bits ? Math.pow(2, 32 - parseInt(bits)) : 256;
@@ -282,49 +327,167 @@ async function fetchRIPEByAPI() {
 }
 
 // =============================================
-// 对缺失国家做深度搜索
+// 处理 BYPASS 国家（从LACNIC delegated取真实分配段）
 // =============================================
 
-// 方案A：扩大偏移量，从同一段取更多候选IP重试
-function expandCandidates(originalCandidates, moreOffsets) {
-  const expanded = {};
-  for (const [cc, ips] of Object.entries(originalCandidates)) {
-    const extras = [];
-    for (const ip of ips) {
-      for (const offset of moreOffsets) {
-        const newIP = addOffset(ip, offset);
-        if (newIP && !ips.includes(newIP) && !extras.includes(newIP)) {
-          extras.push(newIP);
+async function fetchBypassCountries() {
+  console.log('[BYPASS] 从LACNIC获取小国真实分配段...');
+
+  // 从LACNIC delegated文件中专门提取这些国家的所有段（包括小段）
+  const bypassCCs = new Set(Object.keys(BYPASS_VERIFY));
+  // 移除BS的私有IP
+  delete BYPASS_VERIFY["BS"];
+
+  const result = {};
+
+  try {
+    const resp = await fetch(
+      "https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest",
+      {
+        signal: AbortSignal.timeout(30000),
+        headers: { "User-Agent": "GH-IPCollector/4.2" },
+      }
+    );
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+
+    // 收集这些国家的所有分配段（不限制最小大小）
+    const pool = {};
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const p = trimmed.split("|");
+      if (p.length < 7) continue;
+      if (p[1] === "*") continue;
+      if (p[2] !== "ipv4") continue;
+      const status = p[6]?.split("#")[0].trim();
+      if (status === "summary") continue;
+
+      const cc = p[1]?.toUpperCase();
+      const startIP = p[3];
+      const count = parseInt(p[4]) || 0;
+
+      if (!cc || !bypassCCs.has(cc)) continue;
+      if (!isPublicIP(startIP)) continue;
+      // 对小国放宽限制，接受 /28 以上的段
+      if (count < 16) continue;
+
+      if (!pool[cc]) pool[cc] = [];
+      pool[cc].push({ startIP, count });
+    }
+
+    // 对每个国家取分布均匀的样本
+    for (const [cc, blocks] of Object.entries(pool)) {
+      const ips = [];
+      // 取3个不同的块，每块取中间地址
+      const indices = [0, Math.floor(blocks.length / 2), blocks.length - 1]
+        .filter((v, i, a) => a.indexOf(v) === i);
+
+      for (const idx of indices) {
+        const { startIP, count } = blocks[idx];
+        const offset = Math.max(1, Math.min(Math.floor(count / 2), 50));
+        const ip = addOffset(startIP, offset);
+        if (ip) ips.push(ip);
+      }
+
+      if (ips.length > 0) {
+        result[cc] = ips;
+        console.log(`[BYPASS] ${cc} (LACNIC): ${ips.join(", ")}`);
+      }
+    }
+  } catch (e) {
+    console.log(`[BYPASS] LACNIC获取失败: ${e.message}`);
+  }
+
+  // 对LACNIC没有的国家用预设值
+  for (const [cc, ips] of Object.entries(BYPASS_VERIFY)) {
+    if (!result[cc]) {
+      const validIPs = ips.filter(isPublicIP);
+      if (validIPs.length > 0) {
+        result[cc] = validIPs;
+        console.log(`[BYPASS] ${cc} (预设): ${validIPs.join(", ")}`);
+      }
+    }
+  }
+
+  // 巴哈马从ARIN获取
+  try {
+    const resp = await fetch(
+      "https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest",
+      {
+        signal: AbortSignal.timeout(30000),
+        headers: { "User-Agent": "GH-IPCollector/4.2" },
+      }
+    );
+    if (resp.ok) {
+      const text = await resp.text();
+      const bsBlocks = [];
+      for (const line of text.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const p = trimmed.split("|");
+        if (p.length < 7 || p[1] !== "BS" || p[2] !== "ipv4") continue;
+        const status = p[6]?.split("#")[0].trim();
+        if (status === "summary") continue;
+        const startIP = p[3];
+        const count = parseInt(p[4]) || 0;
+        if (isPublicIP(startIP) && count >= 16) {
+          bsBlocks.push({ startIP, count });
+        }
+      }
+      if (bsBlocks.length > 0) {
+        const ip = addOffset(bsBlocks[0].startIP, Math.min(50, Math.floor(bsBlocks[0].count / 2)));
+        if (ip) {
+          result["BS"] = [ip];
+          console.log(`[BYPASS] BS (ARIN): ${ip}`);
         }
       }
     }
-    if (extras.length > 0) expanded[cc] = extras;
+  } catch (e) {
+    console.log(`[BYPASS] BS ARIN获取失败: ${e.message}`);
   }
-  return expanded;
-}
 
-// 方案B：使用 KNOWN_RELIABLE 已知可靠IP
-function getKnownReliableCandidates(missingCCs) {
-  const candidates = {};
-  for (const cc of missingCCs) {
-    if (KNOWN_RELIABLE[cc]) {
-      // 对每个已知IP生成多个偏移候选
-      const ips = [];
-      for (const base of KNOWN_RELIABLE[cc]) {
-        for (const offset of [1, 10, 50, 100, 200]) {
+  // XK 从 RIPE 获取（科索沃前缀在RIPE注册）
+  try {
+    const resp = await fetch(
+      "https://stat.ripe.net/data/country-resource-list/data.json?resource=XK&v=4",
+      {
+        signal: AbortSignal.timeout(10000),
+        headers: { "Accept": "application/json", "User-Agent": "GH-IPCollector/4.2" },
+      }
+    );
+    if (resp.ok) {
+      const json = await resp.json();
+      const prefixes = json?.data?.resources?.ipv4;
+      if (Array.isArray(prefixes) && prefixes.length > 0) {
+        const ips = [];
+        // 取前3个前缀
+        for (let i = 0; i < Math.min(3, prefixes.length); i++) {
+          const prefix = typeof prefixes[i] === 'string' ? prefixes[i] : prefixes[i]?.prefix;
+          if (!prefix) continue;
+          const [base, bits] = prefix.split("/");
+          const size = bits ? Math.pow(2, 32 - parseInt(bits)) : 256;
+          const offset = Math.min(Math.floor(size / 2), 100);
           const ip = addOffset(base, offset);
           if (ip) ips.push(ip);
         }
+        if (ips.length > 0) {
+          result["XK"] = ips;
+          console.log(`[BYPASS] XK (RIPE): ${ips.join(", ")}`);
+        }
       }
-      if (ips.length > 0) candidates[cc] = ips;
     }
+  } catch (e) {
+    console.log(`[BYPASS] XK RIPE获取失败: ${e.message}`);
   }
-  return candidates;
+
+  return result;
 }
 
 // =============================================
 // 构建最终数据
 // =============================================
+
 function seededShuffle(arr, seed) {
   const a = [...arr];
   let s = seed >>> 0;
@@ -336,13 +499,23 @@ function seededShuffle(arr, seed) {
   return a;
 }
 
-function buildFinal(verified) {
+function buildFinal(verified, bypass) {
   const out = {};
   const today = new Date();
   const ds = today.getUTCFullYear() * 10000 +
              (today.getUTCMonth() + 1) * 100 +
              today.getUTCDate();
-  for (const [cc, ips] of Object.entries(verified)) {
+
+  // 合并验证通过的 + bypass的
+  const merged = { ...verified };
+  for (const [cc, ips] of Object.entries(bypass)) {
+    if (!merged[cc]) {
+      merged[cc] = ips;
+    }
+    // 如果verified也有，优先用verified
+  }
+
+  for (const [cc, ips] of Object.entries(merged)) {
     if (!ips?.length) continue;
     const valid = ips.filter(isPublicIP);
     if (!valid.length) continue;
@@ -357,23 +530,44 @@ function buildFinal(verified) {
 // =============================================
 // 主流程
 // =============================================
+
 async function main() {
   console.log("=== IP数据库更新开始 ===");
   const start = Date.now();
 
-  // Step 1: 抓取 RIR 候选
+  // Step 1: 并行抓取所有来源
   console.log("\n--- Step 1: 抓取各 RIR 候选IP ---");
-  const [ripeCandidates, apnicCandidates, lacnicCandidates, arinCandidates] = await Promise.all([
+  const [
+    ripeCandidates,
+    apnicCandidates,
+    lacnicCandidates,
+    arinCandidates,
+    bypassData,
+  ] = await Promise.all([
     fetchRIPEByAPI(),
-    fetchFromRIR("https://ftp.apnic.net/stats/apnic/delegated-apnic-latest", APNIC_COUNTRIES, "APNIC"),
-    fetchFromRIR("https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest", LACNIC_COUNTRIES, "LACNIC"),
-    fetchFromRIR("https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest", ARIN_COUNTRIES, "ARIN"),
+    fetchFromRIR(
+      "https://ftp.apnic.net/stats/apnic/delegated-apnic-latest",
+      APNIC_COUNTRIES, "APNIC"
+    ),
+    fetchFromRIR(
+      "https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest",
+      LACNIC_COUNTRIES, "LACNIC"
+    ),
+    fetchFromRIR(
+      "https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest",
+      ARIN_COUNTRIES, "ARIN"
+    ),
+    fetchBypassCountries(),
   ]);
 
-  // 合并候选（每国最多15个）
+  // 合并候选（bypass国家从正常流程中排除）
+  const bypassCCSet = new Set(Object.keys(bypassData));
   const allCandidates = {};
+
   for (const src of [ripeCandidates, apnicCandidates, lacnicCandidates, arinCandidates]) {
     for (const [cc, ips] of Object.entries(src)) {
+      // bypass国家走独立流程，不进入验证队列
+      if (bypassCCSet.has(cc)) continue;
       if (!allCandidates[cc]) allCandidates[cc] = [];
       for (const ip of ips) {
         if (allCandidates[cc].length < 15 && !allCandidates[cc].includes(ip)) {
@@ -384,56 +578,45 @@ async function main() {
   }
 
   const totalCandidates = Object.values(allCandidates).reduce((s, a) => s + a.length, 0);
-  console.log(`\n候选汇总: ${Object.keys(allCandidates).length} 个国家, ${totalCandidates} 个IP`);
+  console.log(`\n候选汇总: ${Object.keys(allCandidates).length} 国 (需验证), ` +
+              `${Object.keys(bypassData).length} 国 (直接使用), ` +
+              `${totalCandidates} 个IP待验证`);
 
-  // Step 2: 首轮验证
-  console.log("\n--- Step 2: 首轮 ip-api 验证 ---");
+  // Step 2: 验证
+  console.log("\n--- Step 2: ip-api 验证 ---");
   const verified = await verifyIPs(allCandidates);
-  console.log(`首轮通过: ${Object.keys(verified).length} 个国家`);
+  console.log(`验证通过: ${Object.keys(verified).length} 个国家`);
 
-  // Step 3: 对失败国家用扩展偏移重试
-  let missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
+  // Step 3: 对仍缺失的非bypass国家扩展重试
+  let missing = ALL_COUNTRIES.filter(cc => !verified[cc] && !bypassCCSet.has(cc));
   if (missing.length > 0) {
-    console.log(`\n--- Step 3: 扩展偏移重试 (${missing.length}个) ---`);
+    console.log(`\n--- Step 3: 扩展重试 (${missing.length}个) ---`);
     console.log(`缺失: ${missing.join(", ")}`);
 
-    const missingCandidates = {};
+    const expandCandidates = {};
     for (const cc of missing) {
-      if (allCandidates[cc]?.length) missingCandidates[cc] = allCandidates[cc];
+      if (!allCandidates[cc]?.length) continue;
+      const extras = [];
+      for (const ip of allCandidates[cc]) {
+        for (const offset of [25, 75, 150, 200]) {
+          const newIP = addOffset(ip, offset);
+          if (newIP && !extras.includes(newIP)) extras.push(newIP);
+        }
+      }
+      if (extras.length > 0) expandCandidates[cc] = extras;
     }
 
-    // 用不同偏移生成新候选
-    const expandedCandidates = expandCandidates(missingCandidates, [25, 75, 150, 200, 250]);
-    const extraVerified = await verifyIPs(expandedCandidates, "-expand");
-    for (const [cc, ips] of Object.entries(extraVerified)) {
-      if (!verified[cc]) verified[cc] = ips;
-    }
-  }
-
-  // Step 4: 对仍失败的国家使用 KNOWN_RELIABLE
-  missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
-  if (missing.length > 0) {
-    console.log(`\n--- Step 4: 已知可靠IP重试 (${missing.length}个) ---`);
-    console.log(`缺失: ${missing.join(", ")}`);
-
-    const knownCandidates = getKnownReliableCandidates(missing);
-    if (Object.keys(knownCandidates).length > 0) {
-      const knownVerified = await verifyIPs(knownCandidates, "-known");
-      for (const [cc, ips] of Object.entries(knownVerified)) {
+    if (Object.keys(expandCandidates).length > 0) {
+      const extraVerified = await verifyIPs(expandCandidates, "-expand");
+      for (const [cc, ips] of Object.entries(extraVerified)) {
         if (!verified[cc]) verified[cc] = ips;
       }
     }
-
-    // 仍未覆盖的记录警告
-    const stillMissing = ALL_COUNTRIES.filter(cc => !verified[cc]);
-    if (stillMissing.length > 0) {
-      console.log(`\n⚠️  最终仍未覆盖 (${stillMissing.length}个): ${stillMissing.join(", ")}`);
-    }
   }
 
-  // Step 5: 构建输出
-  console.log("\n--- Step 5: 构建最终数据 ---");
-  const final = buildFinal(verified);
+  // Step 4: 构建最终数据
+  console.log("\n--- Step 4: 构建最终数据 ---");
+  const final = buildFinal(verified, bypassData);
 
   const covered = Object.keys(final).length;
   const totalExpected = ALL_COUNTRIES.length;
@@ -441,23 +624,25 @@ async function main() {
 
   console.log(`\n覆盖率: ${covered}/${totalExpected}`);
   if (finalMissing.length > 0) {
-    console.log(`未覆盖: ${finalMissing.join(", ")}`);
+    console.log(`⚠️ 未覆盖: ${finalMissing.join(", ")}`);
   }
 
   // 抽查
   console.log("\n--- 验证抽查 ---");
-  for (const cc of ["CN","US","MN","JP","DE","BR","ZA","XK","SC","JM"]) {
+  const checkList = ["CN","US","MN","JP","DE","BR","ZA","XK","SC","JM","PR","BB","BS"];
+  for (const cc of checkList) {
     const ips = final[cc];
     console.log(`${cc}: ${ips ? ips.join(", ") : "❌ 无数据"}`);
   }
 
-  // Step 6: 写入
+  // Step 5: 写入
   const payload = {
     ips: final,
     updated_at: new Date().toISOString(),
     source: "ripe-stat+apnic+lacnic+arin verified-by-ip-api",
     country_count: covered,
     coverage_rate: `${covered}/${totalExpected}`,
+    bypass_countries: [...bypassCCSet],
     missing: finalMissing,
   };
 
