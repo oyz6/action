@@ -3,7 +3,7 @@ const path = require('path');
 const maxmind = require('maxmind');
 
 // =============================================
-// RIR 国家列表（覆盖所有主权国家与地区）
+// RIR 国家列表
 // =============================================
 
 const RIPE_COUNTRIES = [
@@ -36,7 +36,6 @@ const LACNIC_COUNTRIES = [
 ];
 
 const ARIN_COUNTRIES = ["US","CA"];
-
 const AFRINIC_COUNTRIES = [];
 
 const ALL_COUNTRIES = [...new Set([
@@ -50,7 +49,8 @@ const TERRITORIES_FALLBACK = {
   "VI": ["208.84.136.0/22"],
 };
 
-const XK_HARDCODED = ["217.198.64.1", "77.74.64.1", "188.120.148.1"];
+// 仅作为最后兜底，且已知 API 能正确识别这个 IP
+const XK_HARDCODED_FALLBACK = ["46.99.0.1"];
 
 // =============================================
 // 工具函数
@@ -108,16 +108,13 @@ function parseDelegatedFile(text, targetCountries) {
     if (p[2] !== "ipv4") continue;
     const status = p[6]?.split("#")[0].trim();
     if (status === "summary") continue;
-
     const cc = p[1]?.toUpperCase();
     const startIP = p[3];
     const count = parseInt(p[4]) || 0;
-
     if (!cc || cc.length !== 2) continue;
     if (!targetSet.has(cc)) continue;
     if (!isPublicIP(startIP)) continue;
     if (count < 256) continue;
-
     if (!pool[cc]) pool[cc] = [];
     if (pool[cc].length < 50) {
       pool[cc].push({ startIP, count });
@@ -166,7 +163,7 @@ async function verifyWithMaxMind(ipList) {
 }
 
 // =============================================
-// mra8-api 单 IP 查询
+// mra8-api 查询
 // =============================================
 
 async function queryMRA8(ip) {
@@ -183,35 +180,7 @@ async function queryMRA8(ip) {
 }
 
 // =============================================
-// 从 RIPE 缓存中提取 XK 大量候选 IP
-// =============================================
-
-function getXKCandidatesFromRIPE() {
-  const ripeText = RIR_RAW_TEXT["RIPE"];
-  if (!ripeText) return [];
-  const ips = [];
-  const lines = ripeText.split('\n');
-  for (const line of lines) {
-    if (line.startsWith('#') || line.trim() === '') continue;
-    const p = line.split('|');
-    if (p.length < 7 || p[1] !== "XK" || p[2] !== "ipv4") continue;
-    const status = p[6]?.split('#')[0].trim();
-    if (status === "summary") continue;
-    const startIP = p[3];
-    const count = parseInt(p[4]) || 0;
-    if (!isPublicIP(startIP) || count < 256) continue;
-    const first = addOffset(startIP, 1);
-    const mid = addOffset(startIP, Math.floor(count / 2));
-    const last = addOffset(startIP, count - 2);
-    for (const ip of [first, mid, last]) {
-      if (ip && !ips.includes(ip)) ips.push(ip);
-    }
-  }
-  return ips.slice(0, 30);
-}
-
-// =============================================
-// 自动 Bypass：从已缓存的 RIR 原始文本提取 IP
+// 自动 Bypass 与 XK 特殊扫描
 // =============================================
 
 let RIR_RAW_TEXT = {};
@@ -248,6 +217,36 @@ function getTerritoryFallbackIPs(cc) {
   return ips;
 }
 
+// 专门为 XK 生成大量候选 IP（来自 RIPE 中的 XK 分配段）
+function getXKCandidatesFromRIPE() {
+  const ripeText = RIR_RAW_TEXT["RIPE"];
+  if (!ripeText) return [];
+  const ips = [];
+  const lines = ripeText.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('#') || line.trim() === '') continue;
+    const p = line.split('|');
+    if (p.length < 7 || p[1] !== "XK" || p[2] !== "ipv4") continue;
+    const status = p[6]?.split('#')[0].trim();
+    if (status === "summary") continue;
+    const startIP = p[3];
+    const count = parseInt(p[4]) || 0;
+    if (!isPublicIP(startIP) || count < 256) continue;  // 只扫描 /24 以上段
+    // 每个段取首、1/4、1/2、3/4、尾 五个点
+    const positions = [
+      addOffset(startIP, 1),
+      addOffset(startIP, Math.floor(count / 4)),
+      addOffset(startIP, Math.floor(count / 2)),
+      addOffset(startIP, Math.floor(count * 3 / 4)),
+      addOffset(startIP, count - 2),
+    ];
+    for (const ip of positions) {
+      if (ip && !ips.includes(ip)) ips.push(ip);
+    }
+  }
+  return ips.slice(0, 50);   // 最多 50 个候选，足够覆盖
+}
+
 // =============================================
 // 抓取 RIR 候选
 // =============================================
@@ -281,7 +280,7 @@ async function fetchFromRIR(url, targetCountries, name) {
 }
 
 // =============================================
-// 验证流程（批量 MaxMind）
+// 验证流程
 // =============================================
 
 async function verifyIPs(candidates, label = "") {
@@ -401,7 +400,7 @@ async function main() {
   const verified = await verifyIPs(allCandidates);
   console.log(`验证通过: ${Object.keys(verified).length} 个国家`);
 
-  // Step 3: 自动 Bypass 并二次验证（仅丢弃明确错误的国家代码）
+  // Step 3: 自动 Bypass 并二次验证
   let missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
   for (const cc of Object.keys(TERRITORIES_FALLBACK)) {
     if (!verified[cc]) missing.push(cc);
@@ -415,41 +414,32 @@ async function main() {
       if (bypassIPs.length === 0) {
         bypassIPs = getTerritoryFallbackIPs(cc);
       }
-      if (bypassIPs.length === 0 && cc === "XK") {
-        bypassIPs = XK_HARDCODED.filter(isPublicIP);
+
+      // 对 XK 特殊处理：不依赖常规 bypass，直接启动增强扫描
+      if (cc === "XK") {
+        console.log("[BYPASS] XK 启动增强扫描...");
+        bypassIPs = getXKCandidatesFromRIPE();
+        if (bypassIPs.length === 0) {
+          // 扫描不到，使用已知的硬编码
+          bypassIPs = XK_HARDCODED_FALLBACK.filter(isPublicIP);
+        }
       }
 
-      // 二次验证：仅当 API 明确返回不同国家时才丢弃
       if (bypassIPs.length > 0) {
         const confirmedIPs = [];
         for (const ip of bypassIPs) {
           const apiCountry = await queryMRA8(ip);
           if (apiCountry === null) {
-            // API 无结果，信任 RIR 来源，保留
-            confirmedIPs.push(ip);
+            // 对于 XK，API 无结果时不保留，因为我们需要明确的 XK 确认
+            if (cc !== "XK") confirmedIPs.push(ip);
           } else if (apiCountry === cc) {
             confirmedIPs.push(ip);
           } else {
+            // 如果 API 返回其他国家，对于 XK 我们舍弃（包括返回 RS/AL 等）
             console.log(`[BYPASS] 🔍 ${cc} ${ip} 实际归属 ${apiCountry}，丢弃`);
           }
         }
         bypassIPs = confirmedIPs;
-      }
-
-      // 科索沃特殊扫描：如果仍为空，尝试从 RIPE 大量候选
-      if (cc === "XK" && bypassIPs.length === 0) {
-        console.log("[BYPASS] XK 所有候选均未通过，启动增强扫描...");
-        const candidates = getXKCandidatesFromRIPE();
-        const found = [];
-        for (const ip of candidates) {
-          const apiCountry = await queryMRA8(ip);
-          if (apiCountry === "XK") {
-            found.push(ip);
-            console.log(`[BYPASS] XK 找到有效IP: ${ip}`);
-            if (found.length >= 2) break;
-          }
-        }
-        bypassIPs = found;
       }
 
       if (bypassIPs.length > 0) {
