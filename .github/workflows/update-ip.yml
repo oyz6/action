@@ -23,17 +23,20 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'      # 使用当前 LTS 版本，避免 Node 20 弃用警告
 
-      - name: 缓存 DB-IP 数据库
-        uses: actions/cache@v3
+      - name: 缓存 npm 依赖
+        uses: actions/cache@v4
         with:
-          path: dbip-cache.csv
-          key: dbip-${{ runner.os }}-${{ github.run_date }}
-          restore-keys: dbip-${{ runner.os }}
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
+
+      - name: 安装依赖
+        run: npm ci
 
       - name: 执行更新脚本
-        run: node scripts/update-db.js
+        run: node scripts/ip/update-db.js
 
       - name: 检查生成文件
         run: ls -la data/ip-database.json
@@ -42,18 +45,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 1. 如果 Release 不存在，则创建一个（tag 固定为 ip-database）
+          # 如果 Release 不存在则创建（tag 固定为 ip-database）
           if ! gh release view ip-database > /dev/null 2>&1; then
             echo "Release 不存在，正在创建..."
             gh release create ip-database \
               --title "IP Database" \
-              --notes "每日自动更新的全球 IP 数据库（196个国家）" \
+              --notes "每日自动更新的全球 IP 数据库（197个国家）" \
               --latest
           else
             echo "Release 已存在，将覆盖同名资产"
           fi
 
-          # 2. 上传文件并覆盖同名资产（gh 2.21.0+ 支持 --clobber）
+          # 上传文件并覆盖同名资产
           gh release upload ip-database data/ip-database.json --clobber
 
       - name: 失败时通知
