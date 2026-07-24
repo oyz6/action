@@ -36,6 +36,8 @@ jobs:
         run: npm install
 
       - name: 执行更新脚本
+        env:
+          NODE_PATH: ${{ github.workspace }}/scripts/ip/node_modules
         run: node scripts/ip/update-db.js
 
       - name: 检查生成文件
