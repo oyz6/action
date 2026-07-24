@@ -37,7 +37,7 @@ jobs:
           EOF
           npm install
 
-      - name: 下载 GeoLite2 国家数据库（P3TERX 镜像，无需密钥）
+      - name: 下载 GeoLite2 国家数据库
         run: |
           mkdir -p data
           DOWNLOAD_URL=$(curl -s https://api.github.com/repos/P3TERX/GeoLite.mmdb/releases/latest \
