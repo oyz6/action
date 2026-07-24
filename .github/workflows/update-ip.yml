@@ -22,23 +22,33 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
-      - name: 缓存 npm 依赖（仅缓存 ~/.npm 加速下载）
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('scripts/ip/package.json') }}
-          restore-keys: npm-${{ runner.os }}-
+      - name: 临时生成 package.json 并安装依赖
+        run: |
+          cat > package.json << 'EOF'
+          {
+            "name": "ip-db-updater",
+            "private": true,
+            "dependencies": {
+              "maxmind": "^4.3.23"
+            }
+          }
+          EOF
+          npm install
 
-      - name: 安装依赖
-        working-directory: scripts/ip
-        run: npm install
+      - name: 下载 MaxMind GeoLite2 数据库
+        env:
+          MAXMIND_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+        run: |
+          mkdir -p data
+          curl -s -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=${MAXMIND_KEY}&suffix=tar.gz" -o geoip.tar.gz
+          tar -xzf geoip.tar.gz --strip-components=1
+          mv GeoLite2-Country.mmdb data/
+          rm geoip.tar.gz
 
       - name: 执行更新脚本
-        env:
-          NODE_PATH: ${{ github.workspace }}/scripts/ip/node_modules
-        run: node scripts/ip/update-db.js
+        run: node scripts/update-db.js
 
       - name: 检查生成文件
         run: ls -la data/ip-database.json
@@ -51,7 +61,7 @@ jobs:
             echo "Release 不存在，正在创建..."
             gh release create ip-database \
               --title "IP Database" \
-              --notes "每日自动更新的全球 IP 数据库（197个国家）" \
+              --notes "每日自动更新的全球 IP 数据库" \
               --latest
           else
             echo "Release 已存在，将覆盖同名资产"
