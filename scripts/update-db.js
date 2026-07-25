@@ -49,30 +49,118 @@ const TERRITORIES_FALLBACK = {
   "VI": ["208.84.136.0/22"],
 };
 
+// 仅作为最后兜底，且已知 API 能正确识别这个 IP
 const XK_HARDCODED_FALLBACK = ["46.99.0.1"];
 
 // =============================================
 // 工具函数
 // =============================================
 
-function isPublicIP(ip) { /* 同前，不变 */ }
-function addOffset(ip, offset) { /* 同前 */ }
-function chunk(arr, size) { /* 同前 */ }
+function isPublicIP(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some(x => isNaN(x) || x < 0 || x > 255)) return false;
+  const [a, b, c] = p;
+  if (a === 0) return false;
+  if (a === 10) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false;
+  if (a === 127) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 0 && c === 2) return false;
+  if (a === 192 && b === 168) return false;
+  if (a === 198 && (b === 18 || b === 19)) return false;
+  if (a === 198 && b === 51 && c === 100) return false;
+  if (a === 203 && b === 0 && c === 113) return false;
+  if (a >= 224) return false;
+  return true;
+}
+
+function addOffset(ip, offset) {
+  if (!ip) return null;
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some(isNaN)) return null;
+  let n = ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0;
+  n = (n + offset) >>> 0;
+  const r = `${(n>>>24)&255}.${(n>>>16)&255}.${(n>>>8)&255}.${n&255}`;
+  return isPublicIP(r) ? r : null;
+}
+
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 // =============================================
 // 解析 delegated 文件
 // =============================================
 
-function parseDelegatedFile(text, targetCountries) { /* 同前 */ }
-function sampleFromBlocks(blocks, n) { /* 同前 */ }
+function parseDelegatedFile(text, targetCountries) {
+  const pool = {};
+  const targetSet = new Set(targetCountries);
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const p = trimmed.split("|");
+    if (p.length < 7) continue;
+    if (p[1] === "*") continue;
+    if (p[2] !== "ipv4") continue;
+    const status = p[6]?.split("#")[0].trim();
+    if (status === "summary") continue;
+    const cc = p[1]?.toUpperCase();
+    const startIP = p[3];
+    const count = parseInt(p[4]) || 0;
+    if (!cc || cc.length !== 2) continue;
+    if (!targetSet.has(cc)) continue;
+    if (!isPublicIP(startIP)) continue;
+    if (count < 256) continue;
+    if (!pool[cc]) pool[cc] = [];
+    if (pool[cc].length < 50) {
+      pool[cc].push({ startIP, count });
+    }
+  }
+  return pool;
+}
+
+function sampleFromBlocks(blocks, n) {
+  const ips = [];
+  const step = Math.max(1, Math.floor(blocks.length / n));
+  for (let i = 0; i < blocks.length && ips.length < n; i += step) {
+    const { startIP, count } = blocks[i];
+    const offset = Math.min(Math.floor(count / 2), 100);
+    const ip = addOffset(startIP, offset);
+    if (ip) ips.push(ip);
+  }
+  return ips;
+}
 
 // =============================================
 // MaxMind 本地验证
 // =============================================
 
 let lookupDb = null;
-async function initMaxMind() { /* 同前 */ }
-async function verifyWithMaxMind(ipList) { /* 同前 */ }
+async function initMaxMind() {
+  if (!lookupDb) {
+    const dbPath = path.join(process.cwd(), 'data', 'GeoLite2-Country.mmdb');
+    lookupDb = await maxmind.open(dbPath);
+  }
+  return lookupDb;
+}
+
+async function verifyWithMaxMind(ipList) {
+  const db = await initMaxMind();
+  const result = {};
+  for (const ip of ipList) {
+    try {
+      const geo = db.get(ip);
+      if (geo?.country?.iso_code) {
+        result[ip] = geo.country.iso_code.toUpperCase();
+      }
+    } catch (e) { /* ignore */ }
+  }
+  return result;
+}
 
 // =============================================
 // mra8-api 查询
@@ -97,29 +185,170 @@ async function queryMRA8(ip) {
 
 let RIR_RAW_TEXT = {};
 
-function getAutoBypassIPs(cc) { /* 同前 */ }
+function getAutoBypassIPs(cc) {
+  const ips = [];
+  for (const [rir, text] of Object.entries(RIR_RAW_TEXT)) {
+    const lines = text.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('#') || line.trim() === '') continue;
+      const p = line.split('|');
+      if (p.length < 7 || p[1] !== cc || p[2] !== "ipv4") continue;
+      const status = p[6]?.split('#')[0].trim();
+      if (status === "summary") continue;
+      const startIP = p[3];
+      const count = parseInt(p[4]) || 0;
+      if (!isPublicIP(startIP) || count < 8) continue;
+      const mid = addOffset(startIP, Math.floor(count / 2));
+      if (mid && !ips.includes(mid)) ips.push(mid);
+    }
+  }
+  return [...new Set(ips)].slice(0, 5);
+}
 
-function getTerritoryFallbackIPs(cc) { /* 同前 */ }
+function getTerritoryFallbackIPs(cc) {
+  const prefixes = TERRITORIES_FALLBACK[cc] || [];
+  const ips = [];
+  for (const pfx of prefixes) {
+    const [base, bits] = pfx.split('/');
+    const size = Math.pow(2, 32 - parseInt(bits));
+    const ip = addOffset(base, Math.floor(size / 2));
+    if (ip) ips.push(ip);
+  }
+  return ips;
+}
 
-function getXKCandidatesFromRIPE() { /* 同前 */ }
+// 专门为 XK 生成大量候选 IP（来自 RIPE 中的 XK 分配段）
+function getXKCandidatesFromRIPE() {
+  const ripeText = RIR_RAW_TEXT["RIPE"];
+  if (!ripeText) return [];
+  const ips = [];
+  const lines = ripeText.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('#') || line.trim() === '') continue;
+    const p = line.split('|');
+    if (p.length < 7 || p[1] !== "XK" || p[2] !== "ipv4") continue;
+    const status = p[6]?.split('#')[0].trim();
+    if (status === "summary") continue;
+    const startIP = p[3];
+    const count = parseInt(p[4]) || 0;
+    if (!isPublicIP(startIP) || count < 256) continue;  // 只扫描 /24 以上段
+    // 每个段取首、1/4、1/2、3/4、尾 五个点
+    const positions = [
+      addOffset(startIP, 1),
+      addOffset(startIP, Math.floor(count / 4)),
+      addOffset(startIP, Math.floor(count / 2)),
+      addOffset(startIP, Math.floor(count * 3 / 4)),
+      addOffset(startIP, count - 2),
+    ];
+    for (const ip of positions) {
+      if (ip && !ips.includes(ip)) ips.push(ip);
+    }
+  }
+  return ips.slice(0, 50);   // 最多 50 个候选，足够覆盖
+}
 
 // =============================================
 // 抓取 RIR 候选
 // =============================================
 
-async function fetchFromRIR(url, targetCountries, name) { /* 同前 */ }
+async function fetchFromRIR(url, targetCountries, name) {
+  console.log(`[${name}] 抓取中...`);
+  try {
+    const resp = await fetch(url, {
+      signal: AbortSignal.timeout(60000),
+      headers: { "User-Agent": "GH-IPCollector/5.0" },
+    });
+    if (!resp.ok) {
+      console.log(`[${name}] HTTP ${resp.status}`);
+      return { candidates: {}, raw: null };
+    }
+    const text = await resp.text();
+    console.log(`[${name}] ${(text.length / 1024).toFixed(0)} KB`);
+    RIR_RAW_TEXT[name] = text;
+    const pool = parseDelegatedFile(text, targetCountries);
+    console.log(`[${name}] ${Object.keys(pool).length} 个国家`);
+    const candidates = {};
+    for (const [cc, blocks] of Object.entries(pool)) {
+      const ips = sampleFromBlocks(blocks, 8);
+      if (ips.length > 0) candidates[cc] = ips;
+    }
+    return { candidates, raw: text };
+  } catch (e) {
+    console.error(`[${name}] 错误:`, e.message);
+    return { candidates: {}, raw: null };
+  }
+}
 
 // =============================================
 // 验证流程
 // =============================================
 
-async function verifyIPs(candidates, label = "") { /* 同前 */ }
+async function verifyIPs(candidates, label = "") {
+  const allIPs = [];
+  const ipToCC = {};
+  for (const [cc, ips] of Object.entries(candidates)) {
+    for (const ip of ips) {
+      if (!allIPs.includes(ip)) {
+        allIPs.push(ip);
+        ipToCC[ip] = cc;
+      }
+    }
+  }
+  if (allIPs.length === 0) return {};
+  console.log(`[Verify${label}] 共 ${allIPs.length} 个IP待验证...`);
+
+  const verified = {};
+  const batches = chunk(allIPs, 100);
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    console.log(`[Verify${label}] 批次 ${i + 1}/${batches.length} (${batch.length}个IP)...`);
+    const result = await verifyWithMaxMind(batch);
+    for (const [ip, actualCC] of Object.entries(result)) {
+      const expectedCC = ipToCC[ip];
+      if (actualCC === expectedCC) {
+        if (!verified[actualCC]) verified[actualCC] = [];
+        if (verified[actualCC].length < 10) verified[actualCC].push(ip);
+      } else {
+        console.log(`[Verify${label}] ❌ ${ip}: 期望${expectedCC} 实际${actualCC}`);
+      }
+    }
+  }
+  return verified;
+}
 
 // =============================================
 // 构建最终数据
 // =============================================
 
-function buildFinal(verified) { /* 同前 */ }
+function seededShuffle(arr, seed) {
+  const a = [...arr];
+  let s = seed >>> 0;
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildFinal(verified) {
+  const out = {};
+  const today = new Date();
+  const ds = today.getUTCFullYear() * 10000 +
+             (today.getUTCMonth() + 1) * 100 +
+             today.getUTCDate();
+
+  for (const [cc, ips] of Object.entries(verified)) {
+    if (!ips?.length) continue;
+    const valid = ips.filter(isPublicIP);
+    if (!valid.length) continue;
+    const seed = ds + cc.charCodeAt(0) * 31 + (cc.charCodeAt(1) || 0) * 17;
+    const shuffled = seededShuffle(valid, seed);
+    const take = Math.min(shuffled.length, Math.max(2, 2 + (seed % 3)));
+    out[cc] = shuffled.slice(0, take);
+  }
+  return out;
+}
 
 // =============================================
 // 主流程
