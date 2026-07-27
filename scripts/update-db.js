@@ -32,7 +32,6 @@ const LACNIC_COUNTRIES = [
 
 const ARIN_COUNTRIES = ["US","CA"];
 
-// 非洲国家单独列出，专用 AFRINIC 抓取
 const AFRINIC_COUNTRIES = [
   "EG","LY","TN","DZ","MA","MR","SD",
   "NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
@@ -55,7 +54,7 @@ const TERRITORIES_FALLBACK = {
 const XK_HARDCODED_FALLBACK = ["46.99.0.1"];
 
 // =============================================
-// 工具函数（保持不变）
+// 工具函数
 // =============================================
 
 function isPublicIP(ip) {
@@ -244,7 +243,7 @@ function getXKCandidatesFromRIPE() {
 }
 
 // =============================================
-// 抓取 RIR（增加 AFRINIC 多 URL 重试）
+// 抓取 RIR（使用稳定镜像）
 // =============================================
 
 async function fetchFromRIR(url, targetCountries, name) {
@@ -275,11 +274,12 @@ async function fetchFromRIR(url, targetCountries, name) {
   }
 }
 
+// AFRINIC 专用：多源重试，优先 APNIC 镜像
 async function fetchAFRINICWithRetry() {
   const urls = [
+    "http://ftp.apnic.net/stats/afrinic/delegated-afrinic-latest",   // APNIC 镜像，极稳定
     "https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-latest",
-    "https://www.afrinic.net/stats/afrinic/delegated-afrinic-latest",
-    "https://raw.githubusercontent.com/aviranzer/afrinic-ip-database/master/delegated-afrinic-latest",
+    "http://ftp.apnic.net/stats/afrinic/delegated-afrinic-latest",   // 备选（同上）
   ];
   for (const url of urls) {
     console.log(`[AFRINIC] 尝试 ${url}`);
@@ -287,8 +287,7 @@ async function fetchAFRINICWithRetry() {
     if (Object.keys(res.candidates).length > 0) return res;
     console.log(`[AFRINIC] 该源无有效数据，尝试下一个...`);
   }
-  // 全部失败，返回空
-  console.log("[AFRINIC] 所有源均失败，非洲国家将依赖硬编码后备");
+  console.log("[AFRINIC] 所有源均失败，非洲国家将依赖候选池或缺失");
   return { candidates: {}, raw: null };
 }
 
@@ -333,6 +332,17 @@ async function verifyIPs(candidates, label = "") {
 // 构建最终数据
 // =============================================
 
+function seededShuffle(arr, seed) {
+  const a = [...arr];
+  let s = seed >>> 0;
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function buildFinal(verified) {
   const out = {};
   const today = new Date();
@@ -350,17 +360,6 @@ function buildFinal(verified) {
     out[cc] = shuffled.slice(0, take);
   }
   return out;
-}
-
-function seededShuffle(arr, seed) {
-  const a = [...arr];
-  let s = seed >>> 0;
-  for (let i = a.length - 1; i > 0; i--) {
-    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
-    const j = s % (i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
 }
 
 // =============================================
@@ -423,7 +422,7 @@ async function main() {
       if (bypassIPs.length === 0) {
         bypassIPs = getTerritoryFallbackIPs(cc);
       }
-      // 通用后备：从候选池取（可能为空，但至少尝试）
+      // 通用候选池回退
       if (bypassIPs.length === 0 && cc !== "XK") {
         bypassIPs = allCandidates[cc] || [];
         if (bypassIPs.length > 0) {
@@ -445,7 +444,6 @@ async function main() {
         for (const ip of bypassIPs) {
           const apiCountry = await queryMRA8(ip);
           if (apiCountry === null) {
-            // 非 XK 时保留未知 IP
             if (cc !== "XK") confirmedIPs.push(ip);
           } else if (apiCountry === cc) {
             confirmedIPs.push(ip);
