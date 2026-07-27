@@ -32,6 +32,7 @@ const LACNIC_COUNTRIES = [
 
 const ARIN_COUNTRIES = ["US","CA"];
 
+// 非洲国家单独列出，专用 AFRINIC 抓取
 const AFRINIC_COUNTRIES = [
   "EG","LY","TN","DZ","MA","MR","SD",
   "NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
