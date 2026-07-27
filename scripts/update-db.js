@@ -41,9 +41,12 @@ const AFRINIC_COUNTRIES = [
   "CD","CG","GA","GQ","CF",
 ];
 
+// 南极洲（手动维护）
+const SPECIAL_REGIONS = ["AQ"];
+
 const ALL_COUNTRIES = [...new Set([
   ...RIPE_COUNTRIES, ...APNIC_COUNTRIES, ...LACNIC_COUNTRIES,
-  ...ARIN_COUNTRIES, ...AFRINIC_COUNTRIES,
+  ...ARIN_COUNTRIES, ...AFRINIC_COUNTRIES, ...SPECIAL_REGIONS,
 ])];
 
 const TERRITORIES_FALLBACK = {
@@ -410,7 +413,7 @@ async function main() {
   console.log(`验证通过: ${Object.keys(verified).length} 个国家`);
 
   // Step 3: 自动 Bypass 并二次验证
-  let missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
+  let missing = ALL_COUNTRIES.filter(cc => !verified[cc] && cc !== "AQ");   // AQ 手动处理
   for (const cc of Object.keys(TERRITORIES_FALLBACK)) {
     if (!verified[cc]) missing.push(cc);
   }
@@ -464,6 +467,13 @@ async function main() {
     }
   }
 
+  // 手动添加南极洲 (AQ) IP（不经过 API 验证）
+  const AQ_IPS = ["140.248.24.0", "104.28.92.69", "104.28.244.153"].filter(isPublicIP);
+  if (AQ_IPS.length > 0) {
+    verified['AQ'] = AQ_IPS;
+    console.log(`\n[MANUAL] AQ: ${AQ_IPS.join(', ')}`);
+  }
+
   // Step 4: 构建最终数据
   console.log("\n--- Step 4: 构建最终数据 ---");
   const final = buildFinal(verified);
@@ -479,7 +489,7 @@ async function main() {
 
   // 抽查
   console.log("\n--- 验证抽查 ---");
-  const checkList = ["CN","US","MN","JP","DE","BR","ZA","SC","JM","PR","BB","BS","XK"];
+  const checkList = ["CN","US","MN","JP","DE","BR","ZA","SC","JM","PR","BB","BS","XK","AQ"];
   for (const cc of checkList) {
     const ips = final[cc];
     console.log(`${cc}: ${ips ? ips.join(", ") : "❌ 无数据"}`);
