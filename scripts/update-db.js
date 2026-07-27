@@ -12,11 +12,6 @@ const RIPE_COUNTRIES = [
   "PL","CZ","SK","HU","RO","BG","HR","SI","BA","RS","ME","MK","AL","GR",
   "RU","UA","BY","MD","GE","AM","AZ","KZ","UZ","TM","KG","TJ",
   "TR","IL","AE","SA","QA","KW","BH","OM","YE","JO","LB","SY","IQ","IR",
-  "EG","LY","TN","DZ","MA","MR","SD",
-  "NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
-  "ZA","ZW","ZM","MZ","BW","NA","LS","SZ","AO","MW","MG","MU","SC","KM","ST",
-  "ET","KE","TZ","UG","RW","BI","SO","DJ","ER","SS",
-  "CD","CG","GA","GQ","CF",
   "XK",
 ];
 
@@ -36,7 +31,15 @@ const LACNIC_COUNTRIES = [
 ];
 
 const ARIN_COUNTRIES = ["US","CA"];
-const AFRINIC_COUNTRIES = [];
+
+// 非洲国家单独列出，专用 AFRINIC 抓取
+const AFRINIC_COUNTRIES = [
+  "EG","LY","TN","DZ","MA","MR","SD",
+  "NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
+  "ZA","ZW","ZM","MZ","BW","NA","LS","SZ","AO","MW","MG","MU","SC","KM","ST",
+  "ET","KE","TZ","UG","RW","BI","SO","DJ","ER","SS",
+  "CD","CG","GA","GQ","CF",
+];
 
 const ALL_COUNTRIES = [...new Set([
   ...RIPE_COUNTRIES, ...APNIC_COUNTRIES, ...LACNIC_COUNTRIES,
@@ -49,11 +52,10 @@ const TERRITORIES_FALLBACK = {
   "VI": ["208.84.136.0/22"],
 };
 
-// 仅作为最后兜底，且已知 API 能正确识别这个 IP
 const XK_HARDCODED_FALLBACK = ["46.99.0.1"];
 
 // =============================================
-// 工具函数
+// 工具函数（保持不变）
 // =============================================
 
 function isPublicIP(ip) {
@@ -217,7 +219,6 @@ function getTerritoryFallbackIPs(cc) {
   return ips;
 }
 
-// 专门为 XK 生成大量候选 IP（来自 RIPE 中的 XK 分配段）
 function getXKCandidatesFromRIPE() {
   const ripeText = RIR_RAW_TEXT["RIPE"];
   if (!ripeText) return [];
@@ -231,24 +232,19 @@ function getXKCandidatesFromRIPE() {
     if (status === "summary") continue;
     const startIP = p[3];
     const count = parseInt(p[4]) || 0;
-    if (!isPublicIP(startIP) || count < 256) continue;  // 只扫描 /24 以上段
-    // 每个段取首、1/4、1/2、3/4、尾 五个点
-    const positions = [
-      addOffset(startIP, 1),
-      addOffset(startIP, Math.floor(count / 4)),
-      addOffset(startIP, Math.floor(count / 2)),
-      addOffset(startIP, Math.floor(count * 3 / 4)),
-      addOffset(startIP, count - 2),
-    ];
-    for (const ip of positions) {
+    if (!isPublicIP(startIP) || count < 256) continue;
+    const first = addOffset(startIP, 1);
+    const mid = addOffset(startIP, Math.floor(count / 2));
+    const last = addOffset(startIP, count - 2);
+    for (const ip of [first, mid, last]) {
       if (ip && !ips.includes(ip)) ips.push(ip);
     }
   }
-  return ips.slice(0, 50);   // 最多 50 个候选，足够覆盖
+  return ips.slice(0, 30);
 }
 
 // =============================================
-// 抓取 RIR 候选
+// 抓取 RIR（增加 AFRINIC 多 URL 重试）
 // =============================================
 
 async function fetchFromRIR(url, targetCountries, name) {
@@ -277,6 +273,23 @@ async function fetchFromRIR(url, targetCountries, name) {
     console.error(`[${name}] 错误:`, e.message);
     return { candidates: {}, raw: null };
   }
+}
+
+async function fetchAFRINICWithRetry() {
+  const urls = [
+    "https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-latest",
+    "https://www.afrinic.net/stats/afrinic/delegated-afrinic-latest",
+    "https://raw.githubusercontent.com/aviranzer/afrinic-ip-database/master/delegated-afrinic-latest",
+  ];
+  for (const url of urls) {
+    console.log(`[AFRINIC] 尝试 ${url}`);
+    const res = await fetchFromRIR(url, AFRINIC_COUNTRIES, "AFRINIC");
+    if (Object.keys(res.candidates).length > 0) return res;
+    console.log(`[AFRINIC] 该源无有效数据，尝试下一个...`);
+  }
+  // 全部失败，返回空
+  console.log("[AFRINIC] 所有源均失败，非洲国家将依赖硬编码后备");
+  return { candidates: {}, raw: null };
 }
 
 // =============================================
@@ -320,17 +333,6 @@ async function verifyIPs(candidates, label = "") {
 // 构建最终数据
 // =============================================
 
-function seededShuffle(arr, seed) {
-  const a = [...arr];
-  let s = seed >>> 0;
-  for (let i = a.length - 1; i > 0; i--) {
-    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
-    const j = s % (i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
 function buildFinal(verified) {
   const out = {};
   const today = new Date();
@@ -348,6 +350,17 @@ function buildFinal(verified) {
     out[cc] = shuffled.slice(0, take);
   }
   return out;
+}
+
+function seededShuffle(arr, seed) {
+  const a = [...arr];
+  let s = seed >>> 0;
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 // =============================================
@@ -370,11 +383,7 @@ async function main() {
                  LACNIC_COUNTRIES, "LACNIC"),
     fetchFromRIR("https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest",
                  ARIN_COUNTRIES, "ARIN"),
-    fetchFromRIR("https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-latest",
-                 AFRINIC_COUNTRIES, "AFRINIC").catch(e => {
-                   console.log('[AFRINIC] 抓取失败，将跳过');
-                   return { candidates: {}, raw: null };
-                 }),
+    fetchAFRINICWithRetry(),
   ];
 
   const rirResults = await Promise.all(rirFetchers);
@@ -400,7 +409,7 @@ async function main() {
   const verified = await verifyIPs(allCandidates);
   console.log(`验证通过: ${Object.keys(verified).length} 个国家`);
 
-  // Step 3: 自动 Bypass 并二次验证（增加候选池后备）
+  // Step 3: 自动 Bypass 并二次验证
   let missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
   for (const cc of Object.keys(TERRITORIES_FALLBACK)) {
     if (!verified[cc]) missing.push(cc);
@@ -414,12 +423,15 @@ async function main() {
       if (bypassIPs.length === 0) {
         bypassIPs = getTerritoryFallbackIPs(cc);
       }
-      // 如果仍为空且不是 XK，回退到 Step 1 候选池
+      // 通用后备：从候选池取（可能为空，但至少尝试）
       if (bypassIPs.length === 0 && cc !== "XK") {
         bypassIPs = allCandidates[cc] || [];
+        if (bypassIPs.length > 0) {
+          console.log(`[BYPASS] ${cc} 回退使用候选池IP (${bypassIPs.length} 个)`);
+        }
       }
 
-      // 对 XK 特殊处理
+      // XK 特殊处理
       if (cc === "XK") {
         console.log("[BYPASS] XK 启动增强扫描...");
         bypassIPs = getXKCandidatesFromRIPE();
@@ -433,7 +445,7 @@ async function main() {
         for (const ip of bypassIPs) {
           const apiCountry = await queryMRA8(ip);
           if (apiCountry === null) {
-            // 非 XK 时保留未知 IP；XK 时需要明确确认
+            // 非 XK 时保留未知 IP
             if (cc !== "XK") confirmedIPs.push(ip);
           } else if (apiCountry === cc) {
             confirmedIPs.push(ip);
