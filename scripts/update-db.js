@@ -5,7 +5,6 @@ const maxmind = require('maxmind');
 // =============================================
 // RIR 国家列表
 // =============================================
-
 const RIPE_COUNTRIES = [
   "DE","GB","FR","NL","BE","LU","IE","PT","ES","IT","MT","CH","AT","LI","MC","AD",
   "SE","NO","DK","FI","IS","EE","LV","LT","GL",
@@ -60,7 +59,6 @@ const XK_HARDCODED_FALLBACK = ["46.99.0.1"];
 // =============================================
 // 工具函数
 // =============================================
-
 function isPublicIP(ip) {
   if (!ip || typeof ip !== 'string') return false;
   const p = ip.split(".").map(Number);
@@ -100,7 +98,6 @@ function chunk(arr, size) {
 // =============================================
 // 解析 delegated 文件
 // =============================================
-
 function parseDelegatedFile(text, targetCountries) {
   const pool = {};
   const targetSet = new Set(targetCountries);
@@ -143,7 +140,6 @@ function sampleFromBlocks(blocks, n) {
 // =============================================
 // MaxMind 本地验证
 // =============================================
-
 let lookupDb = null;
 async function initMaxMind() {
   if (!lookupDb) {
@@ -170,7 +166,6 @@ async function verifyWithMaxMind(ipList) {
 // =============================================
 // mra8-api 查询
 // =============================================
-
 async function queryMRA8(ip) {
   try {
     const resp = await fetch(`https://mra8-api.hf.space/${ip}`, {
@@ -187,7 +182,6 @@ async function queryMRA8(ip) {
 // =============================================
 // 自动 Bypass 与 XK 特殊扫描
 // =============================================
-
 let RIR_RAW_TEXT = {};
 
 function getAutoBypassIPs(cc) {
@@ -249,7 +243,6 @@ function getXKCandidatesFromRIPE() {
 // =============================================
 // 抓取 RIR（使用稳定镜像）
 // =============================================
-
 async function fetchFromRIR(url, targetCountries, name) {
   console.log(`[${name}] 抓取中...`);
   try {
@@ -298,7 +291,6 @@ async function fetchAFRINICWithRetry() {
 // =============================================
 // 验证流程
 // =============================================
-
 async function verifyIPs(candidates, label = "") {
   const allIPs = [];
   const ipToCC = {};
@@ -335,7 +327,6 @@ async function verifyIPs(candidates, label = "") {
 // =============================================
 // 构建最终数据
 // =============================================
-
 function seededShuffle(arr, seed) {
   const a = [...arr];
   let s = seed >>> 0;
@@ -369,7 +360,6 @@ function buildFinal(verified) {
 // =============================================
 // 主流程
 // =============================================
-
 async function main() {
   console.log("=== IP数据库更新开始 ===");
   const start = Date.now();
@@ -467,8 +457,13 @@ async function main() {
     }
   }
 
-  // 手动添加南极洲 (AQ) IP（不经过 API 验证）
-  const AQ_IPS = ["140.248.24.0", "104.28.92.69", "104.28.244.153"].filter(isPublicIP);
+  // 手动添加南极洲 (AQ) IP（来自 IP2Location / ipshu 清单，不验证）
+  const AQ_IPS = [
+    "31.6.15.1",          // McMurdo Station
+    "140.248.24.0",
+    "104.28.92.69",
+    "104.28.244.153",
+  ].filter(isPublicIP);
   if (AQ_IPS.length > 0) {
     verified['AQ'] = AQ_IPS;
     console.log(`\n[MANUAL] AQ: ${AQ_IPS.join(', ')}`);
@@ -499,7 +494,7 @@ async function main() {
   const payload = {
     ips: final,
     updated_at: new Date().toISOString(),
-    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification",
+    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification + manual-aq",
     country_count: covered,
     coverage_rate: `${covered}/${totalExpected}`,
     missing: finalMissing,
