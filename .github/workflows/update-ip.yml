@@ -37,7 +37,7 @@ jobs:
           EOF
           npm install
 
-      - name: 下载 GeoLite2 国家数据库
+      - name: 下载 GeoLite2 国家数据库（P3TERX 镜像）
         run: |
           mkdir -p data
           DOWNLOAD_URL=$(curl -s https://api.github.com/repos/P3TERX/GeoLite.mmdb/releases/latest \
@@ -49,23 +49,37 @@ jobs:
       - name: 执行更新脚本
         run: node scripts/update-db.js
 
-      - name: 检查生成文件
-        run: ls -la data/ip-database.json
-
-      - name: 上传到 GitHub Release
+      - name: 生成 Release 描述并发布
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view ip-database > /dev/null 2>&1; then
-            echo "Release 不存在，正在创建..."
-            gh release create ip-database \
-              --title "IP Database" \
-              --notes "每日自动更新的全球 IP 数据库" \
-              --latest
+          COUNTRY_COUNT=$(jq -r '.country_count' data/ip-database.json)
+          COVERAGE=$(jq -r '.coverage_rate' data/ip-database.json)
+          UPDATED=$(jq -r '.updated_at' data/ip-database.json)
+          MISSING=$(jq -r '.missing | if length > 0 then join(", ") else "无" end' data/ip-database.json)
+
+          NOTES="## 🌍 全球 IP 数据库更新报告
+
+          | 项目 | 详情 |
+          |------|------|
+          | 📊 覆盖国家数 | ${COUNTRY_COUNT} |
+          | 📈 覆盖率 | ${COVERAGE} |
+          | ⚠️ 缺失国家 | ${MISSING} |
+          | 🕒 更新时间 | ${UPDATED} |
+          | 🗂️ 数据来源 | RIR Delegated + MaxMind GeoLite2 + mra8-api 验证 |
+
+          > 数据文件：\`ip-database.json\`，可直接下载用于代理分流、地域识别等场景。
+          "
+
+          if gh release view ip-database > /dev/null 2>&1; then
+            gh release edit ip-database --title "IP Database (${COUNTRY_COUNT} 个国家)" --notes "$NOTES"
+            gh release upload ip-database data/ip-database.json --clobber
           else
-            echo "Release 已存在，将覆盖同名资产"
+            gh release create ip-database data/ip-database.json \
+              --title "IP Database (${COUNTRY_COUNT} 个国家)" \
+              --notes "$NOTES" \
+              --latest
           fi
-          gh release upload ip-database data/ip-database.json --clobber
 
       - name: 失败时通知
         if: failure()
