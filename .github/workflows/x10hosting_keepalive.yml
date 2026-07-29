@@ -36,16 +36,15 @@ jobs:
 
       - name: 安装 SeleniumBase
         run: |
-          python -m pip install --upgrade pip
           pip install seleniumbase requests
-          # SeleniumBase 会自动下载匹配的 chromedriver
 
-      - name: 下载 Buster 扩展
+      - name: 下载并配置 Buster 扩展
         run: |
           wget -q https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip -O /tmp/buster.zip
-          mkdir -p /tmp/buster
-          unzip -q /tmp/buster.zip -d /tmp/buster
-          echo "BUSTER_PATH=/tmp/buster" >> $GITHUB_ENV
+          mkdir -p /tmp/buster_extract
+          unzip -q /tmp/buster.zip -d /tmp/buster_extract
+          BUSTER_DIR=$(find /tmp/buster_extract -name manifest.json -exec dirname {} \; | head -1)
+          echo "BUSTER_PATH=$BUSTER_DIR" >> $GITHUB_ENV
 
       - name: 设置代理
         env:
@@ -75,7 +74,7 @@ jobs:
           mkdir -p output/screenshots
           xvfb-run -a --server-args="-screen 0 1280x720x24" python scripts/x10hosting/x10hosting_keepalive.py
 
-      - name: 上传截图（可选）
+      - name: 上传截图
         if: always()
         uses: actions/upload-artifact@v4
         with:
