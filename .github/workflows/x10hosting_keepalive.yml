@@ -43,16 +43,10 @@ jobs:
           wget -q https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip -O /tmp/buster.zip
           mkdir -p /tmp/buster_extract
           unzip -q /tmp/buster.zip -d /tmp/buster_extract
-          echo "解压后目录内容："
-          ls -la /tmp/buster_extract
-          # 定位 manifest.json 所在目录
-          BUSTER_DIR=$(find /tmp/buster_extract -name "manifest.json" -exec dirname {} \; | head -1)
-          echo "找到的 Buster 目录: $BUSTER_DIR"
-          if [ -z "$BUSTER_DIR" ]; then
-            echo "未找到 manifest.json，将使用 /tmp/buster_extract"
-            BUSTER_DIR=/tmp/buster_extract
-          fi
+          # 自动寻找 manifest.json 所在目录
+          BUSTER_DIR=$(find /tmp/buster_extract -name manifest.json -exec dirname {} \; | head -1)
           echo "BUSTER_PATH=$BUSTER_DIR" >> $GITHUB_ENV
+          echo "Buster 目录: $BUSTER_DIR"
 
       - name: 执行保活脚本
         env:
