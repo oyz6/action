@@ -92,14 +92,36 @@ jobs:
             echo "输出文件不存在"
             exit 1
           fi
-          git clone https://x-access-token:${PRIVATE_REPO_TOKEN}@github.com/${PRIVATE_REPO}.git private-repo
+
+          # 关闭命令回显，防止打印敏感 URL
+          set +x
+          echo "::group::推送到私有仓库"
+
+          # 克隆，只保留自定义错误信息
+          if ! git clone --quiet https://x-access-token:${PRIVATE_REPO_TOKEN}@github.com/${PRIVATE_REPO}.git private-repo; then
+            echo "❌ 克隆私有仓库失败"
+            exit 1
+          fi
+
           cp taoiptv.m3u private-repo/
           cd private-repo
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add taoiptv.m3u
-          git diff --cached --quiet || git commit -m "更新 taoiptv.m3u $(date '+%Y-%m-%d %H:%M')"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "📭 无变化，跳过提交"
+          else
+            git commit -m "更新 taoiptv.m3u $(date '+%Y-%m-%d %H:%M')"
+            if ! git push --quiet; then
+              echo "❌ 推送失败"
+              exit 1
+            fi
+            echo "✅ 已推送到私有仓库"
+          fi
+
+          echo "::endgroup::"
+          set -x   # 恢复命令回显
 
       - name: 清理历史运行记录
         uses: Mattraks/delete-workflow-runs@v2
