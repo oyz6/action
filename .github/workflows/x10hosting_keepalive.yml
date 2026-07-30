@@ -36,7 +36,7 @@ jobs:
           pip install --upgrade pip
           pip install playwright requests playwright-stealth
           playwright install chromium
-         playwright install-deps chromium
+          playwright install-deps chromium
 
       - name: 下载 Buster 扩展
         run: |
