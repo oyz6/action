@@ -34,7 +34,7 @@ jobs:
       - name: 安装 Python 依赖
         run: |
           pip install --upgrade pip
-          pip install playwright requests playwright-stealth
+          pip install playwright requests
           playwright install chromium
           playwright install-deps chromium
 
