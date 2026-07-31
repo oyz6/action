@@ -44,24 +44,15 @@ jobs:
               --max-time 10 || true
             exit 1
           fi
-          # 验证环境变量已写入
-          echo "✅ PROXY_SERVER 已设置到 GITHUB_ENV"
-          grep PROXY_SERVER $GITHUB_ENV || echo "⚠️ 未找到 PROXY_SERVER"
 
       - name: 执行保活
         env:
           RUSTIX: ${{ secrets.RUSTIX }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          # ✅ 直接不写 PROXY_SERVER，让它从 GITHUB_ENV 自动继承
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
           TARGET_ACCOUNTS: ${{ github.event.inputs.accounts }}
         run: |
-          # 验证代理变量是否存在
-          echo "PROXY_SERVER=${PROXY_SERVER}"
-          if [ -z "$PROXY_SERVER" ]; then
-            echo "❌ PROXY_SERVER 为空，代理未生效"
-            exit 1
-          fi
           python scripts/Rustix/Rustix.py
 
       - name: 上传截图
