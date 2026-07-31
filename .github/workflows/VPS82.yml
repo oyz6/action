@@ -29,9 +29,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full
 
+      # pip install -q playwright 'requests[socks]' pynacl
       - name: 安装 Playwright 及 Python 库
         run: |
-          pip install -q playwright 'requests[socks]' pynacl
+          pip install -q playwright 'requests[socks]' pynacl playwright-stealth
           playwright install chromium
 
       - name: 下载并解压扩展
