@@ -216,7 +216,8 @@ async function queryFreeIP(ip) {
 // =============================================
 // 冷门区域列表（使用双源验证，优先使用 freeipapi）
 // =============================================
-const COLD_REGIONS = ['NU', 'TK', 'PN', 'EH', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'GL'];
+// const COLD_REGIONS = ['NU', 'TK', 'PN', 'EH', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'GL'];
+const COLD_REGIONS = ['NU', 'TK', 'PN', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'GL'];
 
 async function verifyRegionIP(ip, cc) {
   let actual = null;
