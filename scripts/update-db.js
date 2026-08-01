@@ -31,7 +31,7 @@ const LACNIC_COUNTRIES = [
 
 const ARIN_COUNTRIES = ["US","CA"];
 
-// 非洲国家专用 AFRINIC 抓取（已补上 EH）
+// 非洲国家专用 AFRINIC 抓取
 const AFRINIC_COUNTRIES = [
   "EG","LY","TN","DZ","MA","EH",
   "MR","SD","NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
@@ -43,16 +43,17 @@ const AFRINIC_COUNTRIES = [
 // 南极洲
 const SPECIAL_REGIONS = ["AQ"];
 
+// 保留：强制把朝鲜(KP)加进预期列表，让程序去尝试获取
 const ALL_COUNTRIES = [...new Set([
   ...RIPE_COUNTRIES, ...APNIC_COUNTRIES, ...LACNIC_COUNTRIES,
   ...ARIN_COUNTRIES, ...AFRINIC_COUNTRIES, ...SPECIAL_REGIONS,
+  "KP",
 ])];
 
 // =============================================
 // 兜底后备清单（当动态抓取无效时的最后手段）
 // =============================================
 const HARDCODED_OVERRIDE = {
-   // 13个原缺失国家
    "IS": ["193.4.0.1", "194.144.0.1"],
    "SK": ["82.119.0.1", "89.173.0.1"],
    "GL": ["82.116.0.1", "194.88.0.1"],
@@ -66,7 +67,6 @@ const HARDCODED_OVERRIDE = {
    "TL": ["180.178.0.1", "202.144.0.1"],
    "PG": ["103.149.0.1", "124.248.0.1"],
    "NZ": ["43.224.0.1", "103.105.0.1"],
-   // 南极洲同样归入最后的兜底
    "AQ": ["31.6.15.1", "140.248.24.0", "104.28.92.69", "104.28.244.153"],
 };
 
@@ -474,14 +474,18 @@ async function main() {
 
       // ==========================================================
       // 【优先级 2】 如果动态抓取全部失败，回退到硬编码兜底
+      // 遵循“宁缺毋滥”原则，严格执行精确匹配
       // ==========================================================
       if (!found && HARDCODED_OVERRIDE[cc]) {
         console.log(`[BYPASS] ${cc} 动态获取失败，尝试硬编码后备...`);
         const validated = [];
         for (const ip of HARDCODED_OVERRIDE[cc]) {
           const actual = await queryMRA8(ip);
-          // AQ 特殊处理：由于绝大部分IP数据库都不收录南极洲，API 返回 null 即可视为通过
-          if (actual === cc || (cc === 'AQ' && !actual)) {
+
+          // 严格精确验证逻辑：除非真的是这个国家（或者AQ因为是南极洲，无记录认定为真），否则直接丢弃
+          let isValid = (actual === cc || (cc === 'AQ' && !actual));
+
+          if (isValid) {
             validated.push(ip);
           } else {
             console.log(`[BYPASS] 🔍 ${cc} 硬编码IP ${ip} 实际归属 ${actual || '未知'}，丢弃`);
@@ -513,7 +517,7 @@ async function main() {
   }
 
   console.log("\n--- 验证抽查 ---");
-  const checkList = ["CN","US","MN","JP","DE","BR","ZA","SC","JM","PR","BB","BS","XK","AQ","IS","GL","KP","TL","PG","NZ"];
+  const checkList = ["CN","US","MN","JP","DE","BR","ZA","SC","JM","PR","BB","BS","XK","AQ","IS","GL","KP","TL","PG","NZ","EH"];
   for (const cc of checkList) {
     const ips = final[cc];
     console.log(`${cc}: ${ips ? ips.join(", ") : "❌ 无数据"}`);
@@ -522,7 +526,7 @@ async function main() {
   const payload = {
     ips: final,
     updated_at: new Date().toISOString(),
-    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification + dynamic-fallback-first",
+    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification + strict-validation",
     country_count: covered,
     coverage_rate: `${covered}/${totalExpected}`,
     missing: finalMissing,
