@@ -3,7 +3,7 @@ const path = require('path');
 const maxmind = require('maxmind');
 
 // =============================================
-// RIR 国家列表（已完全对齐用户提供的 COUNTRIES）
+// RIR 国家列表
 // =============================================
 const RIPE_COUNTRIES = [
   "DE","GB","FR","NL","BE","LU","IE","PT","ES","IT","MT","CH","AT","LI","MC","AD",
@@ -55,11 +55,11 @@ const ALL_COUNTRIES = [...new Set([
 // 兜底后备清单（当动态抓取无效时的最后手段）
 // =============================================
 const HARDCODED_OVERRIDE = {
-   "IS": ["193.4.0.1", "194.144.0.1","80.248.16.100"],
+   "IS": ["193.4.0.1", "194.144.0.1", "80.248.16.100"],
    "SK": ["45.81.41.100", "62.168.64.100"],
    "EH": ["104.28.9.164", "104.28.9.166"],
    "KP": ["175.45.178.0"],
-   "IS": ["104.28.13.94", "103.94.180.100","103.231.123.100"],
+   "TL": ["104.28.13.94", "103.94.180.100", "103.231.123.100"],
    "AQ": ["31.6.15.1", "140.248.24.0", "104.28.92.69", "104.28.244.153"],
 };
 
@@ -179,7 +179,7 @@ async function verifyWithMaxMind(ipList) {
 }
 
 // =============================================
-// mra8-api 查询
+// mra8-api 查询（通用）
 // =============================================
 async function queryMRA8(ip) {
   try {
@@ -192,6 +192,45 @@ async function queryMRA8(ip) {
   } catch (e) {
     return null;
   }
+}
+
+// =============================================
+// free.freeipapi.com 查询（冷门地区专用，支持单次最多50个IP的Bulk）
+// =============================================
+async function queryFreeIP(ip) {
+  try {
+    const resp = await fetch(`https://free.freeipapi.com/api/json/${ip}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data?.countryCode?.toUpperCase() || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// =============================================
+// 冷门区域列表（使用双源验证，优先使用 freeipapi）
+// =============================================
+const COLD_REGIONS = ['AQ', 'EH', 'XK', 'KP', 'GL'];
+
+async function verifyRegionIP(ip, cc) {
+  let actual = null;
+
+  // 1. 如果是冷门地区，优先走 freeipapi
+  if (COLD_REGIONS.includes(cc)) {
+    actual = await queryFreeIP(ip);
+    // 2. 如果 freeipapi 返回 null（没查到），则降级使用 mra8-api 兜底
+    if (!actual) {
+      actual = await queryMRA8(ip);
+    }
+  } else {
+    // 3. 常规地区依然只用 mra8-api
+    actual = await queryMRA8(ip);
+  }
+  
+  return actual;
 }
 
 // =============================================
@@ -443,11 +482,11 @@ async function main() {
         if (bypassIPs.length === 0) bypassIPs = XK_HARDCODED_FALLBACK.filter(isPublicIP);
       }
 
-      // 动态抓取的 API 确认
+      // 动态抓取的 API 确认（🔁 调用我们刚写的双源验证函数）
       if (bypassIPs.length > 0) {
         const confirmedIPs = [];
         for (const ip of bypassIPs) {
-          const apiCountry = await queryMRA8(ip);
+          const apiCountry = await verifyRegionIP(ip, cc);
           if (apiCountry === null) {
             if (cc !== "XK") confirmedIPs.push(ip);
           } else if (apiCountry === cc) {
@@ -472,7 +511,7 @@ async function main() {
         console.log(`[BYPASS] ${cc} 动态获取失败，尝试硬编码后备...`);
         const validated = [];
         for (const ip of HARDCODED_OVERRIDE[cc]) {
-          const actual = await queryMRA8(ip);
+          const actual = await verifyRegionIP(ip, cc);
 
           // 严格精确验证逻辑：除非真的是这个国家（或者AQ因为是南极洲，无记录认定为真），否则直接丢弃
           let isValid = (actual === cc || (cc === 'AQ' && !actual));
@@ -518,7 +557,7 @@ async function main() {
   const payload = {
     ips: final,
     updated_at: new Date().toISOString(),
-    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification + strict-validation",
+    source: "rir-delegated-files + maxmind-geolite2 + mra8-api + freeipapi-verification + strict-validation",
     country_count: covered,
     coverage_rate: `${covered}/${totalExpected}`,
     missing: finalMissing,
