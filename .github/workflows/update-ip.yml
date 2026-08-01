@@ -37,12 +37,11 @@ jobs:
           EOF
           npm install
 
-      - name: 下载 GeoLite2 国家数据库（P3TERX 镜像）
+      - name: 下载 MaxMind 国家数据库（Dreamacro 镜像）
         run: |
           mkdir -p data
-          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/P3TERX/GeoLite.mmdb/releases/latest \
-            | grep -o 'https://.*GeoLite2-Country.mmdb"' \
-            | tr -d '"')
+          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Dreamacro/maxmind-geoip/releases/latest \
+            | jq -r '.assets[] | select(.name == "Country.mmdb") | .browser_download_url')
           echo "下载地址: $DOWNLOAD_URL"
           curl -s -L "$DOWNLOAD_URL" -o data/GeoLite2-Country.mmdb
 
