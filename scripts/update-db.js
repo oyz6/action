@@ -18,9 +18,9 @@ const APNIC_COUNTRIES = [
   "CN","JP","KR","AU","SG","HK","TW","MO","MN",
   "MY","TH","VN","ID","PH","MM","KH","LA","BN","TL",
   "IN","BD","LK","NP","BT","MV",
-  "NZ","PG","FJ","SB","VU","WS","TO","KI","FM","PW","MH","NR","TV","CK","NU",
+  "NZ","PG","FJ","SB","VU","WS","TO","KI","FM","PW","MH","NR","TV","CK",
   "PK","AF","KP",
-  "GU","PF","NC"
+  "GU","PF","NC","NU"
 ];
 
 const LACNIC_COUNTRIES = [
@@ -63,6 +63,7 @@ const HARDCODED_OVERRIDE = {
    "KP": ["175.45.178.0"],
    "TL": ["104.28.13.94", "103.94.180.100", "103.231.123.100"],
    "AQ": ["31.6.15.1", "140.248.24.0", "104.28.92.69", "104.28.244.153"],
+   "NU": ["49.156.48.1", "49.156.49.1", "49.156.50.1", "49.156.51.1"],
 };
 
 const TERRITORIES_FALLBACK = {
@@ -215,7 +216,7 @@ async function queryFreeIP(ip) {
 // =============================================
 // 冷门区域列表（使用双源验证，优先使用 freeipapi）
 // =============================================
-const COLD_REGIONS = ['AQ', 'EH', 'XK', 'KP', 'GL'];
+const COLD_REGIONS = ['NU', 'TK', 'PN', 'EH', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'GL'];
 
 async function verifyRegionIP(ip, cc) {
   let actual = null;
