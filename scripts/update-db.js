@@ -18,8 +18,9 @@ const APNIC_COUNTRIES = [
   "CN","JP","KR","AU","SG","HK","TW","MO","MN",
   "MY","TH","VN","ID","PH","MM","KH","LA","BN","TL",
   "IN","BD","LK","NP","BT","MV",
-  "NZ","PG","FJ","SB","VU","WS","TO","KI","FM","PW","MH","NR","TV","CK",
+  "NZ","PG","FJ","SB","VU","WS","TO","KI","FM","PW","MH","NR","TV","CK","NU",
   "PK","AF","KP",
+  "GU","PF","NC"
 ];
 
 const LACNIC_COUNTRIES = [
@@ -31,6 +32,7 @@ const LACNIC_COUNTRIES = [
 
 const ARIN_COUNTRIES = [
   "US","CA","BM","KY","VG",
+  "PR"
 ];
 
 // 非洲国家
