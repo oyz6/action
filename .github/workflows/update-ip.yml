@@ -37,13 +37,57 @@ jobs:
           EOF
           npm install
 
-      - name: 下载 MaxMind 国家数据库（Dreamacro 镜像）
+      - name: 智能选择并下载最新的 GeoLite2 国家数据库
         run: |
           mkdir -p data
-          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Dreamacro/maxmind-geoip/releases/latest \
-            | jq -r '.assets[] | select(.name == "Country.mmdb") | .browser_download_url')
-          echo "下载地址: $DOWNLOAD_URL"
-          curl -s -L "$DOWNLOAD_URL" -o data/GeoLite2-Country.mmdb
+          
+          # 定义三个源及其资产文件名
+          declare -A SOURCES=(
+            ["Loyalsoldier/geoip"]="Country.mmdb"
+            ["Dreamacro/maxmind-geoip"]="Country.mmdb"
+            ["P3TERX/GeoLite.mmdb"]="GeoLite2-Country.mmdb"
+          )
+          
+          LATEST_REPO=""
+          LATEST_TIME="1970-01-01T00:00:00Z"
+          LATEST_ASSET=""
+          
+          echo "🔍 正在检测三个源的最新 Release 时间..."
+          for REPO in "${!SOURCES[@]}"; do
+            ASSET="${SOURCES[$REPO]}"
+            echo "  检查 $REPO ..."
+            PUBLISHED=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | jq -r '.published_at // empty')
+            
+            if [[ -n "$PUBLISHED" ]]; then
+              echo "    -> 发现更新版本: $PUBLISHED"
+              if [[ "$PUBLISHED" > "$LATEST_TIME" ]]; then
+                LATEST_TIME="$PUBLISHED"
+                LATEST_REPO="$REPO"
+                LATEST_ASSET="$ASSET"
+              fi
+            else
+              echo "    -> API 获取失败，跳过该源"
+            fi
+          done
+          
+          if [[ -z "$LATEST_REPO" ]]; then
+            echo "⚠️ 所有 API 检测失败，采用默认最优源 (Loyalsoldier/geoip)..."
+            LATEST_REPO="Loyalsoldier/geoip"
+            LATEST_ASSET="Country.mmdb"
+          fi
+          
+          echo "✅ 最终选定最最新源: $LATEST_REPO (发布时间: $LATEST_TIME)"
+          DOWNLOAD_URL="https://github.com/${LATEST_REPO}/releases/latest/download/${LATEST_ASSET}"
+          echo "📥 下载地址: $DOWNLOAD_URL"
+          
+          curl -s -L -o data/GeoLite2-Country.mmdb "$DOWNLOAD_URL"
+          
+          if [ ! -f data/GeoLite2-Country.mmdb ] || [ $(stat -c%s data/GeoLite2-Country.mmdb) -lt 1000000 ]; then
+            echo "⚠️ 下载文件过小或失败，立即使用硬编码兜底 (Loyalsoldier/geoip)..."
+            curl -s -L -o data/GeoLite2-Country.mmdb "https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb"
+          fi
+          
+          echo "🎉 数据库下载并保存成功。"
 
       - name: 执行更新脚本
         run: node scripts/update-db.js
@@ -65,7 +109,7 @@ jobs:
           | 📈 覆盖率 | ${COVERAGE} |
           | ⚠️ 缺失国家 | ${MISSING} |
           | 🕒 更新时间 | ${UPDATED} |
-          | 🗂️ 数据来源 | RIR Delegated + MaxMind GeoLite2 + mra8-api 验证 |
+          | 🗂️ 数据来源 | RIR Delegated + 最新 MaxMind GeoLite2 + mra8-api 验证 |
 
           > 数据文件：\`ip-database.json\`，可直接下载用于代理分流、地域识别等场景。
           "
