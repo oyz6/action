@@ -11,7 +11,7 @@ const RIPE_COUNTRIES = [
   "PL","CZ","SK","HU","RO","BG","HR","SI","BA","RS","ME","MK","AL","GR",
   "RU","UA","BY","MD","GE","AM","AZ","KZ","UZ","TM","KG","TJ",
   "TR","IL","AE","SA","QA","KW","BH","OM","YE","JO","LB","SY","IQ","IR",
-  "XK",
+  "XK", "GI", "VA"
 ];
 
 const APNIC_COUNTRIES = [
@@ -216,8 +216,10 @@ async function queryFreeIP(ip) {
 // =============================================
 // 冷门区域列表（使用双源验证，优先使用 freeipapi）
 // =============================================
-// const COLD_REGIONS = ['NU', 'TK', 'PN', 'EH', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'GL'];
-const COLD_REGIONS = ['NU', 'TK', 'PN', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'VA', 'UA', 'VG', 'NZ', 'GU', 'CA', 'CY', 'BM', 'SM', 'GI'];
+const COLD_REGIONS = [
+  'NU', 'TK', 'PN', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'GL',
+  'VA', 'UA', 'VG', 'NZ', 'GU', 'CA', 'CY', 'BM', 'SM', 'GI'
+];
 
 async function verifyRegionIP(ip, cc) {
   let actual = null;
