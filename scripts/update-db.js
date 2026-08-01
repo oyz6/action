@@ -31,16 +31,16 @@ const LACNIC_COUNTRIES = [
 
 const ARIN_COUNTRIES = ["US","CA"];
 
-// 非洲国家单独列出，专用 AFRINIC 抓取
+// 非洲国家专用 AFRINIC 抓取（已补上 EH）
 const AFRINIC_COUNTRIES = [
-  "EG","LY","TN","DZ","MA","EH", // ✅ 已补上西撒哈拉
+  "EG","LY","TN","DZ","MA","EH",
   "MR","SD","NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
   "ZA","ZW","ZM","MZ","BW","NA","LS","SZ","AO","MW","MG","MU","SC","KM","ST",
   "ET","KE","TZ","UG","RW","BI","SO","DJ","ER","SS",
   "CD","CG","GA","GQ","CF",
 ];
 
-// 南极洲（手动维护）
+// 南极洲
 const SPECIAL_REGIONS = ["AQ"];
 
 const ALL_COUNTRIES = [...new Set([
@@ -49,9 +49,10 @@ const ALL_COUNTRIES = [...new Set([
 ])];
 
 // =============================================
-// ✅ 新增：硬编码强制补录清单（避开 MaxMind 误判）
+// 兜底后备清单（当动态抓取无效时的最后手段）
 // =============================================
 const HARDCODED_OVERRIDE = {
+   // 13个原缺失国家
    "IS": ["193.4.0.1", "194.144.0.1"],
    "SK": ["82.119.0.1", "89.173.0.1"],
    "GL": ["82.116.0.1", "194.88.0.1"],
@@ -65,6 +66,8 @@ const HARDCODED_OVERRIDE = {
    "TL": ["180.178.0.1", "202.144.0.1"],
    "PG": ["103.149.0.1", "124.248.0.1"],
    "NZ": ["43.224.0.1", "103.105.0.1"],
+   // 南极洲同样归入最后的兜底
+   "AQ": ["31.6.15.1", "140.248.24.0", "104.28.92.69", "104.28.244.153"],
 };
 
 const TERRITORIES_FALLBACK = {
@@ -199,7 +202,7 @@ async function queryMRA8(ip) {
 }
 
 // =============================================
-// 自动 Bypass 与 XK 特殊扫描
+// 抓取与Bypass动态逻辑
 // =============================================
 let RIR_RAW_TEXT = {};
 
@@ -290,7 +293,7 @@ async function fetchFromRIR(url, targetCountries, name) {
   }
 }
 
-// AFRINIC 专用：多源重试，优先 APNIC 镜像
+// AFRINIC 专用：多源重试
 async function fetchAFRINICWithRetry() {
   const urls = [
     "http://ftp.apnic.net/stats/afrinic/delegated-afrinic-latest",
@@ -303,7 +306,7 @@ async function fetchAFRINICWithRetry() {
     if (Object.keys(res.candidates).length > 0) return res;
     console.log(`[AFRINIC] 该源无有效数据，尝试下一个...`);
   }
-  console.log("[AFRINIC] 所有源均失败，非洲国家将依赖候选池或缺失");
+  console.log("[AFRINIC] 所有源均失败");
   return { candidates: {}, raw: null };
 }
 
@@ -384,23 +387,17 @@ async function main() {
   const start = Date.now();
   await initMaxMind();
 
-  // Step 1: 抓取各 RIR
   console.log("\n--- Step 1: 抓取各 RIR 候选IP ---");
   const rirFetchers = [
-    fetchFromRIR("https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-latest",
-                 RIPE_COUNTRIES, "RIPE"),
-    fetchFromRIR("https://ftp.apnic.net/stats/apnic/delegated-apnic-latest",
-                 APNIC_COUNTRIES, "APNIC"),
-    fetchFromRIR("https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest",
-                 LACNIC_COUNTRIES, "LACNIC"),
-    fetchFromRIR("https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest",
-                 ARIN_COUNTRIES, "ARIN"),
+    fetchFromRIR("https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-latest", RIPE_COUNTRIES, "RIPE"),
+    fetchFromRIR("https://ftp.apnic.net/stats/apnic/delegated-apnic-latest", APNIC_COUNTRIES, "APNIC"),
+    fetchFromRIR("https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest", LACNIC_COUNTRIES, "LACNIC"),
+    fetchFromRIR("https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest", ARIN_COUNTRIES, "ARIN"),
     fetchAFRINICWithRetry(),
   ];
 
   const rirResults = await Promise.all(rirFetchers);
 
-  // 合并候选
   const allCandidates = {};
   for (const { candidates } of rirResults) {
     for (const [cc, ips] of Object.entries(candidates)) {
@@ -416,13 +413,11 @@ async function main() {
   const totalCandidates = Object.values(allCandidates).reduce((s, a) => s + a.length, 0);
   console.log(`\n候选汇总: ${Object.keys(allCandidates).length} 国, ${totalCandidates} 个IP待验证`);
 
-  // Step 2: MaxMind 验证
   console.log("\n--- Step 2: MaxMind 验证 ---");
   const verified = await verifyIPs(allCandidates);
   console.log(`验证通过: ${Object.keys(verified).length} 个国家`);
 
-  // Step 3: 自动 Bypass 并二次验证
-  let missing = ALL_COUNTRIES.filter(cc => !verified[cc] && cc !== "AQ");   // AQ 手动处理
+  let missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
   for (const cc of Object.keys(TERRITORIES_FALLBACK)) {
     if (!verified[cc]) missing.push(cc);
   }
@@ -431,18 +426,16 @@ async function main() {
   if (missing.length > 0) {
     console.log(`\n--- Step 3: 自动 Bypass 处理 (${missing.length} 国) ---`);
     for (const cc of missing) {
-      // ✅ 关键修改：优先检查硬编码清单，直接补录
-      if (HARDCODED_OVERRIDE[cc]) {
-        console.log(`[BYPASS] ${cc} 命中硬编码后备，直接补录`);
-        verified[cc] = HARDCODED_OVERRIDE[cc];
-        continue;
-      }
+      let bypassIPs = [];
+      let found = false;
 
-      let bypassIPs = getAutoBypassIPs(cc);
+      // ==========================================================
+      // 【优先级 1】 优先尝试从 RIR 候选池中动态抓取并验证
+      // ==========================================================
+      bypassIPs = getAutoBypassIPs(cc);
       if (bypassIPs.length === 0) {
         bypassIPs = getTerritoryFallbackIPs(cc);
       }
-      // 通用候选池回退
       if (bypassIPs.length === 0 && cc !== "XK") {
         bypassIPs = allCandidates[cc] || [];
         if (bypassIPs.length > 0) {
@@ -454,11 +447,10 @@ async function main() {
       if (cc === "XK") {
         console.log("[BYPASS] XK 启动增强扫描...");
         bypassIPs = getXKCandidatesFromRIPE();
-        if (bypassIPs.length === 0) {
-          bypassIPs = XK_HARDCODED_FALLBACK.filter(isPublicIP);
-        }
+        if (bypassIPs.length === 0) bypassIPs = XK_HARDCODED_FALLBACK.filter(isPublicIP);
       }
 
+      // 动态抓取的 API 确认
       if (bypassIPs.length > 0) {
         const confirmedIPs = [];
         for (const ip of bypassIPs) {
@@ -468,7 +460,7 @@ async function main() {
           } else if (apiCountry === cc) {
             confirmedIPs.push(ip);
           } else {
-            console.log(`[BYPASS] 🔍 ${cc} ${ip} 实际归属 ${apiCountry}，丢弃`);
+            console.log(`[BYPASS] 🔍 ${cc} 动态IP ${ip} 实际归属 ${apiCountry}，丢弃`);
           }
         }
         bypassIPs = confirmedIPs;
@@ -476,26 +468,38 @@ async function main() {
 
       if (bypassIPs.length > 0) {
         verified[cc] = bypassIPs;
-        console.log(`[BYPASS] ${cc}: ${bypassIPs.join(', ')}`);
-      } else {
+        console.log(`[BYPASS] ✅ ${cc} 验证通过 (动态获取): ${bypassIPs.join(', ')}`);
+        found = true;
+      }
+
+      // ==========================================================
+      // 【优先级 2】 如果动态抓取全部失败，回退到硬编码兜底
+      // ==========================================================
+      if (!found && HARDCODED_OVERRIDE[cc]) {
+        console.log(`[BYPASS] ${cc} 动态获取失败，尝试硬编码后备...`);
+        const validated = [];
+        for (const ip of HARDCODED_OVERRIDE[cc]) {
+          const actual = await queryMRA8(ip);
+          // AQ 特殊处理：由于绝大部分IP数据库都不收录南极洲，API 返回 null 即可视为通过
+          if (actual === cc || (cc === 'AQ' && !actual)) {
+            validated.push(ip);
+          } else {
+            console.log(`[BYPASS] 🔍 ${cc} 硬编码IP ${ip} 实际归属 ${actual || '未知'}，丢弃`);
+          }
+        }
+        if (validated.length > 0) {
+          verified[cc] = validated;
+          console.log(`[BYPASS] ✅ ${cc} 验证通过 (硬编码): ${validated.join(', ')}`);
+          found = true;
+        }
+      }
+
+      if (!found) {
         console.log(`[BYPASS] ${cc}: ❌ 无法获取任何有效IP，该地区将缺失`);
       }
     }
   }
 
-  // 手动添加南极洲 (AQ) IP
-  const AQ_IPS = [
-    "31.6.15.1",
-    "140.248.24.0",
-    "104.28.92.69",
-    "104.28.244.153",
-  ].filter(isPublicIP);
-  if (AQ_IPS.length > 0) {
-    verified['AQ'] = AQ_IPS;
-    console.log(`\n[MANUAL] AQ: ${AQ_IPS.join(', ')}`);
-  }
-
-  // Step 4: 构建最终数据
   console.log("\n--- Step 4: 构建最终数据 ---");
   const final = buildFinal(verified);
 
@@ -508,7 +512,6 @@ async function main() {
     console.log(`⚠️ 未覆盖: ${finalMissing.join(", ")}`);
   }
 
-  // 抽查
   console.log("\n--- 验证抽查 ---");
   const checkList = ["CN","US","MN","JP","DE","BR","ZA","SC","JM","PR","BB","BS","XK","AQ","IS","GL","KP","TL","PG","NZ"];
   for (const cc of checkList) {
@@ -516,11 +519,10 @@ async function main() {
     console.log(`${cc}: ${ips ? ips.join(", ") : "❌ 无数据"}`);
   }
 
-  // 写入文件
   const payload = {
     ips: final,
     updated_at: new Date().toISOString(),
-    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification + manual-aq + hardcode-override",
+    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification + dynamic-fallback-first",
     country_count: covered,
     coverage_rate: `${covered}/${totalExpected}`,
     missing: finalMissing,
