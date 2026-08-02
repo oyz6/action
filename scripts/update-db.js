@@ -12,6 +12,7 @@ const RIPE_COUNTRIES = [
   "RU","UA","BY","MD","GE","AM","AZ","KZ","UZ","TM","KG","TJ",
   "TR","IL","AE","SA","QA","KW","BH","OM","YE","JO","LB","SY","IQ","IR",
   "XK",
+  "GI", "VA", "SM", "CY"
 ];
 
 const APNIC_COUNTRIES = [
@@ -19,34 +20,70 @@ const APNIC_COUNTRIES = [
   "MY","TH","VN","ID","PH","MM","KH","LA","BN","TL",
   "IN","BD","LK","NP","BT","MV",
   "NZ","PG","FJ","SB","VU","WS","TO","KI","FM","PW","MH","NR","TV","CK",
-  "PK","AF",
+  "PK","AF","KP",
+  "GU","PF","NC","NU"
 ];
 
 const LACNIC_COUNTRIES = [
   "BR","AR","CL","CO","PE","VE","EC","BO","PY","UY","GY","SR",
   "MX","GT","BZ","HN","SV","NI","CR","PA",
   "CU","JM","HT","DO","TT","BB","LC","VC","GD","AG","DM","KN","BS",
-  "PR",
+  "PR","AW","CW",
 ];
 
-const ARIN_COUNTRIES = ["US","CA"];
+const ARIN_COUNTRIES = [
+  "US","CA","BM","KY","VG",
+  "PR"
+];
 
-// 非洲国家单独列出，专用 AFRINIC 抓取
+// 非洲国家
 const AFRINIC_COUNTRIES = [
-  "EG","LY","TN","DZ","MA","MR","SD",
-  "NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
+  "EG","LY","TN","DZ","MA","EH",
+  "MR","SD","NG","GH","CI","SN","CM","ML","BF","NE","TD","GN","SL","LR","TG","BJ","GW","GM","CV",
   "ZA","ZW","ZM","MZ","BW","NA","LS","SZ","AO","MW","MG","MU","SC","KM","ST",
   "ET","KE","TZ","UG","RW","BI","SO","DJ","ER","SS",
   "CD","CG","GA","GQ","CF",
 ];
 
-// 南极洲（手动维护）
+// 南极洲
 const SPECIAL_REGIONS = ["AQ"];
 
+// 全部预期国家集合
 const ALL_COUNTRIES = [...new Set([
   ...RIPE_COUNTRIES, ...APNIC_COUNTRIES, ...LACNIC_COUNTRIES,
   ...ARIN_COUNTRIES, ...AFRINIC_COUNTRIES, ...SPECIAL_REGIONS,
 ])];
+
+// =============================================
+// 兜底后备清单（当动态抓取无效时的最后手段）
+// =============================================
+const HARDCODED_OVERRIDE = {
+  "IS": ["193.4.0.1", "194.144.0.1", "80.248.16.100"],
+  "SK": ["45.81.41.100", "62.168.64.100"],
+  "EH": ["104.28.9.164", "104.28.9.166"],
+  "KP": ["175.45.178.0"],
+  "TL": ["104.28.13.94", "103.94.180.100", "103.231.123.100"],
+  "AQ": ["31.6.15.1", "140.248.24.0", "104.28.92.69", "104.28.244.153"],
+  "NU": ["49.156.48.1", "49.156.49.1", "49.156.50.1", "49.156.51.1"],
+  "BM": ["104.218.168.250", "104.218.168.243", "207.228.149.197", "162.255.220.39", "104.218.175.19"],
+  "VG": ["161.199.208.22", "209.236.60.38", "162.210.159.130", "161.199.208.28", "209.236.62.65"],
+  "GU": ["117.20.124.49", "117.20.124.21", "101.99.166.149", "114.142.223.147", "101.99.130.224"],
+  "SM": ["109.233.83.212", "109.235.106.110", "109.233.87.155", "109.235.104.123", "109.235.111.190"],
+  "CY": ["109.105.236.49", "109.105.228.61", "109.105.246.222", "109.105.228.213", "109.105.228.100"],
+  "GI": ["104.255.128.61", "104.255.130.238", "104.255.129.76", "153.94.60.110", "178.208.196.124"],
+
+  "SE": ["109.104.27.74", "109.228.132.126", "109.124.134.24", "102.0.12.32", "109.228.128.194"],
+  "UA": ["109.197.166.86", "109.110.70.67", "109.104.185.244", "109.108.68.253", "109.207.113.131"],
+  "GE": ["109.172.158.70", "109.238.225.66", "140.150.163.80", "109.172.175.157", "149.3.48.37"],
+  "AG": ["108.199.59.7", "170.39.108.206", "170.39.109.209", "170.39.108.10", "104.255.179.159"],
+  "CK": ["202.65.35.112", "116.199.200.121", "202.65.43.145", "202.65.35.243", "202.65.43.225"],
+  "WS": ["202.4.33.0", "202.4.48.211", "202.4.32.249", "123.176.72.250", "110.5.112.193"],
+  "AZ": ["109.205.162.152", "109.127.44.235", "109.205.160.237", "109.127.52.249", "158.181.44.54"],
+  "SS": ["102.208.196.62", "105.235.213.138", "102.208.196.78", "154.73.90.145", "102.222.65.30"],
+  "BN": ["103.157.96.121", "119.160.128.207", "119.160.137.119", "118.103.255.247", "119.160.132.211"],
+  "BD": ["103.100.234.46", "103.100.234.165", "101.2.161.10", "103.106.236.37", "103.104.142.80"],
+  "GD": ["192.147.231.105", "199.127.197.201", "192.214.127.94", "204.152.81.40", "216.110.116.97"]
+};
 
 const TERRITORIES_FALLBACK = {
   "PR": ["66.98.224.0/21","209.6.0.0/18","64.125.0.0/19"],
@@ -180,7 +217,80 @@ async function queryMRA8(ip) {
 }
 
 // =============================================
-// 自动 Bypass 与 XK 特殊扫描
+// api.mir6.com 查询
+// =============================================
+async function queryMir6(ip) {
+  try {
+    const resp = await fetch(`https://api.mir6.com/api/ip_json?ip=${ip}&myKey=a2afc9bd586108afdab54e52907bb3d9`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data?.code === 200 && data?.data?.countryCode) {
+      return data.data.countryCode.toUpperCase();
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// =============================================
+// free.freeipapi.com 查询
+// =============================================
+async function queryFreeIP(ip) {
+  try {
+    const resp = await fetch(`https://free.freeipapi.com/api/json/${ip}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data?.countryCode?.toUpperCase() || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// =============================================
+// 冷门区域列表
+// =============================================
+const COLD_REGIONS = [
+  'NU', 'TK', 'PN', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'GL',
+  'VA', 'UA', 'VG', 'NZ', 'GU', 'CA', 'CY', 'BM', 'SM', 'GI',
+  'SE', 'GE', 'AG', 'WS', 'AZ', 'SS', 'BN', 'GD'
+];
+
+// =============================================
+// 核心验证逻辑（现在修改为：所有 API 必须全部返回 cc 才放行）
+// =============================================
+async function verifyRegionIP(ip, cc) {
+  const isCold = COLD_REGIONS.includes(cc);
+
+  // 同时并发执行所有相关 API 查询，减少等待时间
+  const p1 = queryMir6(ip);
+  const p2 = queryMRA8(ip);
+  const p3 = isCold ? queryFreeIP(ip) : Promise.resolve(null);
+
+  const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+
+  let allMatch = false;
+  if (isCold) {
+    // ✅ 冷门地区：必须 mir6 + mra8 + freeipapi 全部都等于 cc，哪怕有一个 null 或错都算失败
+    if (r1 === cc && r2 === cc && r3 === cc) {
+      allMatch = true;
+    }
+  } else {
+    // ✅ 常规地区：必须 mir6 + mra8 全部都等于 cc
+    if (r1 === cc && r2 === cc) {
+      allMatch = true;
+    }
+  }
+
+  return allMatch ? cc : null;
+}
+
+// =============================================
+// 抓取与Bypass动态逻辑
 // =============================================
 let RIR_RAW_TEXT = {};
 
@@ -241,7 +351,7 @@ function getXKCandidatesFromRIPE() {
 }
 
 // =============================================
-// 抓取 RIR（使用稳定镜像）
+// 抓取 RIR
 // =============================================
 async function fetchFromRIR(url, targetCountries, name) {
   console.log(`[${name}] 抓取中...`);
@@ -271,12 +381,12 @@ async function fetchFromRIR(url, targetCountries, name) {
   }
 }
 
-// AFRINIC 专用：多源重试，优先 APNIC 镜像
+// AFRINIC 专用：多源重试
 async function fetchAFRINICWithRetry() {
   const urls = [
-    "http://ftp.apnic.net/stats/afrinic/delegated-afrinic-latest",   // APNIC 镜像，极稳定
+    "http://ftp.apnic.net/stats/afrinic/delegated-afrinic-latest",
     "https://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-latest",
-    "http://ftp.apnic.net/stats/afrinic/delegated-afrinic-latest",   // 备选（同上）
+    "http://ftp.apnic.net/stats/afrinic/delegated-afrinic-latest",
   ];
   for (const url of urls) {
     console.log(`[AFRINIC] 尝试 ${url}`);
@@ -284,7 +394,7 @@ async function fetchAFRINICWithRetry() {
     if (Object.keys(res.candidates).length > 0) return res;
     console.log(`[AFRINIC] 该源无有效数据，尝试下一个...`);
   }
-  console.log("[AFRINIC] 所有源均失败，非洲国家将依赖候选池或缺失");
+  console.log("[AFRINIC] 所有源均失败");
   return { candidates: {}, raw: null };
 }
 
@@ -365,23 +475,17 @@ async function main() {
   const start = Date.now();
   await initMaxMind();
 
-  // Step 1: 抓取各 RIR
   console.log("\n--- Step 1: 抓取各 RIR 候选IP ---");
   const rirFetchers = [
-    fetchFromRIR("https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-latest",
-                 RIPE_COUNTRIES, "RIPE"),
-    fetchFromRIR("https://ftp.apnic.net/stats/apnic/delegated-apnic-latest",
-                 APNIC_COUNTRIES, "APNIC"),
-    fetchFromRIR("https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest",
-                 LACNIC_COUNTRIES, "LACNIC"),
-    fetchFromRIR("https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest",
-                 ARIN_COUNTRIES, "ARIN"),
+    fetchFromRIR("https://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-latest", RIPE_COUNTRIES, "RIPE"),
+    fetchFromRIR("https://ftp.apnic.net/stats/apnic/delegated-apnic-latest", APNIC_COUNTRIES, "APNIC"),
+    fetchFromRIR("https://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest", LACNIC_COUNTRIES, "LACNIC"),
+    fetchFromRIR("https://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest", ARIN_COUNTRIES, "ARIN"),
     fetchAFRINICWithRetry(),
   ];
 
   const rirResults = await Promise.all(rirFetchers);
 
-  // 合并候选
   const allCandidates = {};
   for (const { candidates } of rirResults) {
     for (const [cc, ips] of Object.entries(candidates)) {
@@ -397,13 +501,11 @@ async function main() {
   const totalCandidates = Object.values(allCandidates).reduce((s, a) => s + a.length, 0);
   console.log(`\n候选汇总: ${Object.keys(allCandidates).length} 国, ${totalCandidates} 个IP待验证`);
 
-  // Step 2: MaxMind 验证
   console.log("\n--- Step 2: MaxMind 验证 ---");
   const verified = await verifyIPs(allCandidates);
   console.log(`验证通过: ${Object.keys(verified).length} 个国家`);
 
-  // Step 3: 自动 Bypass 并二次验证
-  let missing = ALL_COUNTRIES.filter(cc => !verified[cc] && cc !== "AQ");   // AQ 手动处理
+  let missing = ALL_COUNTRIES.filter(cc => !verified[cc]);
   for (const cc of Object.keys(TERRITORIES_FALLBACK)) {
     if (!verified[cc]) missing.push(cc);
   }
@@ -412,11 +514,16 @@ async function main() {
   if (missing.length > 0) {
     console.log(`\n--- Step 3: 自动 Bypass 处理 (${missing.length} 国) ---`);
     for (const cc of missing) {
-      let bypassIPs = getAutoBypassIPs(cc);
+      let bypassIPs = [];
+      let found = false;
+
+      // ==========================================================
+      // 【优先级 1】 优先尝试从 RIR 候选池中动态抓取并验证
+      // ==========================================================
+      bypassIPs = getAutoBypassIPs(cc);
       if (bypassIPs.length === 0) {
         bypassIPs = getTerritoryFallbackIPs(cc);
       }
-      // 通用候选池回退
       if (bypassIPs.length === 0 && cc !== "XK") {
         bypassIPs = allCandidates[cc] || [];
         if (bypassIPs.length > 0) {
@@ -428,21 +535,19 @@ async function main() {
       if (cc === "XK") {
         console.log("[BYPASS] XK 启动增强扫描...");
         bypassIPs = getXKCandidatesFromRIPE();
-        if (bypassIPs.length === 0) {
-          bypassIPs = XK_HARDCODED_FALLBACK.filter(isPublicIP);
-        }
+        if (bypassIPs.length === 0) bypassIPs = XK_HARDCODED_FALLBACK.filter(isPublicIP);
       }
 
+      // 动态抓取的 API 确认（调用多源绝对一致逻辑）
       if (bypassIPs.length > 0) {
         const confirmedIPs = [];
         for (const ip of bypassIPs) {
-          const apiCountry = await queryMRA8(ip);
-          if (apiCountry === null) {
-            if (cc !== "XK") confirmedIPs.push(ip);
-          } else if (apiCountry === cc) {
+          const apiCountry = await verifyRegionIP(ip, cc);
+          if (apiCountry === cc) {
             confirmedIPs.push(ip);
           } else {
-            console.log(`[BYPASS] 🔍 ${cc} ${ip} 实际归属 ${apiCountry}，丢弃`);
+            // 只有所有 API 同时符合，才不会进这里；只要断掉就是失败
+            console.log(`[BYPASS] 🔍 ${cc} 动态IP ${ip} 验证不通过（API 结果不一致），丢弃`);
           }
         }
         bypassIPs = confirmedIPs;
@@ -450,26 +555,39 @@ async function main() {
 
       if (bypassIPs.length > 0) {
         verified[cc] = bypassIPs;
-        console.log(`[BYPASS] ${cc}: ${bypassIPs.join(', ')}`);
-      } else {
+        console.log(`[BYPASS] ✅ ${cc} 验证通过 (动态获取): ${bypassIPs.join(', ')}`);
+        found = true;
+      }
+
+      // ==========================================================
+      // 【优先级 2】 如果动态抓取全部失败，回退到硬编码兜底
+      // ==========================================================
+      if (!found && HARDCODED_OVERRIDE[cc]) {
+        console.log(`[BYPASS] ${cc} 动态获取失败，尝试硬编码后备...`);
+        const validated = [];
+        for (const ip of HARDCODED_OVERRIDE[cc]) {
+          const actual = await verifyRegionIP(ip, cc);
+
+          // 只有所有 API 同时返回相同结果，才会入库
+          if (actual === cc) {
+            validated.push(ip);
+          } else {
+            console.log(`[BYPASS] 🔍 ${cc} 硬编码IP ${ip} 验证不通过（API 结果不一致），丢弃`);
+          }
+        }
+        if (validated.length > 0) {
+          verified[cc] = validated;
+          console.log(`[BYPASS] ✅ ${cc} 验证通过 (硬编码): ${validated.join(', ')}`);
+          found = true;
+        }
+      }
+
+      if (!found) {
         console.log(`[BYPASS] ${cc}: ❌ 无法获取任何有效IP，该地区将缺失`);
       }
     }
   }
 
-  // 手动添加南极洲 (AQ) IP（来自 IP2Location / ipshu 清单，不验证）
-  const AQ_IPS = [
-    "31.6.15.1",          // McMurdo Station
-    "140.248.24.0",
-    "104.28.92.69",
-    "104.28.244.153",
-  ].filter(isPublicIP);
-  if (AQ_IPS.length > 0) {
-    verified['AQ'] = AQ_IPS;
-    console.log(`\n[MANUAL] AQ: ${AQ_IPS.join(', ')}`);
-  }
-
-  // Step 4: 构建最终数据
   console.log("\n--- Step 4: 构建最终数据 ---");
   const final = buildFinal(verified);
 
@@ -482,19 +600,17 @@ async function main() {
     console.log(`⚠️ 未覆盖: ${finalMissing.join(", ")}`);
   }
 
-  // 抽查
   console.log("\n--- 验证抽查 ---");
-  const checkList = ["CN","US","MN","JP","DE","BR","ZA","SC","JM","PR","BB","BS","XK","AQ"];
+  const checkList = ["MN","DE","BR","ZA","SC","JM","PR","BB","BS","XK","AQ","IS","GL","KP","TL","PG","NZ","EH", "GI", "VG", "BM", "SM", "CY", "SE", "GE", "AG", "WS", "AZ", "SS", "BN", "GD"];
   for (const cc of checkList) {
     const ips = final[cc];
     console.log(`${cc}: ${ips ? ips.join(", ") : "❌ 无数据"}`);
   }
 
-  // 写入文件
   const payload = {
     ips: final,
     updated_at: new Date().toISOString(),
-    source: "rir-delegated-files + maxmind-geolite2 + mra8-api-verification + manual-aq",
+    source: "rir-delegated-files + maxmind-geolite2 + mir6-api + mra8-api + freeipapi-verification + consensus-validation",
     country_count: covered,
     coverage_rate: `${covered}/${totalExpected}`,
     missing: finalMissing,
