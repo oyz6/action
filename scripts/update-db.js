@@ -2,7 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const maxmind = require('maxmind');
 
+// =============================================
 // RIR 国家列表
+// =============================================
 const RIPE_COUNTRIES = [
   "DE","GB","FR","NL","BE","LU","IE","PT","ES","IT","MT","CH","AT","LI","MC","AD",
   "SE","NO","DK","FI","IS","EE","LV","LT","GL",
@@ -52,7 +54,9 @@ const ALL_COUNTRIES = [...new Set([
   ...ARIN_COUNTRIES, ...AFRINIC_COUNTRIES, ...SPECIAL_REGIONS,
 ])];
 
+// =============================================
 // 兜底后备清单（当动态抓取无效时的最后手段）
+// =============================================
 const HARDCODED_OVERRIDE = {
   "IS": ["193.4.0.1", "194.144.0.1", "80.248.16.100"],
   "SK": ["45.81.41.100", "62.168.64.100"],
@@ -83,7 +87,6 @@ const HARDCODED_OVERRIDE = {
   "GD": ["192.147.231.105", "199.127.197.201", "192.214.127.94", "204.152.81.40", "216.110.116.97"]
 };
 
-
 const TERRITORIES_FALLBACK = {
   "PR": ["66.98.224.0/21","209.6.0.0/18","64.125.0.0/19"],
   "GU": ["168.123.0.0/18","202.128.0.0/17"],
@@ -92,7 +95,9 @@ const TERRITORIES_FALLBACK = {
 
 const XK_HARDCODED_FALLBACK = ["46.99.0.1"];
 
+// =============================================
 // 工具函数
+// =============================================
 function isPublicIP(ip) {
   if (!ip || typeof ip !== 'string') return false;
   const p = ip.split(".").map(Number);
@@ -129,7 +134,9 @@ function chunk(arr, size) {
   return out;
 }
 
+// =============================================
 // 解析 delegated 文件
+// =============================================
 function parseDelegatedFile(text, targetCountries) {
   const pool = {};
   const targetSet = new Set(targetCountries);
@@ -169,7 +176,9 @@ function sampleFromBlocks(blocks, n) {
   return ips;
 }
 
+// =============================================
 // MaxMind 本地验证
+// =============================================
 let lookupDb = null;
 async function initMaxMind() {
   if (!lookupDb) {
@@ -193,7 +202,9 @@ async function verifyWithMaxMind(ipList) {
   return result;
 }
 
+// =============================================
 // mra8-api 查询
+// =============================================
 async function queryMRA8(ip) {
   try {
     const resp = await fetch(`https://mra8-api.hf.space/${ip}`, {
@@ -207,7 +218,9 @@ async function queryMRA8(ip) {
   }
 }
 
+// =============================================
 // api.mir6.com 查询
+// =============================================
 async function queryMir6(ip) {
   try {
     const resp = await fetch(`https://api.mir6.com/api/ip_json?ip=${ip}&myKey=a2afc9bd586108afdab54e52907bb3d9`, {
@@ -224,7 +237,9 @@ async function queryMir6(ip) {
   }
 }
 
+// =============================================
 // free.freeipapi.com 查询
+// =============================================
 async function queryFreeIP(ip) {
   try {
     const resp = await fetch(`https://free.freeipapi.com/api/json/${ip}`, {
@@ -238,7 +253,9 @@ async function queryFreeIP(ip) {
   }
 }
 
+// =============================================
 // 冷门区域列表
+// =============================================
 const COLD_REGIONS = [
   'NU', 'TK', 'PN', 'CX', 'CC', 'NF', 'CK', 'WF', 'PM', 'SH', 'GS', 'AQ', 'BV', 'HM', 'TF', 'XK', 'KP', 'GL',
   'VA', 'UA', 'VG', 'NZ', 'GU', 'CA', 'CY', 'BM', 'SM', 'GI',
@@ -269,7 +286,9 @@ async function verifyRegionIP(ip, cc, isHardcoded = false) {
   return null;
 }
 
+// =============================================
 // 抓取与Bypass动态逻辑
+// =============================================
 let RIR_RAW_TEXT = {};
 
 function getAutoBypassIPs(cc) {
@@ -328,7 +347,9 @@ function getXKCandidatesFromRIPE() {
   return ips.slice(0, 30);
 }
 
+// =============================================
 // 抓取 RIR
+// =============================================
 async function fetchFromRIR(url, targetCountries, name) {
   console.log(`[${name}] 抓取中...`);
   try {
@@ -374,7 +395,9 @@ async function fetchAFRINICWithRetry() {
   return { candidates: {}, raw: null };
 }
 
+// =============================================
 // 验证流程
+// =============================================
 async function verifyIPs(candidates, label = "") {
   const allIPs = [];
   const ipToCC = {};
@@ -408,7 +431,9 @@ async function verifyIPs(candidates, label = "") {
   return verified;
 }
 
+// =============================================
 // 构建最终数据
+// =============================================
 function seededShuffle(arr, seed) {
   const a = [...arr];
   let s = seed >>> 0;
@@ -439,7 +464,9 @@ function buildFinal(verified) {
   return out;
 }
 
+// =============================================
 // 主流程
+// =============================================
 async function main() {
   console.log("=== IP数据库更新开始 ===");
   const start = Date.now();
@@ -487,7 +514,9 @@ async function main() {
       let bypassIPs = [];
       let found = false;
 
+      // ==========================================================
       // 【优先级 1】 优先尝试从 RIR 候选池中动态抓取并验证
+      // ==========================================================
       bypassIPs = getAutoBypassIPs(cc);
       if (bypassIPs.length === 0) {
         bypassIPs = getTerritoryFallbackIPs(cc);
@@ -526,7 +555,9 @@ async function main() {
         found = true;
       }
 
-      // 【优先级 2】 如果动态抓取全部失败，回退到硬编码兜底
+      // ==========================================================
+      // 【优先级 2】 如果动态抓取全部失败，回退到硬编码兜底（无验证直录）
+      // ==========================================================
       if (!found && HARDCODED_OVERRIDE[cc]) {
         console.log(`[BYPASS] ${cc} 动态获取失败，直接采用硬编码后备...`);
         verified[cc] = HARDCODED_OVERRIDE[cc];
@@ -552,12 +583,6 @@ async function main() {
     console.log(`⚠️ 未覆盖: ${finalMissing.join(", ")}`);
   }
 
-  console.log("\n--- 验证抽查 ---");
-  const checkList = ["MN","DE","BR","ZA","SC","JM","PR","BB","BS","XK","AQ","IS","GL","KP","TL","PG","NZ","EH", "GI", "VG", "BM", "SM", "CY", "SE", "GE", "AG", "WS", "AZ", "SS", "BN", "GD"];
-  for (const cc of checkList) {
-    const ips = final[cc];
-    console.log(`${cc}: ${ips ? ips.join(", ") : "❌ 无数据"}`);
-  }
 
   const payload = {
     ips: final,
