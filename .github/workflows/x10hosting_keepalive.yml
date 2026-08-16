@@ -2,8 +2,8 @@ name: X10hosting 保活 X15
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: '0 6 * * *'   # 每天 UTC 6:00
+  schedule:
+     - cron: '0 4 1 * *'
 
 permissions:
   actions: write
