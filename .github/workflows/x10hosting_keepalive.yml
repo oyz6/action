@@ -35,6 +35,15 @@ jobs:
         run: |
           pip install -q seleniumbase requests
 
+      - name: 安装 Chrome 120（固定版本以兼容 Buster）
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: '120'
+
+      - name: 设置 Chrome 路径
+        run: echo "CHROME_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> $GITHUB_ENV
+
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
 
@@ -46,9 +55,9 @@ jobs:
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
           echo "BUSTER_PATH=$(pwd)/scripts/extensions/buster/unpacked" >> $GITHUB_ENV
 
-      - name: 检查 Buster 扩展目录
+      - name: 验证 Buster 扩展目录
         run: |
-         if [ -f "$(pwd)/scripts/extensions/buster/unpacked/manifest.json" ]; then
+          if [ -f "$(pwd)/scripts/extensions/buster/unpacked/manifest.json" ]; then
             echo "✅ manifest.json 存在于 unpacked 根目录"
           else
             echo "⚠️ 未找到，尝试查找子目录..."
@@ -76,8 +85,9 @@ jobs:
           X10HOSTING: ${{ secrets.X10HOSTING }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}   # 由 setup_proxy.sh 导出，格式 socks5://127.0.0.1:1080
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}          # 由 setup_proxy.sh 导出
           BUSTER_PATH: ${{ env.BUSTER_PATH }}
+          CHROME_PATH: ${{ env.CHROME_PATH }}            # 关键：传递 Chrome 120 路径
         run: |
           mkdir -p screenshots
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive.py
