@@ -46,6 +46,15 @@ jobs:
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
           echo "BUSTER_PATH=$(pwd)/scripts/extensions/buster/unpacked" >> $GITHUB_ENV
 
+      - name: 检查 Buster 扩展目录
+        run: |
+         if [ -f "$(pwd)/scripts/extensions/buster/unpacked/manifest.json" ]; then
+            echo "✅ manifest.json 存在于 unpacked 根目录"
+          else
+            echo "⚠️ 未找到，尝试查找子目录..."
+            find scripts/extensions/buster/unpacked -maxdepth 2 -name manifest.json
+          fi
+
       - name: 设置代理
         env:
           NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名 （大金）双ISP - US
