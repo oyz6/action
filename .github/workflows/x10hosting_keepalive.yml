@@ -1,9 +1,9 @@
-name: X10hosting 保活 (SeleniumBase)
+name: X10hosting 保活 2
 
 on:
   workflow_dispatch:
-#  schedule:
-#    - cron: '0 6 * * *'   # 每天 UTC 6:00
+  # schedule:
+  #   - cron: '0 6 * * *'   # 每天 UTC 6:00
 
 permissions:
   actions: write
@@ -35,34 +35,23 @@ jobs:
         run: |
           pip install -q seleniumbase requests
 
-      - name: 安装 Chrome 123（Buster 支持的最低版本）
-        id: setup-chrome
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: '123'
+      - name: 安装 ChromeDriver
+        run: seleniumbase install chromedriver
 
-      - name: 设置 Chrome 路径
-        run: echo "CHROME_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> $GITHUB_ENV
-
-      - name: 安装 ChromeDriver 123
-        run: seleniumbase install chromedriver 123.0.6312.122
-
-      - name: 下载并解压 Buster 扩展
+      - name: 下载并解压 NopeCHA 扩展
         run: |
-          mkdir -p scripts/extensions/buster
-          wget -q -O scripts/extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip
-          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
-          echo "BUSTER_PATH=$(pwd)/scripts/extensions/buster/unpacked" >> $GITHUB_ENV
-
-      - name: 验证 Buster 扩展目录
-        run: |
-          if [ -f "$(pwd)/scripts/extensions/buster/unpacked/manifest.json" ]; then
-            echo "✅ manifest.json 存在于 unpacked 根目录"
+          mkdir -p scripts/extensions/nopecha
+          wget -q -O /tmp/nopecha.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y /tmp/nopecha.zip -o/tmp/nopecha_extracted
+          # 确保 manifest.json 位于 unpacked 根目录
+          if [ -f /tmp/nopecha_extracted/manifest.json ]; then
+            mv /tmp/nopecha_extracted scripts/extensions/nopecha/unpacked
           else
-            echo "⚠️ 未找到，尝试查找子目录..."
-            find scripts/extensions/buster/unpacked -maxdepth 2 -name manifest.json
+            # 通常解压后有一个子目录，移动其内容
+            mv /tmp/nopecha_extracted/* scripts/extensions/nopecha/unpacked
           fi
+          echo "NOPECHA_PATH=$(pwd)/scripts/extensions/nopecha/unpacked" >> $GITHUB_ENV
 
       - name: 设置代理
         env:
@@ -85,9 +74,9 @@ jobs:
           X10HOSTING: ${{ secrets.X10HOSTING }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}
-          BUSTER_PATH: ${{ env.BUSTER_PATH }}
-          CHROME_PATH: ${{ env.CHROME_PATH }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}   # 由 setup_proxy.sh 导出
+          NOPECHA_PATH: ${{ env.NOPECHA_PATH }}
+          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
         run: |
           mkdir -p screenshots
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive.py
