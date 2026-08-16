@@ -1,9 +1,9 @@
-name: X10hosting 保活 2
+name: X10hosting 保活 (SeleniumBase)
 
 on:
   workflow_dispatch:
 #  schedule:
-#    - cron: '0 6 * * *'   # 每天 UTC 6:00 自动运行一次
+#    - cron: '0 6 * * *'   # 每天 UTC 6:00
 
 permissions:
   actions: write
@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   keepalive:
-    name: 执行保活脚本
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
 
     steps:
       - name: 检出私有仓库
@@ -21,44 +21,43 @@ jobs:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
 
-      - name: 设置 Python
+      - name: 配置 Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: 安装系统依赖
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb unzip curl
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full
 
-      - name: 安装 Python 依赖
+      - name: 安装 Python 库
         run: |
-          pip install --upgrade pip
-          pip install playwright requests
-          playwright install chromium
-          playwright install-deps chromium
+          pip install -q seleniumbase requests
 
-      - name: 下载 Buster 扩展
+      - name: 安装 ChromeDriver
+        run: seleniumbase install chromedriver
+
+      - name: 下载并解压 Buster 扩展
         run: |
-          wget -q https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip -O /tmp/buster.zip
-          mkdir -p /tmp/buster_extract
-          unzip -q /tmp/buster.zip -d /tmp/buster_extract
-          BUSTER_DIR=$(find /tmp/buster_extract -name manifest.json -exec dirname {} \; | head -1)
-          echo "BUSTER_PATH=$BUSTER_DIR" >> $GITHUB_ENV
+          mkdir -p scripts/extensions/buster
+          wget -q -O scripts/extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip
+          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+          echo "BUSTER_PATH=$(pwd)/scripts/extensions/buster/unpacked" >> $GITHUB_ENV
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名 （大金）双ISP - US
+          NODE_LINK: ${{ secrets.PROXY_NODE }}   # 双ISP - US 节点
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           chmod +x scripts/setup_proxy.sh
           if ! bash scripts/setup_proxy.sh; then
-            echo "❌ 代理设置失败，发送通知..."
             curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TG_CHAT_ID}" \
               -d parse_mode="HTML" \
-              -d text="❌ <b>VPS8 签到失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              -d text="❌ <b>X10hosting 保活失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               --max-time 10 || true
             exit 1
           fi
@@ -68,18 +67,18 @@ jobs:
           X10HOSTING: ${{ secrets.X10HOSTING }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_HTTP: ${{ env.PROXY_HTTP }}          # 由 setup_proxy.sh 设置
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}   # 由 setup_proxy.sh 导出，格式 socks5://127.0.0.1:1080
           BUSTER_PATH: ${{ env.BUSTER_PATH }}
         run: |
-          mkdir -p output/screenshots
-          xvfb-run -a --server-args="-screen 0 1280x720x24" python scripts/x10hosting/x10hosting_keepalive.py
+          mkdir -p screenshots
+          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive_sb.py
 
       - name: 上传截图
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: x10-screenshots-${{ github.run_number }}
-          path: output/screenshots/*.png
+          path: screenshots/*.png
           retention-days: 7
           if-no-files-found: ignore
 
