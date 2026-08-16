@@ -44,8 +44,8 @@ jobs:
       - name: 设置 Chrome 路径
         run: echo "CHROME_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> $GITHUB_ENV
 
-      - name: 安装 ChromeDriver
-        run: seleniumbase install chromedriver
+      - name: 安装 ChromeDriver 123
+        run: seleniumbase install chromedriver 123.0.6312.122
 
       - name: 下载并解压 Buster 扩展
         run: |
@@ -85,9 +85,9 @@ jobs:
           X10HOSTING: ${{ secrets.X10HOSTING }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}          # 由 setup_proxy.sh 导出
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
           BUSTER_PATH: ${{ env.BUSTER_PATH }}
-          CHROME_PATH: ${{ env.CHROME_PATH }}            # 传递 Chrome 123 路径
+          CHROME_PATH: ${{ env.CHROME_PATH }}
         run: |
           mkdir -p screenshots
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive.py
