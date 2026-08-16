@@ -48,7 +48,7 @@ jobs:
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.PROXY_NODE }}   # 双ISP - US 节点
+          NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名 （大金）双ISP - US
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
@@ -57,7 +57,7 @@ jobs:
             curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TG_CHAT_ID}" \
               -d parse_mode="HTML" \
-              -d text="❌ <b>X10hosting 保活失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              -d text="❌ <b>VPS8 签到失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               --max-time 10 || true
             exit 1
           fi
@@ -71,7 +71,7 @@ jobs:
           BUSTER_PATH: ${{ env.BUSTER_PATH }}
         run: |
           mkdir -p screenshots
-          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive_sb.py
+          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive.py
 
       - name: 上传截图
         if: always()
