@@ -35,11 +35,11 @@ jobs:
         run: |
           pip install -q seleniumbase requests
 
-      - name: 安装 Chrome 120（固定版本以兼容 Buster）
+      - name: 安装 Chrome 123（Buster 支持的最低版本）
         id: setup-chrome
         uses: browser-actions/setup-chrome@v1
         with:
-          chrome-version: '120'
+          chrome-version: '123'
 
       - name: 设置 Chrome 路径
         run: echo "CHROME_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> $GITHUB_ENV
@@ -87,7 +87,7 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}          # 由 setup_proxy.sh 导出
           BUSTER_PATH: ${{ env.BUSTER_PATH }}
-          CHROME_PATH: ${{ env.CHROME_PATH }}            # 关键：传递 Chrome 120 路径
+          CHROME_PATH: ${{ env.CHROME_PATH }}            # 传递 Chrome 123 路径
         run: |
           mkdir -p screenshots
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive.py
