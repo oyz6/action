@@ -1,4 +1,4 @@
-name: X10hosting 保活 2
+name: X10hosting 保活 X15
 
 on:
   workflow_dispatch:
