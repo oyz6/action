@@ -83,15 +83,15 @@ jobs:
         run: |
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VpsFree/renew.py 2>&1 | tee output.log
 
-      - name: 备份第一次截图并等待
-        if: steps.renew_attempt1.outcome == 'failure'
-        run: |
-          if [ -d screenshots ]; then
-            mv screenshots screenshots-attempt1
-            echo "已备份第一次截图"
-          fi
-          echo "等待 30 秒后重试..."
-          sleep 30
+#      - name: 备份第一次截图并等待
+#        if: steps.renew_attempt1.outcome == 'failure'
+#        run: |
+#          if [ -d screenshots ]; then
+#            mv screenshots screenshots-attempt1
+#            echo "已备份第一次截图"
+#          fi
+#          echo "等待 30 秒后重试..."
+#          sleep 30
 
       - name: 执行续期脚本（第 2 次）
         if: steps.renew_attempt1.outcome == 'failure'
@@ -128,17 +128,16 @@ jobs:
             echo "未检测到 NEXT_RUN_UTC，跳过 cron 更新"
           fi
 
-      # ---------- 上传截图（包含两次尝试的目录） ----------
-      - name: 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots-${{ github.run_number }}
-          path: |
-            screenshots/
-            screenshots-attempt1/
-          retention-days: 3
-          if-no-files-found: ignore
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-${{ github.run_number }}
+#          path: |
+#            screenshots/
+#            screenshots-attempt1/
+#          retention-days: 3
+#          if-no-files-found: ignore
 
       - name: 清理历史运行记录
         if: always()
