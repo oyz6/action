@@ -66,7 +66,7 @@ jobs:
             curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TG_CHAT_ID}" \
               -d parse_mode="HTML" \
-              -d text="❌ <b>VpsFree.es 续期失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              -d text="❌ <b>VpsFree 续期失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               --max-time 10 || true
             exit 1
           fi
@@ -82,19 +82,27 @@ jobs:
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
         run: |
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VpsFree/renew.py 2>&1 | tee output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
 
-#      - name: 备份第一次截图并等待
-#        if: steps.renew_attempt1.outcome == 'failure'
-#        run: |
-#          if [ -d screenshots ]; then
-#            mv screenshots screenshots-attempt1
-#            echo "已备份第一次截图"
-#          fi
-#          echo "等待 30 秒后重试..."
-#          sleep 30
+      # 如需备份截图并等待，可取消注释以下步骤
+      # - name: 备份第一次截图并等待
+      #   if: steps.renew_attempt1.outcome == 'failure'
+      #   run: |
+      #     if [ -d screenshots ]; then
+      #       mv screenshots screenshots-attempt1
+      #       echo "已备份第一次截图"
+      #     fi
+      #     echo "等待 30 秒后重试..."
+      #     sleep 30
 
       - name: 执行续期脚本（第 2 次）
-        if: steps.renew_attempt1.outcome == 'failure'
+        if: steps.renew_attempt1.outputs.status == 'failed'
         id: renew_attempt2
         env:
           VPSFREE: ${{ secrets.VPSFREE }}
@@ -109,7 +117,7 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
-          WORKFLOW_FILE: .github/workflows/VpsFree_Renew.yml   # 根据实际文件名调整
+          WORKFLOW_NAME: ${{ github.workflow }}
         run: |
           NEXT_RUN_UTC=$(grep -oP 'NEXT_RUN_UTC=\K.*' output.log | tail -1)
           if [ -n "$NEXT_RUN_UTC" ]; then
@@ -117,7 +125,14 @@ jobs:
             CRON=$(date -u -d "$NEXT_RUN_UTC" +"%M %H * * *")
             echo "新 cron: $CRON"
             cd main-repo
-            # 替换第一处 cron 行
+
+            WORKFLOW_FILE=$(grep -lE "^name:\s*['\"]?$WORKFLOW_NAME['\"]?\s*$" .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -1)
+            if [ -z "$WORKFLOW_FILE" ]; then
+              echo "❌ 未找到匹配的工作流文件，跳过 cron 更新"
+              exit 1
+            fi
+
+            echo "找到工作流文件: $WORKFLOW_FILE"
             sed -i "0,/cron: '.*'/s//cron: '$CRON'/" "$WORKFLOW_FILE"
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -128,16 +143,17 @@ jobs:
             echo "未检测到 NEXT_RUN_UTC，跳过 cron 更新"
           fi
 
-#      - name: 上传截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: screenshots-${{ github.run_number }}
-#          path: |
-#            screenshots/
-#            screenshots-attempt1/
-#          retention-days: 3
-#          if-no-files-found: ignore
+      # 如需上传截图，可取消注释以下步骤
+      # - name: 上传截图
+      #   if: always()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: screenshots-${{ github.run_number }}
+      #     path: |
+      #       screenshots/
+      #       screenshots-attempt1/
+      #     retention-days: 3
+      #     if-no-files-found: ignore
 
       - name: 清理历史运行记录
         if: always()
