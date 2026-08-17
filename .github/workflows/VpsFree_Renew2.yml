@@ -82,6 +82,13 @@ jobs:
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
         run: |
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VpsFree/renew.py 2>&1 | tee output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
 
       # 如需备份截图并等待，可取消注释以下步骤
       # - name: 备份第一次截图并等待
@@ -95,7 +102,7 @@ jobs:
       #     sleep 30
 
       - name: 执行续期脚本（第 2 次）
-        if: steps.renew_attempt1.outcome == 'failure'
+        if: steps.renew_attempt1.outputs.status == 'failed'
         id: renew_attempt2
         env:
           VPSFREE: ${{ secrets.VPSFREE_0 }}
