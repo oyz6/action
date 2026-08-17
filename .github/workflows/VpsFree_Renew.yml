@@ -15,12 +15,20 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: 检出仓库
+      - name: 检出私有仓库
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
-          persist-credentials: true   # 保留 token 以便后续 git push
+          persist-credentials: true
+
+      - name: 检出公开仓库
+        if: always()
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.REPO_TOKEN }}
+          path: main-repo
+          persist-credentials: true
 
       - name: 配置 Python
         uses: actions/setup-python@v5
@@ -74,21 +82,23 @@ jobs:
         run: |
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VpsFree/renew.py 2>&1 | tee output.log
 
-      - name: 更新 Cron（如果脚本输出 NEXT_RUN_UTC）
+      - name: 更新 Cron
         if: always() && steps.renew.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
+          WORKFLOW_FILE: .github/workflows/VpsFree_Renew.yml   # 根据实际文件名调整
         run: |
           NEXT_RUN_UTC=$(grep -oP 'NEXT_RUN_UTC=\K.*' output.log | tail -1)
           if [ -n "$NEXT_RUN_UTC" ]; then
             echo "下次运行时间 (UTC): $NEXT_RUN_UTC"
             CRON=$(date -u -d "$NEXT_RUN_UTC" +"%M %H * * *")
             echo "新 cron: $CRON"
-            # 替换 workflow 中的 cron 行（仅第一处）
-            sed -i "0,/cron: '.*'/s//cron: '$CRON'/" .github/workflows/VpsFree_Renew.yml
+            cd main-repo
+            # 替换第一处 cron 行
+            sed -i "0,/cron: '.*'/s//cron: '$CRON'/" "$WORKFLOW_FILE"
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add .github/workflows/vpsfree-renew.yml
+            git add "$WORKFLOW_FILE"
             git commit -m "chore: update cron to $CRON UTC" || echo "没有变更"
             git push
           else
