@@ -71,8 +71,31 @@ jobs:
             exit 1
           fi
 
-      - name: 执行续期脚本
-        id: renew
+      - name: 执行续期脚本（第 1 次）
+        id: renew_attempt1
+        continue-on-error: true
+        env:
+          VPSFREE: ${{ secrets.VPSFREE }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+        run: |
+          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VpsFree/renew.py 2>&1 | tee output.log
+
+      - name: 备份第一次截图并等待
+        if: steps.renew_attempt1.outcome == 'failure'
+        run: |
+          if [ -d screenshots ]; then
+            mv screenshots screenshots-attempt1
+            echo "已备份第一次截图"
+          fi
+          echo "等待 30 秒后重试..."
+          sleep 30
+
+      - name: 执行续期脚本（第 2 次）
+        if: steps.renew_attempt1.outcome == 'failure'
+        id: renew_attempt2
         env:
           VPSFREE: ${{ secrets.VPSFREE }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -83,7 +106,7 @@ jobs:
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VpsFree/renew.py 2>&1 | tee output.log
 
       - name: 更新 Cron
-        if: always() && steps.renew.outcome == 'success'
+        if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
           WORKFLOW_FILE: .github/workflows/VpsFree_Renew.yml   # 根据实际文件名调整
@@ -105,12 +128,15 @@ jobs:
             echo "未检测到 NEXT_RUN_UTC，跳过 cron 更新"
           fi
 
+      # ---------- 上传截图（包含两次尝试的目录） ----------
       - name: 上传截图
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshots-${{ github.run_number }}
-          path: screenshots/
+          path: |
+            screenshots/
+            screenshots-attempt1/
           retention-days: 3
           if-no-files-found: ignore
 
