@@ -83,15 +83,16 @@ jobs:
         run: |
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VpsFree/renew.py 2>&1 | tee output.log
 
-#      - name: 备份第一次截图并等待
-#        if: steps.renew_attempt1.outcome == 'failure'
-#        run: |
-#          if [ -d screenshots ]; then
-#            mv screenshots screenshots-attempt1
-#            echo "已备份第一次截图"
-#          fi
-#          echo "等待 30 秒后重试..."
-#          sleep 30
+      # 如需备份截图并等待，可取消注释以下步骤
+      # - name: 备份第一次截图并等待
+      #   if: steps.renew_attempt1.outcome == 'failure'
+      #   run: |
+      #     if [ -d screenshots ]; then
+      #       mv screenshots screenshots-attempt1
+      #       echo "已备份第一次截图"
+      #     fi
+      #     echo "等待 30 秒后重试..."
+      #     sleep 30
 
       - name: 执行续期脚本（第 2 次）
         if: steps.renew_attempt1.outcome == 'failure'
@@ -109,7 +110,7 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
-          WORKFLOW_NAME: ${{ github.workflow }}   # 当前工作流名称，例如 "VpsFree.es 续期"
+          WORKFLOW_NAME: ${{ github.workflow }}
         run: |
           NEXT_RUN_UTC=$(grep -oP 'NEXT_RUN_UTC=\K.*' output.log | tail -1)
           if [ -n "$NEXT_RUN_UTC" ]; then
@@ -118,34 +119,13 @@ jobs:
             echo "新 cron: $CRON"
             cd main-repo
 
-            WORKFLOW_FILE=$(python3 - <<'PYEOF'
-            import os, re
-            name = os.environ['WORKFLOW_NAME']
-            found = None
-            for fn in sorted(os.listdir('.github/workflows')):
-                if fn.endswith(('.yml', '.yaml')):
-                    path = os.path.join('.github/workflows', fn)
-                    with open(path, encoding='utf-8') as f:
-                        content = f.read()
-                    m = re.search(r'^[ \t]*name[ \t]*:[ \t]*["\']?([^"\']+?)["\']?[ \t]*$', content, re.MULTILINE)
-                    if m and m.group(1).strip() == name:
-                        found = path
-                        break
-            if found:
-                print(found)
-            else:
-                print('', end='')
-                print('⚠️ 未找到匹配的工作流文件，请检查工作流名称', file=sys.stderr)
-            PYEOF
-            )
-
+            WORKFLOW_FILE=$(grep -lE "^name:\s*['\"]?$WORKFLOW_NAME['\"]?\s*$" .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -1)
             if [ -z "$WORKFLOW_FILE" ]; then
               echo "❌ 未找到匹配的工作流文件，跳过 cron 更新"
               exit 1
             fi
 
             echo "找到工作流文件: $WORKFLOW_FILE"
-            # 替换第一处 cron 行
             sed -i "0,/cron: '.*'/s//cron: '$CRON'/" "$WORKFLOW_FILE"
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -156,16 +136,17 @@ jobs:
             echo "未检测到 NEXT_RUN_UTC，跳过 cron 更新"
           fi
 
-#      - name: 上传截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: screenshots-${{ github.run_number }}
-#          path: |
-#            screenshots/
-#            screenshots-attempt1/
-#          retention-days: 3
-#          if-no-files-found: ignore
+      # 如需上传截图，可取消注释以下步骤
+      # - name: 上传截图
+      #   if: always()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: screenshots-${{ github.run_number }}
+      #     path: |
+      #       screenshots/
+      #       screenshots-attempt1/
+      #     retention-days: 3
+      #     if-no-files-found: ignore
 
       - name: 清理历史运行记录
         if: always()
