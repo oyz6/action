@@ -90,15 +90,15 @@ jobs:
             echo "status=success" >> $GITHUB_OUTPUT
           fi
 
-       - name: 备份第一次截图并等待
-         if: steps.renew_attempt1.outcome == 'failure'
-         run: |
-           if [ -d screenshots ]; then
-             mv screenshots screenshots-attempt1
-             echo "已备份第一次截图"
-           fi
-           echo "等待 60 秒后重试..."
-           sleep 60
+      - name: 备份第一次截图并等待
+        if: steps.renew_attempt1.outputs.status == 'failed'
+        run: |
+          if [ -d screenshots ]; then
+            mv screenshots screenshots-attempt1
+            echo "已备份第一次截图"
+          fi
+          echo "等待 60 秒后重试..."
+          sleep 60
 
       - name: 执行续期脚本（第 2 次）
         if: steps.renew_attempt1.outputs.status == 'failed'
