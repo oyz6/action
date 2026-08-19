@@ -90,16 +90,15 @@ jobs:
             echo "status=success" >> $GITHUB_OUTPUT
           fi
 
-      # 如需备份截图并等待，可取消注释以下步骤
-      # - name: 备份第一次截图并等待
-      #   if: steps.renew_attempt1.outcome == 'failure'
-      #   run: |
-      #     if [ -d screenshots ]; then
-      #       mv screenshots screenshots-attempt1
-      #       echo "已备份第一次截图"
-      #     fi
-      #     echo "等待 30 秒后重试..."
-      #     sleep 30
+       - name: 备份第一次截图并等待
+         if: steps.renew_attempt1.outcome == 'failure'
+         run: |
+           if [ -d screenshots ]; then
+             mv screenshots screenshots-attempt1
+             echo "已备份第一次截图"
+           fi
+           echo "等待 60 秒后重试..."
+           sleep 60
 
       - name: 执行续期脚本（第 2 次）
         if: steps.renew_attempt1.outputs.status == 'failed'
@@ -134,10 +133,12 @@ jobs:
 
             echo "找到工作流文件: $WORKFLOW_FILE"
             sed -i "0,/cron: '.*'/s//cron: '$CRON'/" "$WORKFLOW_FILE"
+
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add "$WORKFLOW_FILE"
             git commit -m "chore: update cron to $CRON UTC" || echo "没有变更"
+            git pull --rebase origin main
             git push
           else
             echo "未检测到 NEXT_RUN_UTC，跳过 cron 更新"
