@@ -121,7 +121,7 @@ jobs:
           NEXT_RUN_UTC=$(grep -oP 'NEXT_RUN_UTC=\K.*' output.log | tail -1)
           if [ -n "$NEXT_RUN_UTC" ]; then
             echo "下次运行时间 (UTC): $NEXT_RUN_UTC"
-            CRON=$(date -u -d "$NEXT_RUN_UTC" +"%M %H * * *")
+            CRON=$(date -u -d "$NEXT_RUN_UTC" +"%-M %-H %-d %-m *")
             echo "新 cron: $CRON"
             cd main-repo
 
