@@ -31,19 +31,15 @@ jobs:
 
       - name: 安装 Python 库
         run: |
-          pip install -q seleniumbase requests[socks] pysocks
+          pip install -q seleniumbase requests
 
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
 
       - name: 下载并解压扩展
         run: |
-          mkdir -p scripts/extensions/nopecha scripts/extensions/buster
-
-          wget -q -O scripts/extensions/nopecha/chromium.zip \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
-          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
-
+          mkdir -p scripts/extensions/buster
+          
           wget -q -O scripts/extensions/buster/buster.zip \
             https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
