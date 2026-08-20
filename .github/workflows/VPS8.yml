@@ -4,15 +4,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-first:
-    name: 首次执行
+  sign:
+    name: 执行签到
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
       actions: write
-    outputs:
-      signin_success: ${{ steps.signin_first.outcome == 'success' && 'true' || 'false' }}
 
     steps:
       - name: 检出代码仓库
@@ -25,7 +23,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: 安装系统依赖
         run: |
@@ -53,7 +50,7 @@ jobs:
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.PROXY_NODE_ISP }}  # 改为对应节点变量名 美国 加利福尼亚州 洛杉矶 - ISP
+          NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}  # 360t7 美国一年 - 双ISP - US
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
@@ -68,8 +65,8 @@ jobs:
             exit 1
           fi
 
-      - name: 执行签到（首次）
-        id: signin_first
+      - name: 执行签到（第 1 次）
+        id: attempt1
         continue-on-error: true
         env:
           VPS8_RENEW_TEST: "0"
@@ -77,99 +74,38 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_SB.py
 
-#      - name: 上传截图（首次）
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: screenshots-first-${{ github.run_number }}
-#          path: screenshots/*.png
-#          retention-days: 3
-#          if-no-files-found: ignore
-
-  run-retry:
-    name: 重试执行
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
-    needs: run-first
-    if: always() && needs.run-first.outputs.signin_success == 'false'
-    permissions:
-      contents: read
-      actions: write
-
-    steps:
-      - name: 检出代码仓库
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/scripts
-          token: ${{ secrets.REPO_TOKEN }}
-
-      - name: 配置 Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: 安装系统依赖
+      - name: 备份第一次截图并等待
+        if: steps.attempt1.outcome == 'failure'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full
-
-      - name: 安装 Python 库
-        run: |
-          pip install -q seleniumbase requests
-
-      - name: 安装 ChromeDriver
-        run: seleniumbase install chromedriver
-
-      - name: 下载并解压扩展
-        run: |
-          mkdir -p scripts/extensions/nopecha scripts/extensions/buster
-
-          wget -q -O scripts/extensions/nopecha/chromium.zip \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
-          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
-
-          wget -q -O scripts/extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip
-          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
-
-      - name: 设置代理
-        env:
-          NODE_LINK: ${{ secrets.PROXY_NODE_ISP }}  # 改为对应节点变量名 美国 加利福尼亚州 洛杉矶 - ISP
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: |
-          chmod +x scripts/setup_proxy.sh
-          if ! bash scripts/setup_proxy.sh; then
-            echo "❌ 代理设置失败，发送通知..."
-            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-              -d chat_id="${TG_CHAT_ID}" \
-              -d parse_mode="HTML" \
-              -d text="❌ <b>VPS8 签到失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              --max-time 10 || true
-            exit 1
+          if [ -d screenshots ]; then
+            mv screenshots screenshots-attempt1
+            echo "已备份第一次截图"
           fi
+          echo "等待 60 秒后重试..."
+          sleep 60
 
-      - name: 执行签到（重试）
-        id: signin_retry
+      - name: 执行签到（第 2 次）
+        if: steps.attempt1.outcome == 'failure'
         env:
           VPS8_RENEW_TEST: "0"
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_SB.py
 
-#      - name: 上传截图（重试）
+#      - name: 上传所有截图
 #        if: always()
 #        uses: actions/upload-artifact@v4
 #        with:
-#          name: screenshots-retry-${{ github.run_number }}
-#          path: screenshots/*.png
+#          name: screenshots-${{ github.run_number }}
+#          path: |
+#            screenshots-attempt1/
+#            screenshots/
 #          retention-days: 3
 #          if-no-files-found: ignore
 
@@ -181,4 +117,4 @@ jobs:
           repository: ${{ github.repository }}
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
-          keep_minimum_runs: 2
+          keep_minimum_runs: 1
