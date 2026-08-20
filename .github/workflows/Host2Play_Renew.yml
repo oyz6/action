@@ -4,11 +4,6 @@ on:
   schedule:
     - cron: '43 */6 * * *'    # 触发点UTC: 00:43、06:43、12:43、18:43
   workflow_dispatch:
-    inputs:
-      is_retry:
-        description: '是否为重试运行'
-        required: false
-        default: 'false'
 
 permissions:
   actions: write
@@ -27,7 +22,7 @@ jobs:
         with:
           repository: oyz6/scripts
           token: ${{ secrets.REPO_TOKEN }}
-          path: .  # 拉到根目录
+          path: .
 
       - name: 配置 Python 环境
         uses: actions/setup-python@v5
@@ -80,51 +75,20 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      # 把结果写入文件，供重试 job 判断是否需要运行
-      - name: 写出结果标记
-        if: always()
-        run: |
-          echo "${{ steps.renew_run.outcome }}" > /tmp/first_outcome.txt
-          cat /tmp/first_outcome.txt
-
-      # 上传结果标记文件，传递给重试 job
-      - name: 上传结果标记
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: outcome-${{ github.run_number }}
-          path: /tmp/first_outcome.txt
-          retention-days: 1
-
   run-retry:
     name: 重试执行
     runs-on: ubuntu-latest
     needs: run-first
-    # 无论 run-first 成功还是失败都运行此 job（但内部会判断）
-    if: always()
+    if: always() && needs.run-first.outputs.success == 'false'
+    permissions:
+      actions: write
+      contents: read
 
     steps:
-      - name: 下载结果标记
-        uses: actions/download-artifact@v4
-        with:
-          name: outcome-${{ github.run_number }}
-          path: /tmp/outcome
-
-      - name: 检查是否需要重试
-        id: need_retry
-        run: |
-          OUTCOME=$(cat /tmp/outcome/first_outcome.txt 2>/dev/null || echo "unknown")
-          echo "首次运行结果: $OUTCOME"
-          if [ "$OUTCOME" = "success" ]; then
-            echo "首次成功，跳过重试"
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "首次失败，执行重试"
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
+      - name: 等待 60 秒（让 IP 封锁冷却）
+        run: sleep 60
 
       - name: 拉取私有仓库
-        if: steps.need_retry.outputs.skip == 'false'
         uses: actions/checkout@v4
         with:
           repository: oyz6/scripts
@@ -132,13 +96,11 @@ jobs:
           path: .
 
       - name: 配置 Python 环境
-        if: steps.need_retry.outputs.skip == 'false'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: 安装系统依赖
-        if: steps.need_retry.outputs.skip == 'false'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb ffmpeg unzip curl
@@ -146,26 +108,17 @@ jobs:
           sudo dpkg -i /tmp/chrome.deb || sudo apt-get install -f -y
 
       - name: 安装 Python 依赖
-        if: steps.need_retry.outputs.skip == 'false'
         run: |
           python -m pip install --upgrade pip
           pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
 
-      - name: 等待 60 秒（让 IP 封锁冷却）
-        if: steps.need_retry.outputs.skip == 'false'
-        run: |
-          echo "[INFO] 等待 60 秒后重试，让 IP 封锁冷却..."
-          sleep 60
-
       - name: 启用 WARP 网络
-        if: steps.need_retry.outputs.skip == 'false'
         uses: fscarmen/warp-on-actions@v1.3
         with:
           stack: dual
           mode: client
 
       - name: 修复 DNS
-        if: steps.need_retry.outputs.skip == 'false'
         run: |
           sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo systemctl disable systemd-resolved 2>/dev/null || true
@@ -177,7 +130,6 @@ jobs:
           curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E 'ip=|warp=|loc=' || true
 
       - name: 执行续订（重试）
-        if: steps.need_retry.outputs.skip == 'false'
         id: renew_retry
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN_8 }}
@@ -185,7 +137,7 @@ jobs:
         run: python -u scripts/Host2Play/main.py
 
       - name: 上传截图（重试）
-        if: steps.need_retry.outputs.skip == 'false' && always()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshots-retry-${{ github.run_number }}
