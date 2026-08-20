@@ -73,26 +73,26 @@ jobs:
           PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_api.py
 
-      - name: 备份第一次截图并等待
-        if: steps.attempt1.outcome == 'failure'
-        run: |
-          if [ -d screenshots ]; then
-            mv screenshots screenshots-attempt1
-            echo "已备份第一次截图"
-          fi
-          echo "等待 60 秒后重试..."
-          sleep 60
+#      - name: 备份第一次截图并等待
+#        if: steps.attempt1.outcome == 'failure'
+#        run: |
+#          if [ -d screenshots ]; then
+#            mv screenshots screenshots-attempt1
+#            echo "已备份第一次截图"
+#          fi
+#          echo "等待 60 秒后重试..."
+#          sleep 60
 
-      - name: 执行签到（第 2 次）
-        if: steps.attempt1.outcome == 'failure'
-        env:
-          VPS8_RENEW_TEST: "0"
-          VPS8: ${{ secrets.VPS8 }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
-        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_api.py
+#      - name: 执行签到（第 2 次）
+#        if: steps.attempt1.outcome == 'failure'
+#        env:
+#          VPS8_RENEW_TEST: "0"
+#          VPS8: ${{ secrets.VPS8 }}
+#          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+#          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+#          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
+#          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
+#        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_api.py
 
 #      - name: 上传所有截图
 #        if: always()
