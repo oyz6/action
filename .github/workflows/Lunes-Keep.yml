@@ -37,7 +37,7 @@ jobs:
 
       - name: 配置代理
         env:
-          NODE_LINK: ${{ secrets.PROXY_NODE_ISP }}  # 改为对应节点变量名 煤山 - 双ISP - US
+          NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}  # 360t7 美国一年 - 双ISP - US
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
