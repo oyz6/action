@@ -3,7 +3,7 @@ name: VpsFree.es 续期 2
 on:
   workflow_dispatch:
   schedule:
-    - cron: '16 13 31 8 *'   # 脚本会根据续期开放时间自动更新此行
+    - cron: '37 12 7 9 *'   # 脚本会根据续期开放时间自动更新此行
 
 permissions:
   contents: write
