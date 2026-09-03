@@ -50,7 +50,8 @@ jobs:
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}  # 360t7 美国一年 - 双ISP - US
+#          NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}  # 360t7 美国一年 - 双ISP - USPROXY_NODE_US_IT7
+          NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}  # 美国 加利福尼亚州 洛杉矶 — 搬瓦工
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
