@@ -59,6 +59,13 @@ jobs:
             libpango-1.0-0 \
             libcairo2
 
+      - name: 安装 Python 依赖
+        run: |
+          pip install --upgrade pip
+          pip install seleniumbase pyvirtualdisplay
+          seleniumbase install chromedriver
+          seleniumbase install chrome
+
       - name: 设置代理
         env:
           NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}  # 美国 加利福尼亚州 洛杉矶 — 搬瓦工
@@ -75,13 +82,6 @@ jobs:
               --max-time 10 || true
             exit 1
           fi
-
-      - name: 安装 Python 依赖
-        run: |
-          pip install --upgrade pip
-          pip install seleniumbase pyvirtualdisplay
-          seleniumbase install chromedriver
-          seleniumbase install chrome
 
       - name: 运行续订脚本
         id: renew
