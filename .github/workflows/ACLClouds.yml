@@ -1,0 +1,87 @@
+name: ACLClouds 续期
+
+on:
+  workflow_dispatch:
+#  schedule:
+#    - cron: '0 23 */3 * *' # 每隔3天 UTC 23:00（北京时间 07:00）运行
+
+jobs:
+  Renew-acl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            x11-utils \
+            xdotool \
+            scrot \
+            fonts-noto-cjk
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install seleniumbase aiohttp requests
+          seleniumbase install chromedriver
+
+      - name: 设置代理（可选）
+        env:
+          NODE_LINK: ${{ secrets.NODE_LINK }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          chmod +x scripts/setup_proxy.sh
+          if ! bash scripts/setup_proxy.sh; then
+            echo "❌ 代理设置失败，发送通知..."
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d parse_mode="HTML" \
+              -d text="❌ <b>ACLClouds 续期失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --max-time 10 || true
+            exit 1
+          fi
+
+      - name: 执行续期脚本
+        env:
+          ACLClOUDS_1: ${{ secrets.ACLClOUDS_1 }}
+   #       ACLClOUDS_2: ${{ secrets.ACLClOUDS_2 }}
+   #       ACLClOUDS_3: ${{ secrets.ACLClOUDS_3 }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" \
+            python3 scripts/ACLClouds/renew.py
+
+      - name: 上传截图
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ github.run_number }}
+          path: output/screenshots/
+          retention-days: 3
+
+      - name: 清理旧运行
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 3
