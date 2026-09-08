@@ -102,14 +102,14 @@ jobs:
             echo "未检测到 NEXT_RUN_UTC，跳过 cron 更新"
           fi
 
-      - name: 上传截图
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: screenshots-${{ github.run_number }}
-          path: output/screenshots/
-          retention-days: 3
-          if-no-files-found: ignore
+#      - name: 上传截图
+#        uses: actions/upload-artifact@v4
+#        if: always()
+#        with:
+#          name: screenshots-${{ github.run_number }}
+#          path: output/screenshots/
+#          retention-days: 3
+#          if-no-files-found: ignore
 
       - name: 清理历史运行记录
         if: always()
