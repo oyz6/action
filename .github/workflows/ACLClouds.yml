@@ -3,7 +3,7 @@ name: ACLClouds 续期
 on:
   workflow_dispatch:
   schedule:
-    - cron: '14 4 10 1 *'   # 初始 cron，脚本会根据续期开放时间自动更新
+    - cron: '0 */1 * * *'   # 初始 cron，脚本会根据续期开放时间自动更新
 
 permissions:
   contents: write
