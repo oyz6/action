@@ -3,7 +3,7 @@ name: KataBump 续订
 on:
   workflow_dispatch:
   schedule:
-    - cron: '54 17 9 9 *'   # 脚本会根据续订开放时间自动更新此行
+    - cron: '11 4 12 9 *'   # 脚本会根据续订开放时间自动更新此行
 
 permissions:
   contents: write
