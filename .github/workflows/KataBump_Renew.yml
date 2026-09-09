@@ -110,26 +110,29 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
+          WORKFLOW_NAME: ${{ github.workflow }}
         run: |
           NEXT_RUN_UTC=$(grep -oP 'NEXT_RUN_UTC=\K.*' output.log | tail -1)
           if [ -n "$NEXT_RUN_UTC" ]; then
             echo "下次运行时间 (UTC): $NEXT_RUN_UTC"
             CRON=$(date -u -d "$NEXT_RUN_UTC" +"%-M %-H %-d %-m *")
             echo "新 cron: $CRON"
-            # 进入主仓库目录
             cd main-repo
-            # 查找对应的工作流文件
-            WORKFLOW_FILE=$(grep -lE "^name:\s*['\"]?${{ github.workflow }}['\"]?\s*$" .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -1)
+
+            WORKFLOW_FILE=$(grep -lE "^name:\s*['\"]?$WORKFLOW_NAME['\"]?\s*$" .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -1)
             if [ -z "$WORKFLOW_FILE" ]; then
               echo "❌ 未找到匹配的工作流文件，跳过 cron 更新"
               exit 1
             fi
+
             echo "找到工作流文件: $WORKFLOW_FILE"
             sed -i "0,/cron: '.*'/s//cron: '$CRON'/" "$WORKFLOW_FILE"
+
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add "$WORKFLOW_FILE"
-            git commit -m "chore: update cron to $CRON UTC" || echo "没有变更"
+            COMMIT_MSG="下次执行时间：$(date -u -d "$NEXT_RUN_UTC" '+%Y年%m月%d日 %H:%M')"
+            git commit -m "$COMMIT_MSG" || echo "没有变更"
             git pull --rebase origin main
             git push
           else
