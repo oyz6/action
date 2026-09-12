@@ -39,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            xvfb x11-utils xdotool \
+            xvfb x11-utils xdotool scrot fonts-noto-cjk \
             libgtk-3-0 libnss3 libxss1 libasound2t64 libxtst6 xauth \
             fonts-liberation libgbm1 libxkbcommon0 libatk1.0-0 \
             libatk-bridge2.0-0 libcups2 libdrm2 libxcomposite1 \
