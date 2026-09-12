@@ -3,7 +3,7 @@ name: KataBump 续订
 on:
   workflow_dispatch:
   schedule:
-    - cron: '11 4 16 9 *'   # 脚本会根据续订开放时间自动更新此行
+    - cron: '11 4 13 9 *'   # 脚本会根据续订开放时间自动更新此行
 
 permissions:
   contents: write
@@ -39,32 +39,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            xvfb \
-            xdotool \
-            x11-utils \
-            libgtk-3-0 \
-            libnss3 \
-            libxss1 \
-            libasound2t64 \
-            libxtst6 \
-            xauth \
-            fonts-liberation \
-            libgbm1 \
-            libxkbcommon0 \
-            libatk1.0-0 \
-            libatk-bridge2.0-0 \
-            libcups2 \
-            libdrm2 \
-            libxcomposite1 \
-            libxdamage1 \
-            libxrandr2 \
-            libpango-1.0-0 \
-            libcairo2
+            xvfb x11-utils xdotool scrot fonts-noto-cjk \
+            libgtk-3-0 libnss3 libxss1 libasound2t64 libxtst6 xauth \
+            fonts-liberation libgbm1 libxkbcommon0 libatk1.0-0 \
+            libatk-bridge2.0-0 libcups2 libdrm2 libxcomposite1 \
+            libxdamage1 libxrandr2 libpango-1.0-0 libcairo2
 
       - name: 安装 Python 依赖
         run: |
           pip install --upgrade pip
-          pip install seleniumbase pyvirtualdisplay
+          pip install seleniumbase requests pyvirtualdisplay
           seleniumbase install chromedriver
           seleniumbase install chrome
 
@@ -99,15 +83,6 @@ jobs:
           sleep 2
           python scripts/KataBump/main.py 2>&1 | tee output.log
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-
-      - name: 上传截图
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: screenshots-${{ github.run_number }}
-          path: "*.png"
-          retention-days: 7
-          if-no-files-found: ignore
 
       - name: 更新 Cron
         if: always()
@@ -151,3 +126,14 @@ jobs:
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
           keep_minimum_runs: 1
+
+      - name: 上传截图（失败时保留）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-screenshots-${{ github.run_number }}
+          path: |
+            *.png
+            *.html
+          retention-days: 3
+          if-no-files-found: ignore
