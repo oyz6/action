@@ -1,13 +1,7 @@
-# .github/workflows/build-wheels.yml
 name: 安装依赖打包
 
 on:
   workflow_dispatch:
-    inputs:
-      grpcio_version:
-        description: 'grpcio 版本 (留空=最新)'
-        required: false
-        default: ''
 
 jobs:
   build:
@@ -16,6 +10,7 @@ jobs:
     steps:
       - name: 下载 Python wheel
         run: |
+          mkdir -p wheels
           pip download \
             grpcio \
             grpcio-tools \
@@ -30,29 +25,34 @@ jobs:
             --abi=cp313 \
             -d ./wheels/
 
-          echo "=== 下载的文件 ==="
+          echo "=== 下载的 wheel ==="
           ls -lh ./wheels/
-
-      - name: 获取 main.so 最新 Tag
-        run: |
-          TAG=$(curl -s https://api.github.com/repos/oyz8/agent-v1-so/releases/latest \
-                | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
-          echo "TAG=$TAG" >> $GITHUB_ENV
-          echo "最新 Tag: $TAG"
 
       - name: 下载 main.so
         run: |
-          URL="https://github.com/oyz8/agent-v1-so/releases/download/${{ env.TAG }}/main-3.13-amd64.so"
-          echo "下载: $URL"
-          curl -fSL "$URL" -o ./main.so
-          ls -lh ./main.so
+          # 获取最新 tag
+          RELEASE=$(curl -s https://api.github.com/repos/oyz8/agent-v1-so/releases/latest)
+          TAG=$(echo "$RELEASE" | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+          echo "Tag: $TAG"
 
-      - name: 打包 zip
+          # 从 assets 里找 main-3.13-amd64.so 的下载链接
+          URL=$(echo "$RELEASE" | grep browser_download_url | grep 'main-3.13-amd64.so' | cut -d'"' -f4)
+          echo "URL: $URL"
+
+          if [ -z "$URL" ]; then
+            echo "❌ 未找到 main-3.13-amd64.so，使用固定链接兜底"
+            URL="https://github.com/oyz8/agent-v1-so/releases/download/main.so-v28/main-3.13-amd64.so"
+          fi
+
+          curl -fSL "$URL" -o main.so
+          ls -lh main.so
+
+      - name: 打包
         run: |
           zip -r deploy.zip wheels/ main.so
-          ls -lh deploy.zip
           echo "=== zip 内容 ==="
           unzip -l deploy.zip
+          ls -lh deploy.zip
 
       - name: 上传 Artifact
         uses: actions/upload-artifact@v4
