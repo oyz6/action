@@ -48,6 +48,12 @@ jobs:
           chrome-version: ${{ env.CHROME_VERSION }}
           install-chromedriver: false  # 我们使用 undetected-chromedriver，无需官方 chromedriver
 
+      - name: 安装中文字体
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk fonts-wqy-zenhei
+          fc-cache -fv
+
       - name: 安装 Python 依赖
         run: |
           pip install --upgrade pip
