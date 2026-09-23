@@ -74,7 +74,7 @@ jobs:
             echo "🔍 调试模式开启"
             python -c "import undetected_chromedriver as uc; print('undetected_chromedriver 版本:', uc.__version__)"
           fi
-          python nodeloc/main.py
+          python nodeloc/main-test.py
 
 #      - name: 上传调试截图
 #        if: always()
