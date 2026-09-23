@@ -74,16 +74,16 @@ jobs:
             echo "🔍 调试模式开启"
             python -c "import undetected_chromedriver as uc; print('undetected_chromedriver 版本:', uc.__version__)"
           fi
-          python nodeloc/main.py
+          python nodeloc/main-test.py
 
-      - name: 上传调试截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-screenshots
-          path: /tmp/screenshots/
-          retention-days: 3
-          if-no-files-found: ignore
+#      - name: 上传调试截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: debug-screenshots
+#          path: /tmp/screenshots/
+#          retention-days: 3
+#          if-no-files-found: ignore
 
       - name: 清理工作流记录（保留最近3次）
         uses: Mattraks/delete-workflow-runs@v2
