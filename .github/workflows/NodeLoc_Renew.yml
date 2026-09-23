@@ -62,6 +62,23 @@ jobs:
       - name: 创建截图目录
         run: mkdir -p /tmp/screenshots
 
+      - name: 设置代理
+        env:
+          NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名 （大金）双ISP - US
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          chmod +x scripts/setup_proxy.sh
+          if ! bash scripts/setup_proxy.sh; then
+            # 只有脚本返回非0（比如节点挂了、sing-box 启动失败）才会到这里发 TG 报错并中断
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d parse_mode="HTML" \
+              -d text="❌ <b>NodeLoc 失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --max-time 10 || true
+            exit 1
+          fi
+
       - name: 执行签到脚本
         env:
           NL_ACCOUNT: ${{ secrets.NL_ACCOUNT }}
