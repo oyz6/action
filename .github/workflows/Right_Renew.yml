@@ -52,9 +52,13 @@ jobs:
       - name: 创建截图目录
         run: mkdir -p /tmp/screenshots
 
+      - name: 清理 undetected-chromedriver 缓存
+        run: |
+          rm -rf "$HOME/.local/share/undetected_chromedriver" || true
+
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.NODE_LINK }}
+          NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名 （大金）双ISP - US
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
@@ -72,6 +76,7 @@ jobs:
         env:
           RIGHT: ${{ secrets.RIGHT }}
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROME_VERSION: ${{ env.CHROME_VERSION }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
