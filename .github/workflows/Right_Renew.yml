@@ -44,11 +44,10 @@ jobs:
       - name: 安装 Python 依赖
         run: |
           pip install --upgrade pip
-          if [ -f enshan/requirements.txt ]; then
-            pip install -r enshan/requirements.txt
+          pip install requests "requests[socks]" selenium undetected-chromedriver
+          if [ -f Right/requirements.txt ]; then
+            pip install -r Right/requirements.txt
           fi
-          # 代理是 socks5 时，requests 需要 PySocks
-          pip install "requests[socks]"
 
       - name: 创建截图目录
         run: mkdir -p /tmp/screenshots
