@@ -41,6 +41,17 @@ jobs:
           sudo apt-get install -y fonts-noto-cjk fonts-wqy-zenhei
           fc-cache -fv
 
+      - name: 安装 Xvfb（虚拟显示）
+        run: |
+          sudo apt-get install -y xvfb
+
+      - name: 启动 Xvfb
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
+          sleep 2
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          echo "启动 Xvfb 完成"
+
       - name: 安装 Python 依赖
         run: |
           pip install --upgrade pip
@@ -79,6 +90,7 @@ jobs:
           CHROME_VERSION: ${{ env.CHROME_VERSION }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          DISPLAY: ':99'
         run: |
           python Right/main.py
 
