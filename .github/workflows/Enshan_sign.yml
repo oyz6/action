@@ -56,8 +56,8 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install requests "requests[socks]" selenium undetected-chromedriver
-          if [ -f Right/requirements.txt ]; then
-            pip install -r Right/requirements.txt
+          if [ -f enshan/requirements.txt ]; then
+            pip install -r enshan/requirements.txt
           fi
 
       - name: 创建截图目录
@@ -92,7 +92,7 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           DISPLAY: ':99'
         run: |
-          python Right/main.py
+          python enshan/main.py
 
 #      - name: 上传截图
 #        if: always()
