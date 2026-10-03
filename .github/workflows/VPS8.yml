@@ -41,7 +41,7 @@ jobs:
           mkdir -p scripts/extensions/nopecha scripts/extensions/buster
 
           wget -q -O scripts/extensions/nopecha/chromium.zip \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.2-rc.2/chromium.zip
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
 
           wget -q -O scripts/extensions/buster/buster.zip \
@@ -50,8 +50,8 @@ jobs:
 
       - name: 设置代理
         env:
-#          NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}  # 360t7 美国一年 - 双ISP - USPROXY_NODE_US_IT7
-          NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}  # 美国 加利福尼亚州 洛杉矶 — 搬瓦工
+          NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}  # 360t7 美国一年 - 双ISP - USPROXY_NODE_US_IT7
+#          NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}  # 美国 加利福尼亚州 洛杉矶 — 搬瓦工
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
