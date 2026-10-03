@@ -73,7 +73,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
-        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_SB.py
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
       - name: 备份第一次截图并等待
         if: steps.attempt1.outcome == 'failure'
@@ -96,7 +96,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
-        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_SB.py
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
       - name: 清理历史运行记录
         if: always()
