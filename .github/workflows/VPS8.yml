@@ -27,11 +27,13 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full
+          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full git
 
       - name: 安装 Python 库
         run: |
-          pip install -q seleniumbase requests openai 'httpx[socks]'
+          pip install -q seleniumbase requests playwright opencv-python \
+                        msgpack typer matplotlib google-genai httpx \
+                        loguru pydantic-settings tenacity pytz
 
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
@@ -42,6 +44,15 @@ jobs:
           wget -q -O scripts/extensions/buster/buster.zip \
             https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip
           7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+
+      - name: 克隆 hcaptcha-challenger
+        run: |
+          git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
+          cd hcaptcha-challenger
+          git fetch --depth 1 origin d4da375916cde6bb85128eb8fc9859e1f06cacbc \
+            && git checkout --detach FETCH_HEAD \
+            || echo "[WARN] 固定 commit 获取失败，使用克隆时的 main HEAD"
+          git rev-parse HEAD
 
       - name: 设置代理
         env:
@@ -69,8 +80,11 @@ jobs:
           VPS8: ${{ secrets.VPS8 }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
-          AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          PROXY_HTTP: ${{ env.PROXY_SERVER }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
 #      - name: 备份第一次截图并等待
@@ -90,8 +104,11 @@ jobs:
 #          VPS8: ${{ secrets.VPS8 }}
 #          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
 #          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-#          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
-#          AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+#          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+#          PROXY_HTTP: ${{ env.PROXY_SERVER }}
+#          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+#          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+#          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
 #        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
 #      - name: 上传所有截图
