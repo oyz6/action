@@ -38,12 +38,12 @@ jobs:
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
 
-      - name: 下载并解压扩展
+      - name: 下载并解压 NopeCHA 扩展
         run: |
-          mkdir -p scripts/extensions/buster
-          wget -q -O scripts/extensions/buster/buster.zip \
-            https://github.com/dessant/buster/releases/download/v3.4.0/buster_captcha_solver_for_humans-3.4.0-chrome.zip
-          7z x -y scripts/extensions/buster/buster.zip -oscripts/extensions/buster/unpacked
+          mkdir -p scripts/extensions/nopecha
+          wget -q -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -85,6 +85,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
 #      - name: 备份第一次截图并等待
@@ -109,6 +110,7 @@ jobs:
 #          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 #          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
 #          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+#          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
 #        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
 #      - name: 上传所有截图
