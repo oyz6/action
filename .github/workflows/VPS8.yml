@@ -7,7 +7,7 @@ jobs:
   sign:
     name: 执行签到
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: write
@@ -92,7 +92,9 @@ jobs:
         if: steps.attempt1.outcome == 'failure'
         run: |
           if [ -d screenshots ]; then
-            mv screenshots screenshots-attempt1
+            mkdir -p screenshots-attempt1
+            find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
+            rm -f screenshots/*.png
             echo "已备份第一次截图"
           fi
           echo "等待 60 秒后重试..."
@@ -121,7 +123,7 @@ jobs:
 #          path: |
 #            screenshots-attempt1/
 #            screenshots/
-#          retention-days: 3
+#          retention-days: 7
 #          if-no-files-found: ignore
 
       - name: 清理历史运行记录
