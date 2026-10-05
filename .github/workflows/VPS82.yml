@@ -7,7 +7,7 @@ jobs:
   sign:
     name: 执行签到
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: write
@@ -92,7 +92,9 @@ jobs:
         if: steps.attempt1.outcome == 'failure'
         run: |
           if [ -d screenshots ]; then
-            mv screenshots screenshots-attempt1
+            mkdir -p screenshots-attempt1
+            find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
+            rm -f screenshots/*.png
             echo "已备份第一次截图"
           fi
           echo "等待 60 秒后重试..."
@@ -113,6 +115,27 @@ jobs:
           NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
+      - name: 提交成功题型
+        if: always()
+        run: |
+          if [ ! -s scripts/VPS8/success_prompts.log ]; then
+            echo "[INFO] success_prompts.log 不存在或为空，跳过"
+            exit 0
+          fi
+          echo "[INFO] 检测到 success_prompts.log 变化..."
+          cd "$GITHUB_WORKSPACE"
+          if [ -z "$(git status --porcelain -- scripts/VPS8/success_prompts.log)" ]; then
+            echo "[INFO] success_prompts.log 无变化，跳过提交"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/VPS8/success_prompts.log
+          git commit -m "更新 VPS8 成功题型日志 $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          git pull --rebase --strategy-option=theirs || true
+          git push
+          echo "[INFO] ✅ success_prompts.log 已提交到私库"
+
 #      - name: 上传所有截图
 #        if: always()
 #        uses: actions/upload-artifact@v4
@@ -121,7 +144,7 @@ jobs:
 #          path: |
 #            screenshots-attempt1/
 #            screenshots/
-#          retention-days: 3
+#          retention-days: 7
 #          if-no-files-found: ignore
 
       - name: 清理历史运行记录
