@@ -1,0 +1,322 @@
+name: VPS8 签到（并行）
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_f1:
+        description: '启用 F1 签到'
+        required: false
+        default: true
+        type: boolean
+      enable_f2:
+        description: '启用 F2 签到'
+        required: false
+        default: true
+        type: boolean
+      enable_f3:
+        description: '启用 F3 签到'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: write
+
+# =========================================================
+#                账号配置区（只改这里）
+# =========================================================
+env:
+  # ---------- F1 账号 ----------
+  F1_NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}   # 美国 洛杉矶 — 搬瓦工
+  F1_VPS8:      ${{ secrets.VPS8 }}
+
+  # ---------- F2 账号 ----------
+  F2_NODE_LINK: ${{ secrets.PROXY_NODE }}          # 大金 双ISP - US
+  F2_VPS8:      ${{ secrets.VPS82 }}
+
+  # ---------- F3 账号 ----------
+  F3_NODE_LINK: ${{ secrets.PROXY_NODE_US_ISP }}   # 美国 洛杉矶 ISP
+  F3_VPS8:      ${{ secrets.VPS83 }}
+
+  # ---------- 三个账号公共配置 ----------
+  VPS8_RENEW_TEST: "0"
+  TG_BOT_TOKEN:    ${{ secrets.TG_BOT_TOKEN }}
+  TG_CHAT_ID:      ${{ secrets.TG_CHAT_ID }}
+  OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+  OPENAI_MODEL:    ${{ secrets.OPENAI_MODEL }}
+  NOPECHA_KEY:     ${{ secrets.NOPECHA_KEY }}
+# =========================================================
+
+jobs:
+  # ========================= F1 =========================
+  sign-f1:
+    name: F1 签到
+    if: ${{ inputs.enable_f1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      NODE_LINK: ${{ env.F1_NODE_LINK }}
+      VPS8:      ${{ env.F1_VPS8 }}
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+
+      - name: 配置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full git
+
+      - name: 安装 Python 库
+        run: |
+          pip install -q seleniumbase requests playwright opencv-python \
+                        msgpack typer matplotlib google-genai httpx \
+                        loguru pydantic-settings tenacity pytz
+
+      - name: 安装 ChromeDriver
+        run: seleniumbase install chromedriver
+
+      - name: 下载并解压 NopeCHA 扩展
+        run: |
+          mkdir -p scripts/extensions/nopecha
+          wget -q -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
+
+      - name: 克隆 hcaptcha-challenger
+        run: |
+          git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
+          cd hcaptcha-challenger
+          git fetch --depth 1 origin d4da375916cde6bb85128eb8fc9859e1f06cacbc \
+            && git checkout --detach FETCH_HEAD \
+            || echo "[WARN] 固定 commit 获取失败，使用克隆时的 main HEAD"
+          git rev-parse HEAD
+
+      - name: 设置代理
+        run: |
+          chmod +x scripts/setup_proxy.sh
+          if ! bash scripts/setup_proxy.sh; then
+            echo "❌ 代理设置失败，发送通知..."
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d parse_mode="HTML" \
+              -d text="❌ <b>F1 VPS8 签到失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --max-time 10 || true
+            exit 1
+          fi
+
+      - name: 执行签到（第 1 次）
+        id: attempt1
+        continue-on-error: true
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
+
+      - name: 备份第一次截图并等待
+        if: steps.attempt1.outcome == 'failure'
+        run: |
+          if [ -d screenshots ]; then
+            mkdir -p screenshots-attempt1
+            find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
+            rm -f screenshots/*.png
+            echo "已备份第一次截图"
+          fi
+          echo "等待 60 秒后重试..."
+          sleep 60
+
+      - name: 执行签到（第 2 次）
+        if: steps.attempt1.outcome == 'failure'
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
+
+  # ========================= F2 =========================
+  sign-f2:
+    name: F2 签到
+    if: ${{ inputs.enable_f2 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      NODE_LINK: ${{ env.F2_NODE_LINK }}
+      VPS8:      ${{ env.F2_VPS8 }}
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+
+      - name: 配置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full git
+
+      - name: 安装 Python 库
+        run: |
+          pip install -q seleniumbase requests playwright opencv-python \
+                        msgpack typer matplotlib google-genai httpx \
+                        loguru pydantic-settings tenacity pytz
+
+      - name: 安装 ChromeDriver
+        run: seleniumbase install chromedriver
+
+      - name: 下载并解压 NopeCHA 扩展
+        run: |
+          mkdir -p scripts/extensions/nopecha
+          wget -q -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
+
+      - name: 克隆 hcaptcha-challenger
+        run: |
+          git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
+          cd hcaptcha-challenger
+          git fetch --depth 1 origin d4da375916cde6bb85128eb8fc9859e1f06cacbc \
+            && git checkout --detach FETCH_HEAD \
+            || echo "[WARN] 固定 commit 获取失败，使用克隆时的 main HEAD"
+          git rev-parse HEAD
+
+      - name: 设置代理
+        run: |
+          chmod +x scripts/setup_proxy.sh
+          if ! bash scripts/setup_proxy.sh; then
+            echo "❌ 代理设置失败，发送通知..."
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d parse_mode="HTML" \
+              -d text="❌ <b>F2 VPS8 签到失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --max-time 10 || true
+            exit 1
+          fi
+
+      - name: 执行签到（第 1 次）
+        id: attempt1
+        continue-on-error: true
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
+
+      - name: 备份第一次截图并等待
+        if: steps.attempt1.outcome == 'failure'
+        run: |
+          if [ -d screenshots ]; then
+            mkdir -p screenshots-attempt1
+            find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
+            rm -f screenshots/*.png
+            echo "已备份第一次截图"
+          fi
+          echo "等待 60 秒后重试..."
+          sleep 60
+
+      - name: 执行签到（第 2 次）
+        if: steps.attempt1.outcome == 'failure'
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
+
+  # ========================= F3 =========================
+  sign-f3:
+    name: F3 签到
+    if: ${{ inputs.enable_f3 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      NODE_LINK: ${{ env.F3_NODE_LINK }}
+      VPS8:      ${{ env.F3_VPS8 }}
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+
+      - name: 配置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full git
+
+      - name: 安装 Python 库
+        run: |
+          pip install -q seleniumbase requests playwright opencv-python \
+                        msgpack typer matplotlib google-genai httpx \
+                        loguru pydantic-settings tenacity pytz
+
+      - name: 安装 ChromeDriver
+        run: seleniumbase install chromedriver
+
+      - name: 下载并解压 NopeCHA 扩展
+        run: |
+          mkdir -p scripts/extensions/nopecha
+          wget -q -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
+
+      - name: 克隆 hcaptcha-challenger
+        run: |
+          git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
+          cd hcaptcha-challenger
+          git fetch --depth 1 origin d4da375916cde6bb85128eb8fc9859e1f06cacbc \
+            && git checkout --detach FETCH_HEAD \
+            || echo "[WARN] 固定 commit 获取失败，使用克隆时的 main HEAD"
+          git rev-parse HEAD
+
+      - name: 设置代理
+        run: |
+          chmod +x scripts/setup_proxy.sh
+          if ! bash scripts/setup_proxy.sh; then
+            echo "❌ 代理设置失败，发送通知..."
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d parse_mode="HTML" \
+              -d text="❌ <b>F3 VPS8 签到失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --max-time 10 || true
+            exit 1
+          fi
+
+      - name: 执行签到（第 1 次）
+        id: attempt1
+        continue-on-error: true
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
+
+      - name: 备份第一次截图并等待
+        if: steps.attempt1.outcome == 'failure'
+        run: |
+          if [ -d screenshots ]; then
+            mkdir -p screenshots-attempt1
+            find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
+            rm -f screenshots/*.png
+            echo "已备份第一次截图"
+          fi
+          echo "等待 60 秒后重试..."
+          sleep 60
+
+      - name: 执行签到（第 2 次）
+        if: steps.attempt1.outcome == 'failure'
+        run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
+
+  # ========================= 统一清理 =========================
+  cleanup:
+    name: 清理历史运行记录
+    runs-on: ubuntu-22.04
+    needs: [sign-f1, sign-f2, sign-f3]
+    if: always()
+    steps:
+      - name: 清理历史运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: ${{ github.workflow }}
+          retain_days: 0
+          keep_minimum_runs: 1
