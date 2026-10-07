@@ -56,10 +56,12 @@ jobs:
     if: ${{ inputs.enable_f1 }}
     runs-on: ubuntu-22.04
     timeout-minutes: 60
-    env:
-      NODE_LINK: ${{ env.F1_NODE_LINK }}
-      VPS8:      ${{ env.F1_VPS8 }}
     steps:
+      - name: 导出账号配置
+        run: |
+          echo "NODE_LINK=${{ env.F1_NODE_LINK }}" >> $GITHUB_ENV
+          echo "VPS8=${{ env.F1_VPS8 }}" >> $GITHUB_ENV
+
       - name: 检出代码仓库
         uses: actions/checkout@v4
         with:
@@ -141,10 +143,12 @@ jobs:
     if: ${{ inputs.enable_f2 }}
     runs-on: ubuntu-22.04
     timeout-minutes: 60
-    env:
-      NODE_LINK: ${{ env.F2_NODE_LINK }}
-      VPS8:      ${{ env.F2_VPS8 }}
     steps:
+      - name: 导出账号配置
+        run: |
+          echo "NODE_LINK=${{ env.F2_NODE_LINK }}" >> $GITHUB_ENV
+          echo "VPS8=${{ env.F2_VPS8 }}" >> $GITHUB_ENV
+
       - name: 检出代码仓库
         uses: actions/checkout@v4
         with:
@@ -226,10 +230,12 @@ jobs:
     if: ${{ inputs.enable_f3 }}
     runs-on: ubuntu-22.04
     timeout-minutes: 60
-    env:
-      NODE_LINK: ${{ env.F3_NODE_LINK }}
-      VPS8:      ${{ env.F3_VPS8 }}
     steps:
+      - name: 导出账号配置
+        run: |
+          echo "NODE_LINK=${{ env.F3_NODE_LINK }}" >> $GITHUB_ENV
+          echo "VPS8=${{ env.F3_VPS8 }}" >> $GITHUB_ENV
+
       - name: 检出代码仓库
         uses: actions/checkout@v4
         with:
