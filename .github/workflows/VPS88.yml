@@ -28,7 +28,8 @@ permissions:
 # =========================================================
 env:
   # ---------- F1 账号 ----------
-  F1_NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}   # 美国 洛杉矶 — 搬瓦工
+#  F1_NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}   # 美国 洛杉矶 — 搬瓦工
+  F1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 美国一年 - 双ISP
   F1_VPS8:      ${{ secrets.VPS8 }}
   F1_STAGGER:   "0"
 
