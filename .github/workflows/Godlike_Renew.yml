@@ -57,12 +57,12 @@ jobs:
           PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 写入格式:socks5://127.0.0.1:1080
         run: python scripts/Godlike/main.py
 
-      - name: 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: error-screenshots
-          path: scripts/Godlike/*.png
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: error-screenshots
+#          path: scripts/Godlike/*.png
 
       - name: 清理历史
         if: always()
