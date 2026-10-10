@@ -43,7 +43,7 @@ env:
   F3_VPS8:      ${{ secrets.VPS83 }}
   F3_STAGGER:   "40"
 
-  # ---------- 三个账号公共配置 ----------
+  # ---------- 公共配置 ----------
   VPS8_RENEW_TEST: "0"
   TG_BOT_TOKEN:    ${{ secrets.TG_BOT_TOKEN }}
   TG_CHAT_ID:      ${{ secrets.TG_CHAT_ID }}
@@ -84,7 +84,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v1
+          key: ${{ runner.os }}-pip-${{ github.job }}-v2
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
@@ -153,6 +153,17 @@ jobs:
         if: steps.attempt1.outcome == 'failure'
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
+#      - name: 上传所有截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-f1-${{ github.run_number }}
+#          path: |
+#            screenshots-attempt1/
+#            screenshots/
+#          retention-days: 7
+#          if-no-files-found: ignore
+
   # ========================= F2 =========================
   sign-f2:
     name: F2 签到
@@ -183,7 +194,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v1
+          key: ${{ runner.os }}-pip-${{ github.job }}-v2
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
@@ -282,7 +293,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v1
+          key: ${{ runner.os }}-pip-${{ github.job }}-v2
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
