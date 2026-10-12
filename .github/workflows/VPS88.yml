@@ -105,10 +105,42 @@ jobs:
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
+          rm -rf scripts/extensions/nopecha
           mkdir -p scripts/extensions/nopecha
           wget -q -O scripts/extensions/nopecha/chromium.zip \
             https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
+
+      - name: 禁用 NopeCHA 的 hCaptcha 支持
+        run: |
+          MANIFEST="scripts/extensions/nopecha/unpacked/manifest.json"
+          python - <<'EOF'
+          import json, pathlib
+
+          path = pathlib.Path("scripts/extensions/nopecha/unpacked/manifest.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+
+          def is_hcaptcha(script):
+              for m in script.get("matches", []):
+                  if "hcaptcha.com" in m:
+                      return True
+              return False
+
+          before = len(data.get("content_scripts", []))
+          data["content_scripts"] = [
+              s for s in data.get("content_scripts", [])
+              if not is_hcaptcha(s)
+          ]
+          after = len(data["content_scripts"])
+
+          path.write_text(
+              json.dumps(data, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+          )
+          print(f"content_scripts: {before} -> {after}（已移除 hCaptcha 注入）")
+          EOF
+
+          grep -c "hcaptcha" "$MANIFEST" || echo "manifest 中已无 hcaptcha 引用"
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -215,10 +247,42 @@ jobs:
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
+          rm -rf scripts/extensions/nopecha
           mkdir -p scripts/extensions/nopecha
           wget -q -O scripts/extensions/nopecha/chromium.zip \
             https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
+
+      - name: 禁用 NopeCHA 的 hCaptcha 支持
+        run: |
+          MANIFEST="scripts/extensions/nopecha/unpacked/manifest.json"
+          python - <<'EOF'
+          import json, pathlib
+
+          path = pathlib.Path("scripts/extensions/nopecha/unpacked/manifest.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+
+          def is_hcaptcha(script):
+              for m in script.get("matches", []):
+                  if "hcaptcha.com" in m:
+                      return True
+              return False
+
+          before = len(data.get("content_scripts", []))
+          data["content_scripts"] = [
+              s for s in data.get("content_scripts", [])
+              if not is_hcaptcha(s)
+          ]
+          after = len(data["content_scripts"])
+
+          path.write_text(
+              json.dumps(data, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+          )
+          print(f"content_scripts: {before} -> {after}（已移除 hCaptcha 注入）")
+          EOF
+
+          grep -c "hcaptcha" "$MANIFEST" || echo "manifest 中已无 hcaptcha 引用"
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -262,6 +326,17 @@ jobs:
       - name: 执行签到（第 2 次）
         if: steps.attempt1.outcome == 'failure'
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
+
+#      - name: 上传所有截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-f1-${{ github.run_number }}
+#          path: |
+#            screenshots-attempt1/
+#            screenshots/
+#          retention-days: 7
+#          if-no-files-found: ignore
 
   # ========================= F3 =========================
   sign-f3:
@@ -314,10 +389,42 @@ jobs:
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
+          rm -rf scripts/extensions/nopecha
           mkdir -p scripts/extensions/nopecha
           wget -q -O scripts/extensions/nopecha/chromium.zip \
             https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
+
+      - name: 禁用 NopeCHA 的 hCaptcha 支持
+        run: |
+          MANIFEST="scripts/extensions/nopecha/unpacked/manifest.json"
+          python - <<'EOF'
+          import json, pathlib
+
+          path = pathlib.Path("scripts/extensions/nopecha/unpacked/manifest.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+
+          def is_hcaptcha(script):
+              for m in script.get("matches", []):
+                  if "hcaptcha.com" in m:
+                      return True
+              return False
+
+          before = len(data.get("content_scripts", []))
+          data["content_scripts"] = [
+              s for s in data.get("content_scripts", [])
+              if not is_hcaptcha(s)
+          ]
+          after = len(data["content_scripts"])
+
+          path.write_text(
+              json.dumps(data, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+          )
+          print(f"content_scripts: {before} -> {after}（已移除 hCaptcha 注入）")
+          EOF
+
+          grep -c "hcaptcha" "$MANIFEST" || echo "manifest 中已无 hcaptcha 引用"
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -361,6 +468,17 @@ jobs:
       - name: 执行签到（第 2 次）
         if: steps.attempt1.outcome == 'failure'
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
+
+#      - name: 上传所有截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-f1-${{ github.run_number }}
+#          path: |
+#            screenshots-attempt1/
+#            screenshots/
+#          retention-days: 7
+#          if-no-files-found: ignore
 
   # ========================= 统一清理 =========================
   cleanup:
