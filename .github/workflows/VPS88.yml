@@ -24,12 +24,12 @@ permissions:
   actions: write
 
 # =========================================================
-#                账号配置区
+#                账号配置区（只改这里）
 # =========================================================
 env:
   # ---------- F1 账号 ----------
 #  F1_NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}   # 美国 洛杉矶 — 搬瓦工
-  F1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}    # 360t7 美国一年 - 双ISP
+  F1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 美国一年 - 双ISP
   F1_VPS8:      ${{ secrets.VPS8 }}
   F1_STAGGER:   "0"
 
@@ -47,9 +47,10 @@ env:
   VPS8_RENEW_TEST: "0"
   TG_BOT_TOKEN:    ${{ secrets.TG_BOT_TOKEN }}
   TG_CHAT_ID:      ${{ secrets.TG_CHAT_ID }}
-  OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}   # 对应服务的 key
-  OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}  # 对应服务的 base_url
-  OPENAI_MODEL:    ${{ secrets.OPENAI_MODEL }}     # 对应的 vision 模型名
+  OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+  OPENAI_MODEL:    ${{ secrets.OPENAI_MODEL }}
+  NOPECHA_KEY:     ${{ secrets.NOPECHA_KEY }}
 # =========================================================
 
 jobs:
@@ -83,7 +84,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v3
+          key: ${{ runner.os }}-pip-${{ github.job }}-v2
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
@@ -101,6 +102,13 @@ jobs:
 
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
+
+      - name: 下载并解压 NopeCHA 扩展
+        run: |
+          mkdir -p scripts/extensions/nopecha
+          wget -q -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -186,7 +194,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v3
+          key: ${{ runner.os }}-pip-${{ github.job }}-v2
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
@@ -204,6 +212,13 @@ jobs:
 
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
+
+      - name: 下载并解压 NopeCHA 扩展
+        run: |
+          mkdir -p scripts/extensions/nopecha
+          wget -q -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -252,7 +267,7 @@ jobs:
 #        if: always()
 #        uses: actions/upload-artifact@v4
 #        with:
-#          name: screenshots-f2-${{ github.run_number }}
+#          name: screenshots-f1-${{ github.run_number }}
 #          path: |
 #            screenshots-attempt1/
 #            screenshots/
@@ -289,7 +304,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v3
+          key: ${{ runner.os }}-pip-${{ github.job }}-v2
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
@@ -307,6 +322,13 @@ jobs:
 
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
+
+      - name: 下载并解压 NopeCHA 扩展
+        run: |
+          mkdir -p scripts/extensions/nopecha
+          wget -q -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -355,7 +377,7 @@ jobs:
 #        if: always()
 #        uses: actions/upload-artifact@v4
 #        with:
-#          name: screenshots-f3-${{ github.run_number }}
+#          name: screenshots-f1-${{ github.run_number }}
 #          path: |
 #            screenshots-attempt1/
 #            screenshots/
@@ -377,3 +399,5 @@ jobs:
           delete_workflow_pattern: ${{ github.workflow }}
           retain_days: 0
           keep_minimum_runs: 1
+
+
