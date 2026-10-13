@@ -50,6 +50,7 @@ env:
   OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}   # 对应服务的 key
   OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}  # 对应服务的 base_url
   OPENAI_MODEL:    ${{ secrets.OPENAI_MODEL }}     # 对应的 vision 模型名
+  NOPECHA_KEY:     ${{ secrets.NOPECHA_KEY }}
 # =========================================================
 
 jobs:
