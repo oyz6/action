@@ -105,42 +105,10 @@ jobs:
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
-          rm -rf scripts/extensions/nopecha
           mkdir -p scripts/extensions/nopecha
           wget -q -O scripts/extensions/nopecha/chromium.zip \
             https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
-
-      - name: 禁用 NopeCHA 的 hCaptcha 支持
-        run: |
-          MANIFEST="scripts/extensions/nopecha/unpacked/manifest.json"
-          python - <<'EOF'
-          import json, pathlib
-
-          path = pathlib.Path("scripts/extensions/nopecha/unpacked/manifest.json")
-          data = json.loads(path.read_text(encoding="utf-8"))
-
-          def is_hcaptcha(script):
-              for m in script.get("matches", []):
-                  if "hcaptcha.com" in m:
-                      return True
-              return False
-
-          before = len(data.get("content_scripts", []))
-          data["content_scripts"] = [
-              s for s in data.get("content_scripts", [])
-              if not is_hcaptcha(s)
-          ]
-          after = len(data["content_scripts"])
-
-          path.write_text(
-              json.dumps(data, ensure_ascii=False, indent=2),
-              encoding="utf-8",
-          )
-          print(f"content_scripts: {before} -> {after}（已移除 hCaptcha 注入）")
-          EOF
-
-          grep -c "hcaptcha" "$MANIFEST" || echo "manifest 中已无 hcaptcha 引用"
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -247,42 +215,10 @@ jobs:
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
-          rm -rf scripts/extensions/nopecha
           mkdir -p scripts/extensions/nopecha
           wget -q -O scripts/extensions/nopecha/chromium.zip \
             https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
-
-      - name: 禁用 NopeCHA 的 hCaptcha 支持
-        run: |
-          MANIFEST="scripts/extensions/nopecha/unpacked/manifest.json"
-          python - <<'EOF'
-          import json, pathlib
-
-          path = pathlib.Path("scripts/extensions/nopecha/unpacked/manifest.json")
-          data = json.loads(path.read_text(encoding="utf-8"))
-
-          def is_hcaptcha(script):
-              for m in script.get("matches", []):
-                  if "hcaptcha.com" in m:
-                      return True
-              return False
-
-          before = len(data.get("content_scripts", []))
-          data["content_scripts"] = [
-              s for s in data.get("content_scripts", [])
-              if not is_hcaptcha(s)
-          ]
-          after = len(data["content_scripts"])
-
-          path.write_text(
-              json.dumps(data, ensure_ascii=False, indent=2),
-              encoding="utf-8",
-          )
-          print(f"content_scripts: {before} -> {after}（已移除 hCaptcha 注入）")
-          EOF
-
-          grep -c "hcaptcha" "$MANIFEST" || echo "manifest 中已无 hcaptcha 引用"
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -389,42 +325,10 @@ jobs:
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
-          rm -rf scripts/extensions/nopecha
           mkdir -p scripts/extensions/nopecha
           wget -q -O scripts/extensions/nopecha/chromium.zip \
             https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
-
-      - name: 禁用 NopeCHA 的 hCaptcha 支持
-        run: |
-          MANIFEST="scripts/extensions/nopecha/unpacked/manifest.json"
-          python - <<'EOF'
-          import json, pathlib
-
-          path = pathlib.Path("scripts/extensions/nopecha/unpacked/manifest.json")
-          data = json.loads(path.read_text(encoding="utf-8"))
-
-          def is_hcaptcha(script):
-              for m in script.get("matches", []):
-                  if "hcaptcha.com" in m:
-                      return True
-              return False
-
-          before = len(data.get("content_scripts", []))
-          data["content_scripts"] = [
-              s for s in data.get("content_scripts", [])
-              if not is_hcaptcha(s)
-          ]
-          after = len(data["content_scripts"])
-
-          path.write_text(
-              json.dumps(data, ensure_ascii=False, indent=2),
-              encoding="utf-8",
-          )
-          print(f"content_scripts: {before} -> {after}（已移除 hCaptcha 注入）")
-          EOF
-
-          grep -c "hcaptcha" "$MANIFEST" || echo "manifest 中已无 hcaptcha 引用"
 
       - name: 克隆 hcaptcha-challenger
         run: |
