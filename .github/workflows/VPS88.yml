@@ -29,7 +29,7 @@ permissions:
 env:
   # ---------- F1 账号 ----------
 #  F1_NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}   # 美国 洛杉矶 — 搬瓦工
-  F1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 美国一年 - 双ISP
+  F1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}    # 360t7 美国一年 - 双ISP
   F1_VPS8:      ${{ secrets.VPS8 }}
   F1_STAGGER:   "0"
 
@@ -83,7 +83,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v5
+          key: ${{ runner.os }}-pip-${{ github.job }}-v3
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
@@ -92,7 +92,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             xvfb fonts-noto-cjk p7zip-full git
-          sudo fc-cache -fs > /dev/null 2>&1 || true
 
       - name: 安装 Python 库
         run: |
@@ -130,13 +129,14 @@ jobs:
         continue-on-error: true
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
-      - name: 备份并等待
+      - name: 备份第一次截图并等待
         if: steps.attempt1.outcome == 'failure'
         run: |
           if [ -d screenshots ]; then
             mkdir -p screenshots-attempt1
             find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
             rm -f screenshots/*.png
+            echo "已备份第一次截图"
           fi
           echo "等待 60 秒后重试..."
           sleep 60
@@ -186,7 +186,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v5
+          key: ${{ runner.os }}-pip-${{ github.job }}-v3
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
@@ -195,7 +195,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             xvfb fonts-noto-cjk p7zip-full git
-          sudo fc-cache -fs > /dev/null 2>&1 || true
 
       - name: 安装 Python 库
         run: |
@@ -233,13 +232,14 @@ jobs:
         continue-on-error: true
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
-      - name: 备份并等待
+      - name: 备份第一次截图并等待
         if: steps.attempt1.outcome == 'failure'
         run: |
           if [ -d screenshots ]; then
             mkdir -p screenshots-attempt1
             find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
             rm -f screenshots/*.png
+            echo "已备份第一次截图"
           fi
           echo "等待 60 秒后重试..."
           sleep 60
@@ -252,7 +252,7 @@ jobs:
 #        if: always()
 #        uses: actions/upload-artifact@v4
 #        with:
-#          name: screenshots-f1-${{ github.run_number }}
+#          name: screenshots-f2-${{ github.run_number }}
 #          path: |
 #            screenshots-attempt1/
 #            screenshots/
@@ -289,7 +289,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v5
+          key: ${{ runner.os }}-pip-${{ github.job }}-v3
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
 
@@ -298,7 +298,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             xvfb fonts-noto-cjk p7zip-full git
-          sudo fc-cache -fs > /dev/null 2>&1 || true
 
       - name: 安装 Python 库
         run: |
@@ -336,13 +335,14 @@ jobs:
         continue-on-error: true
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
 
-      - name: 备份并等待
+      - name: 备份第一次截图并等待
         if: steps.attempt1.outcome == 'failure'
         run: |
           if [ -d screenshots ]; then
             mkdir -p screenshots-attempt1
             find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
             rm -f screenshots/*.png
+            echo "已备份第一次截图"
           fi
           echo "等待 60 秒后重试..."
           sleep 60
@@ -355,7 +355,7 @@ jobs:
 #        if: always()
 #        uses: actions/upload-artifact@v4
 #        with:
-#          name: screenshots-f1-${{ github.run_number }}
+#          name: screenshots-f3-${{ github.run_number }}
 #          path: |
 #            screenshots-attempt1/
 #            screenshots/
