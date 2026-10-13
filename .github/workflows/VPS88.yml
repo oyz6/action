@@ -50,7 +50,6 @@ env:
   OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}   # 对应服务的 key
   OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}  # 对应服务的 base_url
   OPENAI_MODEL:    ${{ secrets.OPENAI_MODEL }}     # 对应的 vision 模型名
-  NOPECHA_KEY:     ${{ secrets.NOPECHA_KEY }}
 # =========================================================
 
 jobs:
@@ -102,13 +101,6 @@ jobs:
 
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
-
-      - name: 下载并解压 NopeCHA 扩展
-        run: |
-          mkdir -p scripts/extensions/nopecha
-          wget -q -O scripts/extensions/nopecha/chromium.zip \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
-          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
 
       - name: 克隆 hcaptcha-challenger
         run: |
@@ -213,13 +205,6 @@ jobs:
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
 
-      - name: 下载并解压 NopeCHA 扩展
-        run: |
-          mkdir -p scripts/extensions/nopecha
-          wget -q -O scripts/extensions/nopecha/chromium.zip \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
-          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
-
       - name: 克隆 hcaptcha-challenger
         run: |
           git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
@@ -322,13 +307,6 @@ jobs:
 
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
-
-      - name: 下载并解压 NopeCHA 扩展
-        run: |
-          mkdir -p scripts/extensions/nopecha
-          wget -q -O scripts/extensions/nopecha/chromium.zip \
-            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
-          7z x -y scripts/extensions/nopecha/chromium.zip -oscripts/extensions/nopecha/unpacked
 
       - name: 克隆 hcaptcha-challenger
         run: |
