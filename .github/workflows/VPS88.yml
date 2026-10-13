@@ -64,53 +64,34 @@ jobs:
         run: |
           echo "NODE_LINK=${{ env.F1_NODE_LINK }}" >> $GITHUB_ENV
           echo "VPS8=${{ env.F1_VPS8 }}" >> $GITHUB_ENV
-
       - name: 错峰等待
         run: sleep ${{ env.F1_STAGGER }}
-
       - name: 检出代码仓库
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
-
       - name: 配置 Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: 缓存 pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v3
+          key: ${{ runner.os }}-pip-${{ github.job }}-v4
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
-
       - name: 安装系统依赖
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             xvfb fonts-noto-cjk p7zip-full git
-
       - name: 安装 Python 库
         run: |
-          pip install -q seleniumbase requests playwright opencv-python-headless \
-                        msgpack typer matplotlib google-genai httpx \
-                        loguru pydantic-settings tenacity pytz
-
+          pip install -q seleniumbase requests opencv-python-headless
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
-
-      - name: 克隆 hcaptcha-challenger
-        run: |
-          git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
-          cd hcaptcha-challenger
-          git fetch --depth 1 origin d4da375916cde6bb85128eb8fc9859e1f06cacbc \
-            && git checkout --detach FETCH_HEAD \
-            || echo "[WARN] 固定 commit 获取失败，使用克隆时的 main HEAD"
-          git rev-parse HEAD
-
       - name: 设置代理
         run: |
           chmod +x scripts/setup_proxy.sh
@@ -123,24 +104,19 @@ jobs:
               --max-time 10 || true
             exit 1
           fi
-
       - name: 执行签到（第 1 次）
         id: attempt1
         continue-on-error: true
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
-
-      - name: 备份第一次截图并等待
+      - name: 备份并等待
         if: steps.attempt1.outcome == 'failure'
         run: |
           if [ -d screenshots ]; then
             mkdir -p screenshots-attempt1
             find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
             rm -f screenshots/*.png
-            echo "已备份第一次截图"
           fi
-          echo "等待 60 秒后重试..."
           sleep 60
-
       - name: 执行签到（第 2 次）
         if: steps.attempt1.outcome == 'failure'
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
@@ -167,53 +143,34 @@ jobs:
         run: |
           echo "NODE_LINK=${{ env.F2_NODE_LINK }}" >> $GITHUB_ENV
           echo "VPS8=${{ env.F2_VPS8 }}" >> $GITHUB_ENV
-
       - name: 错峰等待
         run: sleep ${{ env.F2_STAGGER }}
-
       - name: 检出代码仓库
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
-
       - name: 配置 Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: 缓存 pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v3
+          key: ${{ runner.os }}-pip-${{ github.job }}-v4
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
-
       - name: 安装系统依赖
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             xvfb fonts-noto-cjk p7zip-full git
-
       - name: 安装 Python 库
         run: |
-          pip install -q seleniumbase requests playwright opencv-python-headless \
-                        msgpack typer matplotlib google-genai httpx \
-                        loguru pydantic-settings tenacity pytz
-
+          pip install -q seleniumbase requests opencv-python-headless
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
-
-      - name: 克隆 hcaptcha-challenger
-        run: |
-          git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
-          cd hcaptcha-challenger
-          git fetch --depth 1 origin d4da375916cde6bb85128eb8fc9859e1f06cacbc \
-            && git checkout --detach FETCH_HEAD \
-            || echo "[WARN] 固定 commit 获取失败，使用克隆时的 main HEAD"
-          git rev-parse HEAD
-
       - name: 设置代理
         run: |
           chmod +x scripts/setup_proxy.sh
@@ -226,24 +183,19 @@ jobs:
               --max-time 10 || true
             exit 1
           fi
-
       - name: 执行签到（第 1 次）
         id: attempt1
         continue-on-error: true
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
-
-      - name: 备份第一次截图并等待
+      - name: 备份并等待
         if: steps.attempt1.outcome == 'failure'
         run: |
           if [ -d screenshots ]; then
             mkdir -p screenshots-attempt1
             find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
             rm -f screenshots/*.png
-            echo "已备份第一次截图"
           fi
-          echo "等待 60 秒后重试..."
           sleep 60
-
       - name: 执行签到（第 2 次）
         if: steps.attempt1.outcome == 'failure'
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
@@ -270,53 +222,34 @@ jobs:
         run: |
           echo "NODE_LINK=${{ env.F3_NODE_LINK }}" >> $GITHUB_ENV
           echo "VPS8=${{ env.F3_VPS8 }}" >> $GITHUB_ENV
-
       - name: 错峰等待
         run: sleep ${{ env.F3_STAGGER }}
-
       - name: 检出代码仓库
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/scripts
           token: ${{ secrets.REPO_TOKEN }}
-
       - name: 配置 Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: 缓存 pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ github.job }}-v3
+          key: ${{ runner.os }}-pip-${{ github.job }}-v4
           restore-keys: |
             ${{ runner.os }}-pip-${{ github.job }}-
-
       - name: 安装系统依赖
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             xvfb fonts-noto-cjk p7zip-full git
-
       - name: 安装 Python 库
         run: |
-          pip install -q seleniumbase requests playwright opencv-python-headless \
-                        msgpack typer matplotlib google-genai httpx \
-                        loguru pydantic-settings tenacity pytz
-
+          pip install -q seleniumbase requests opencv-python-headless
       - name: 安装 ChromeDriver
         run: seleniumbase install chromedriver
-
-      - name: 克隆 hcaptcha-challenger
-        run: |
-          git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
-          cd hcaptcha-challenger
-          git fetch --depth 1 origin d4da375916cde6bb85128eb8fc9859e1f06cacbc \
-            && git checkout --detach FETCH_HEAD \
-            || echo "[WARN] 固定 commit 获取失败，使用克隆时的 main HEAD"
-          git rev-parse HEAD
-
       - name: 设置代理
         run: |
           chmod +x scripts/setup_proxy.sh
@@ -329,24 +262,19 @@ jobs:
               --max-time 10 || true
             exit 1
           fi
-
       - name: 执行签到（第 1 次）
         id: attempt1
         continue-on-error: true
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
-
-      - name: 备份第一次截图并等待
+      - name: 备份并等待
         if: steps.attempt1.outcome == 'failure'
         run: |
           if [ -d screenshots ]; then
             mkdir -p screenshots-attempt1
             find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
             rm -f screenshots/*.png
-            echo "已备份第一次截图"
           fi
-          echo "等待 60 秒后重试..."
           sleep 60
-
       - name: 执行签到（第 2 次）
         if: steps.attempt1.outcome == 'failure'
         run: xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/VPS8/main_ai.py
