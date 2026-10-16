@@ -11,12 +11,12 @@ on:
       enable_f2:
         description: '启用 F2 签到'
         required: false
-        default: true
+        default: false
         type: boolean
       enable_f3:
         description: '启用 F3 签到'
         required: false
-        default: true
+        default: false
         type: boolean
 
 permissions:
