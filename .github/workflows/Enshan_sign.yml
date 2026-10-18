@@ -121,10 +121,10 @@ jobs:
 
     steps:
       - name: 启用 WARP 代理
-        uses: fscarmen/warp-on-actions@v1.3
+        uses: fscarmen/warp-on-actions@v1.4
         with:
-          stack: dual
-          mode: client
+          stack: ipv4          # 强制 IPv4，降低 ESA 对 IPv6 数据中心段的拦截概率
+          mode: client         # 使用 warp-cli 客户端模式，便于执行重置注册
 
       - name: 修复 DNS
         run: |
@@ -134,43 +134,100 @@ jobs:
           sudo chattr +i /etc/resolv.conf 2>/dev/null || true
           sleep 2
 
+      # ========== 关键步骤：重置 WARP 注册，循环刷 IP ==========
+      - name: 重置 WARP 注册并刷 IP
+        id: warp_refresh
+        run: |
+          echo "===== 重置 WARP 注册 ====="
+          # 1. 断开连接
+          sudo warp-cli --accept-tos disconnect 2>/dev/null || true
+          sleep 2
+
+          # 2. 删除当前注册（拿到新 IP 的关键）
+          sudo warp-cli --accept-tos registration delete 2>/dev/null || true
+          sleep 2
+
+          # 3. 创建新注册
+          sudo warp-cli --accept-tos registration new 2>/dev/null || \
+            sudo warp-cli --accept-tos register 2>/dev/null || true
+          sleep 3
+
+          # 4. 连接
+          sudo warp-cli --accept-tos connect 2>/dev/null || true
+          sleep 8
+
+          # 5. 循环检查 IP 是否变化（最多重试 3 次）
+          OLD_IP=""
+          for attempt in 1 2 3; do
+            NEW_IP=$(curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^ip=' | cut -d'=' -f2)
+            echo "第 ${attempt} 次 IP: ${NEW_IP}"
+            if [ -n "$NEW_IP" ] && [ "$NEW_IP" != "$OLD_IP" ]; then
+              echo "WARP_IP=${NEW_IP}" >> "$GITHUB_ENV"
+              break
+            fi
+            OLD_IP="$NEW_IP"
+            # 如果 IP 未变，断开重连并重新注册
+            sudo warp-cli --accept-tos disconnect 2>/dev/null || true
+            sleep 2
+            sudo warp-cli --accept-tos registration delete 2>/dev/null || true
+            sleep 2
+            sudo warp-cli --accept-tos registration new 2>/dev/null || true
+            sleep 3
+            sudo warp-cli --accept-tos connect 2>/dev/null || true
+            sleep 10
+          done
+
+          echo "===== 最终 WARP 出口 IP: ${WARP_IP} ====="
+          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp|loc)=' || true
+
+      # ========== 访问推广链接（增强检测） ==========
       - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
 
-          echo "===== WARP 出口 IP ====="
-          curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | grep -E "^(ip|warp|loc)=" || true
-          echo ""
-
           echo "===== 访问: $URL ====="
           SUCCESS=0
           for i in 1 2 3; do
             echo "----- 第 $i 次尝试 -----"
-            HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+            rm -f /tmp/promo_headers.txt /tmp/promo_cookies.txt /tmp/promo_body.html
+
+            HTTP_CODE=$(curl -sL -o /tmp/promo_body.html \
+              -D /tmp/promo_headers.txt \
+              -c /tmp/promo_cookies.txt \
+              -b /tmp/promo_cookies.txt \
               -w "%{http_code}" --max-time 30 \
-              -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
               -H "Accept-Language: zh-CN,zh;q=0.9" \
+              -H "Referer: https://www.right.com.cn/forum/" \
               -H "Cache-Control: no-cache" \
               -H "Pragma: no-cache" \
               -H "Upgrade-Insecure-Requests: 1" \
+              -H "sec-ch-ua: \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"" \
+              -H "sec-ch-ua-mobile: ?0" \
+              -H "sec-ch-ua-platform: \"Windows\"" \
+              -H "Sec-Fetch-Dest: document" \
+              -H "Sec-Fetch-Mode: navigate" \
+              -H "Sec-Fetch-Site: none" \
+              -H "Sec-Fetch-User: ?1" \
               --compressed "$URL" || echo "000")
 
             echo "HTTP: $HTTP_CODE"
 
-            if [ "$HTTP_CODE" = "200" ] && grep -qi "rHEX_2132_promotion" /tmp/promo_headers.txt; then
+            # 成功条件：没有 WAF 拦截 + 拿到推广 cookie
+            if [ "$HTTP_CODE" = "200" ] && \
+               ! grep -qi "denied by http_security_level" /tmp/promo_headers.txt && \
+               grep -qi "rHEX_2132_promotion" /tmp/promo_cookies.txt; then
               echo "✅ 第 $i 次成功：拿到 rHEX_2132_promotion"
-              grep -i "rHEX_2132_promotion" /tmp/promo_headers.txt
+              grep -i "rHEX_2132_promotion" /tmp/promo_cookies.txt
               SUCCESS=1
               break
             fi
 
             echo "❌ 第 $i 次失败"
-            if [ -f /tmp/promo_headers.txt ]; then
-              cat /tmp/promo_headers.txt
-            fi
+            grep -iE "X-Tengine-Error|HTTP/" /tmp/promo_headers.txt || true
             sleep 10
           done
 
@@ -187,17 +244,15 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           if [ "$PROMO_OK" = "1" ]; then
-            ICON="✅"
-            TEXT="成功"
+            ICON="✅"; TEXT="成功"
           else
-            ICON="❌"
-            TEXT="失败"
+            ICON="❌"; TEXT="失败"
           fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
             -d parse_mode="HTML" \
-            -d text="${ICON} <b>恩山访问推广</b>%0A%0A结果：${TEXT}%0A时间：${TIME_CN}%0A%0AEnshan Daily Sign-in" \
+            -d text="${ICON} <b>恩山访问推广</b>%0A%0A结果：${TEXT}%0A出口IP：${WARP_IP:-未知}%0A时间：${TIME_CN}%0A%0AEnshan Daily Sign-in" \
             --max-time 10 || true
 
   # ============================================================
