@@ -23,87 +23,68 @@ jobs:
           sudo chattr +i /etc/resolv.conf 2>/dev/null || true
           sleep 2
 
-      - name: 重置 WARP 并刷 IP (防卡死版)
-        id: warp_refresh
-        run: |
-          # 定义辅助函数，带超时执行
-          warp_exec() {
-            echo ">>> 执行: warp-cli $@"
-            timeout 15s sudo warp-cli --accept-tos "$@" || echo "⚠️ 命令超时或失败 (忽略并继续)"
-          }
-
-          echo "===== 1. 初始状态 ====="
-          curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp|loc)=' || true
-
-          for attempt in 1 2 3; do
-            echo "===== 尝试换 IP: 第 $attempt 次 ====="
-            
-            # 停止服务避免死锁
-            sudo systemctl stop warp-svc 2>/dev/null || true
-            sleep 2
-
-            # 清理注册
-            warp_exec disconnect
-            warp_exec registration delete
-            sleep 2
-
-            # 重启服务
-            sudo systemctl start warp-svc 2>/dev/null || true
-            sleep 3
-
-            # 新注册并连接
-            warp_exec registration new
-            sleep 2
-            warp_exec connect
-            sleep 8
-
-            # 检查 IP
-            NEW_IP=$(curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^ip=' | cut -d'=' -f2)
-            echo "当前出口 IP: ${NEW_IP}"
-            
-            if [ -n "$NEW_IP" ]; then
-              echo "WARP_IP=${NEW_IP}" >> "$GITHUB_ENV"
-              # 只要拿到 IP 就跳出循环，不再强求 IP 一定变化，因为可能撞池子
-              break 
-            fi
-            sleep 10
-          done
-
       - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
-          echo "===== 使用当前 IP: $WARP_IP 访问 ====="
-          
-          rm -f /tmp/promo_headers.txt /tmp/promo_cookies.txt /tmp/promo_body.html
 
-          HTTP_CODE=$(curl -sL -o /tmp/promo_body.html \
-            -D /tmp/promo_headers.txt \
-            -c /tmp/promo_cookies.txt \
-            -b /tmp/promo_cookies.txt \
-            -w "%{http_code}" --max-time 30 \
-            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
-            -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
-            -H "Accept-Language: zh-CN,zh;q=0.9" \
-            -H "Referer: https://www.right.com.cn/forum/" \
-            -H "Cache-Control: no-cache" \
-            -H "Pragma: no-cache" \
-            -H "Upgrade-Insecure-Requests: 1" \
-            --compressed "$URL" || echo "000")
+          echo "===== WARP 出口 IP ====="
+          curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace | grep -E "^(ip|warp|loc)=" || true
+          echo ""
 
-          echo "HTTP 状态码: $HTTP_CODE"
-          echo "===== 响应头信息 ====="
-          cat /tmp/promo_headers.txt
-          
-          echo "===== Cookie 检查 ====="
-          if grep -qi "rHEX_2132_promotion" /tmp/promo_cookies.txt; then
-            echo "✅ 成功拿到推广 Cookie!"
-            grep -i "rHEX_2132_promotion" /tmp/promo_cookies.txt
+          echo "===== 访问: $URL ====="
+          SUCCESS=0
+          for i in 1 2 3; do
+            echo "----- 第 $i 次尝试 -----"
+            HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+              -w "%{http_code}" --max-time 30 \
+              -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
+              -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
+              -H "Accept-Language: zh-CN,zh;q=0.9" \
+              -H "Cache-Control: no-cache" \
+              -H "Pragma: no-cache" \
+              -H "Upgrade-Insecure-Requests: 1" \
+              --compressed "$URL" || echo "000")
+
+            echo "HTTP: $HTTP_CODE"
+
+            if [ "$HTTP_CODE" = "200" ] && grep -qi "rHEX_2132_promotion" /tmp/promo_headers.txt; then
+              echo "✅ 第 $i 次成功：拿到 rHEX_2132_promotion"
+              grep -i "rHEX_2132_promotion" /tmp/promo_headers.txt
+              SUCCESS=1
+              break
+            fi
+
+            echo "❌ 第 $i 次失败"
+            if [ -f /tmp/promo_headers.txt ]; then
+              cat /tmp/promo_headers.txt
+            fi
+            sleep 10
+          done
+
+          if [ "$SUCCESS" = "1" ]; then
+            echo "PROMO_OK=1" >> "$GITHUB_ENV"
           else
-            echo "❌ 没有拿到推广 Cookie"
+            echo "PROMO_OK=0" >> "$GITHUB_ENV"
           fi
 
-          if grep -qi "denied by http_security_level" /tmp/promo_headers.txt; then
-            echo "❌ 再次被阿里云 WAF 拦截 (http_security_level)"
+      - name: 推送推广 TG 通知
+        if: always()
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          if [ "$PROMO_OK" = "1" ]; then
+            ICON="✅"
+            TEXT="成功"
+          else
+            ICON="❌"
+            TEXT="失败"
           fi
+          TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            -d parse_mode="HTML" \
+            -d text="${ICON} <b>恩山访问推广</b>%0A%0A结果：${TEXT}%0A时间：${TIME_CN}%0A%0AEnshan Daily Sign-in" \
+            --max-time 10 || true
