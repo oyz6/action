@@ -17,6 +17,7 @@ jobs:
   checkin:
     name: 签到
     runs-on: ubuntu-latest
+    timeout-minutes: 20 # 仅增加超时保护，防止意外死锁
 
     steps:
       - name: 拉取私有仓库
@@ -71,6 +72,7 @@ jobs:
           rm -rf "$HOME/.local/share/undetected_chromedriver" || true
 
       - name: 设置代理
+        timeout-minutes: 5
         env:
           NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}  # 360t7 美国一年 - 双ISP - US
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -87,6 +89,7 @@ jobs:
           fi
 
       - name: 执行签到脚本
+        timeout-minutes: 10
         env:
           RIGHT: ${{ secrets.RIGHT }}
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
@@ -95,6 +98,7 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           DISPLAY: ':99'
         run: |
+          # 完全还原最初的命令
           python enshan/main.py
 
 #      - name: 上传截图
@@ -118,6 +122,7 @@ jobs:
   promo:
     name: 访问推广
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: 启用 WARP 代理（dual）
@@ -137,7 +142,7 @@ jobs:
 
       - name: 确认 WARP 出口
         run: |
-          echo "===== WARP 初始出口 ====="
+          echo "[$(date +'%H:%M:%S')] ===== WARP 初始出口 ====="
           curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace \
             | grep -E "^(ip|warp|loc)=" || true
           echo ""
@@ -145,28 +150,37 @@ jobs:
       - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
+        timeout-minutes: 5
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
 
           for i in 1 2 3 4 5; do
-            echo "===== 第 $i 次尝试 ====="
+            echo "[$(date +'%H:%M:%S')] ===== 第 $i 次尝试 ====="
 
-            # 第 1 次直接用初始 WARP 出口；从第 2 次起换 IP
             if [ "$i" -gt 1 ]; then
-              echo "→ 重连 WARP 轮换出口 IP"
+              echo "[$(date +'%H:%M:%S')] → 重连 WARP 轮换出口 IP"
               sudo warp-cli --accept-tos disconnect 2>/dev/null || true
               sleep 2
               sudo warp-cli --accept-tos connect   2>/dev/null || true
-              sleep 6
-              echo "当前出口："
+              
+              echo "[$(date +'%H:%M:%S')] 等待 WARP 重连就绪..."
+              for j in {1..5}; do
+                if curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+                  break
+                fi
+                echo "[$(date +'%H:%M:%S')] WARP 尚未完全就绪，等待 3 秒..."
+                sleep 3
+              done
+              
+              echo "[$(date +'%H:%M:%S')] 当前出口："
               curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
                 | grep -E "^(ip|warp|loc)=" || true
             fi
 
-            # 不强制 -4/-6，dual 下让系统按隧道走
+            echo "[$(date +'%H:%M:%S')] 正在发起 curl 请求..."
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --max-time 30 \
+              -w "%{http_code}" --max-time 20 \
               -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
               -H "Accept-Language: zh-CN,zh;q=0.9" \
@@ -175,20 +189,27 @@ jobs:
               -H "Upgrade-Insecure-Requests: 1" \
               --compressed "$URL") || HTTP_CODE="000"
 
-            echo "HTTP: $HTTP_CODE"
+            echo "[$(date +'%H:%M:%S')] 请求完成，HTTP 状态码: $HTTP_CODE"
 
             if [ "$HTTP_CODE" = "200" ] && grep -qi "rHEX_2132_promotion" /tmp/promo_headers.txt; then
-              echo "✅ 第 $i 次成功：拿到 rHEX_2132_promotion"
+              echo "[$(date +'%H:%M:%S')] ✅ 第 $i 次成功：拿到 rHEX_2132_promotion"
               grep -i "rHEX_2132_promotion" /tmp/promo_headers.txt
               SUCCESS=1
               break
             fi
 
-            echo "❌ 第 $i 次失败"
+            echo "[$(date +'%H:%M:%S')] ❌ 第 $i 次失败"
+            
+            # 【核心优化】不要直接 cat 整个 headers，如果被风控拦截返回大段 HTML，会导致日志卡死
+            # 改为只打印前 10 行，既能排错，又保证网页流畅
             if [ -f /tmp/promo_headers.txt ]; then
-              cat /tmp/promo_headers.txt
+              echo "--- Headers 前 10 行 ---"
+              head -n 10 /tmp/promo_headers.txt
+              echo "-------------------------"
             fi
-            sleep 10
+            
+            echo "[$(date +'%H:%M:%S')] 等待 5 秒后重试..."
+            sleep 5
           done
 
           if [ "$SUCCESS" = "1" ]; then
@@ -206,7 +227,7 @@ jobs:
           if [ "$PROMO_OK" = "1" ]; then
             ICON="✅"; TEXT="成功"
           else
-            ICON="❌"; TEXT="失败"
+            ICON="❌"; TEXT="失败或超时"
           fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
