@@ -1,4 +1,4 @@
-name: Lunes Host 自动保活 
+name: Lunes Host 自动保活（并行）
 
 on:
   schedule:
