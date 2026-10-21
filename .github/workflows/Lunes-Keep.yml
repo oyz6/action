@@ -6,6 +6,17 @@ on:
     # UTC 时间 = 北京时间 - 8小时 = 04:12
     - cron: '12 4 1,11,21 * *'
   workflow_dispatch:
+    inputs:
+      enable_f1:
+        description: '启用 账号 1'
+        required: false
+        default: true
+        type: boolean
+      enable_f2:
+        description: '启用 账号 2'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -37,6 +48,8 @@ jobs:
   # ========================= 账号 1 =========================
   keepalive-1:
     name: 账号 1
+    # schedule 触发时 inputs 为空，必须放行；手动触发时按开关
+    if: ${{ github.event_name == 'schedule' || inputs.enable_f1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     # 不同 group，保证两个 job 可以并行
@@ -123,6 +136,8 @@ jobs:
   # ========================= 账号 2 =========================
   keepalive-2:
     name: 账号 2
+    # schedule 触发时 inputs 为空，必须放行；手动触发时按开关
+    if: ${{ github.event_name == 'schedule' || inputs.enable_f2 }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     concurrency:
