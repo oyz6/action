@@ -36,27 +36,33 @@ env:
 jobs:
   sign:
     name: ${{ matrix.label }} 签到
-    if: ${{ inputs.enable_f1 || inputs.enable_f2 || inputs.enable_f3 }}
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     strategy:
-      fail-fast: false
+      fail-fast: false      # 单路失败不影响其他账号
       max-parallel: 3
+      
+      # 核心配置区：以后新增账号 / 修改代理 / 修改错峰时间，只改这里
       matrix:
         include:
+          # ---------- F1 账号 ----------
           - label: F1
-            enabled:  ${{ inputs.enable_f1 }}
-            node_link: ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 US 双 ISP
-            account:   ${{ secrets.VPS8 }}
-            stagger:   0
+            enabled: ${{ inputs.enable_f1 }}
+            node_link: ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 美国一年 - 双ISP
+            account:   ${{ secrets.VPS8 }}               # 账号密钥名
+            stagger:   0                                 # 错峰等待秒数
+            
+          # ---------- F2 账号 ----------
           - label: F2
-            enabled:  ${{ inputs.enable_f2 }}
-            node_link: ${{ secrets.PROXY_NODE }}         # 大金 US 双 ISP
+            enabled: ${{ inputs.enable_f2 }}
+            node_link: ${{ secrets.PROXY_NODE }}         # 大金 双ISP - US
             account:   ${{ secrets.VPS82 }}
             stagger:   20
+            
+          # ---------- F3 账号 ----------
           - label: F3
-            enabled:  ${{ inputs.enable_f3 }}
-            node_link: ${{ secrets.PROXY_NODE_US_ISP }}  # US 洛杉矶 ISP
+            enabled: ${{ inputs.enable_f3 }}
+            node_link: ${{ secrets.PROXY_NODE_US_ISP }}  # 美国 洛杉矶 ISP
             account:   ${{ secrets.VPS83 }}
             stagger:   40
 
@@ -191,7 +197,7 @@ jobs:
             python -u scripts/VPS8/main_ai.py
           echo "::endgroup::"
 
-      # ---------- 上传所有截图（attempt1 备份 + 最终目录） ----------
+      # ---------- 上传所有截图 ----------
 #      - name: 上传所有截图
 #        if: always() && matrix.enabled == 'true'
 #        uses: actions/upload-artifact@v4
