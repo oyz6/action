@@ -22,11 +22,16 @@ permissions:
 
 env:
   VPS8_RENEW_TEST: "0"
+  # Telegram 通知
   TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-  TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
+
+  # OpenAI 视觉模型（hCaptcha AI 破解用）
+  OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}
   OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-  OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+  OPENAI_MODEL:    ${{ secrets.OPENAI_MODEL }}
+
+  # NopeCHA Key（多个换行分隔）
   NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
 
 jobs:
@@ -39,20 +44,22 @@ jobs:
       matrix:
         include:
           - slug: F1
-            node_secret: PROXY_NODE_360t7
-            account_secret: VPS8
-            stagger: 0
-            enable: ${{ inputs.enable_f1 }}
+            node_secret:    PROXY_NODE_360t7   # 360t7 美国一年 - 双ISP
+            account_secret: VPS8               # → secrets.VPS8
+            stagger:        0
+            enable:         ${{ inputs.enable_f1 }}
+
           - slug: F2
-            node_secret: PROXY_NODE
-            account_secret: VPS82
-            stagger: 20
-            enable: ${{ inputs.enable_f2 }}
+            node_secret:    PROXY_NODE         # 大金 双ISP - US
+            account_secret: VPS82              # → secrets.VPS82
+            stagger:        20
+            enable:         ${{ inputs.enable_f2 }}
+
           - slug: F3
-            node_secret: PROXY_NODE_US_ISP
-            account_secret: VPS83
-            stagger: 40
-            enable: ${{ inputs.enable_f3 }}
+            node_secret:    PROXY_NODE_US_ISP  # 美国 洛杉矶 ISP
+            account_secret: VPS83              # → secrets.VPS83
+            stagger:        40
+            enable:         ${{ inputs.enable_f3 }}
 
     env:
       NODE_LINK: ${{ secrets[matrix.node_secret] }}
@@ -168,6 +175,17 @@ jobs:
           xvfb-run -a --server-args="-screen 0 1280x720x24" \
             python -u scripts/VPS8/main_ai.py
           echo "::endgroup::"
+
+#      - name: 上传截图
+#        if: ${{ always() && matrix.enable }}
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-${{ matrix.slug }}-${{ github.run_number }}
+#          path: |
+#            screenshots-attempt1/
+#            screenshots/
+#          retention-days: 7
+#          if-no-files-found: ignore
 
   cleanup:
     name: 清理历史运行
