@@ -2,8 +2,8 @@ name: X10hosting 保活 X14
 
 on:
   workflow_dispatch:
-  schedule:
-     - cron: '0 4 1 * *'
+#  schedule:
+#     - cron: '0 4 1 * *'
 
 permissions:
   actions: write
