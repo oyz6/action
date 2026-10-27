@@ -1,15 +1,9 @@
-# NL_ACCOUNT 账号配置格式
-# 用户名----密码
-# 多账号配置（每行一个）
-# user1----password1
-# user2----password2
-# user3----password3
-
 name: NodeLoc 每日签到
 
+# ================== 定时 & 手动触发 ==================
 on:
   schedule:
-    - cron: '05 4 * * *'  # 每天北京时间 12:05 运行
+    - cron: '05 4 * * *'   # 北京时间 12:05
   workflow_dispatch:
     inputs:
       debug:
@@ -18,14 +12,30 @@ on:
         default: false
         type: boolean
 
+# ================== 全局变量（置顶方便改） ==================
 env:
   PYTHON_VERSION: '3.11'
   CHROME_VERSION: '131'
 
+# ================== 并行签到 ==================
 jobs:
   checkin:
-    name: 执行签到
+    name: 签到 - ${{ matrix.account_name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # 一条账号挂了不影响另一个继续跑
+      # ⬇⬇⬇ 账号配置就在这里改 ⬇⬇⬇
+      # account_name  : 日志/artifact 里显示的名字
+      # account_secret: 存放账号密码的 Secret 名称（格式: 用户名----密码）
+      # proxy_secret  : 存放代理节点的 Secret 名称
+      matrix:
+        include:
+          - account_name: '账号1'
+            account_secret: NL_ACCOUNT
+            proxy_secret: PROXY_NODE            # 大金 双ISP - US
+          - account_name: '账号2'
+            account_secret: NL_ACCOUNT_TEST
+            proxy_secret: PROXY_NODE_360t7      # 360t7 美国一年 - 双ISP - US
     steps:
       - name: 拉取私有仓库
         uses: actions/checkout@v4
@@ -39,14 +49,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: nodeloc/requirements.txt   # 指向 nodeloc 目录下的依赖文件
+          cache-dependency-path: nodeloc/requirements.txt
 
       - name: 安装 Chrome 浏览器
         id: setup-chrome
         uses: browser-actions/setup-chrome@v1
         with:
           chrome-version: ${{ env.CHROME_VERSION }}
-          install-chromedriver: false  # 我们使用 undetected-chromedriver，无需官方 chromedriver
+          install-chromedriver: false
 
       - name: 安装中文字体
         run: |
@@ -57,51 +67,57 @@ jobs:
       - name: 安装 Python 依赖
         run: |
           pip install --upgrade pip
-          pip install -r nodeloc/requirements.txt           # 从正确路径安装
+          pip install -r nodeloc/requirements.txt
 
       - name: 创建截图目录
         run: mkdir -p /tmp/screenshots
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名 （大金）双ISP - US
+          NODE_LINK: ${{ secrets[matrix.proxy_secret] }}   # 动态引用
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           chmod +x scripts/setup_proxy.sh
           if ! bash scripts/setup_proxy.sh; then
-            # 只有脚本返回非0（比如节点挂了、sing-box 启动失败）才会到这里发 TG 报错并中断
             curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TG_CHAT_ID}" \
               -d parse_mode="HTML" \
-              -d text="❌ <b>NodeLoc 失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              -d text="❌ <b>NodeLoc 失败</b>（${{ matrix.account_name }}）%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               --max-time 10 || true
             exit 1
           fi
 
       - name: 执行签到脚本
         env:
-          NL_ACCOUNT: ${{ secrets.NL_ACCOUNT }}
+          NL_ACCOUNT: ${{ secrets[matrix.account_secret] }}  # 动态引用
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           DEBUG: ${{ github.event.inputs.debug == 'true' && '1' || '0' }}
         run: |
           if [ "$DEBUG" == "1" ]; then
-            echo "🔍 调试模式开启"
+            echo "🔍 调试模式开启（${{ matrix.account_name }}）"
             python -c "import undetected_chromedriver as uc; print('undetected_chromedriver 版本:', uc.__version__)"
           fi
           python nodeloc/main-test.py
 
-#      - name: 上传调试截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: debug-screenshots
-#          path: /tmp/screenshots/
-#          retention-days: 3
-#          if-no-files-found: ignore
+      - name: 上传调试截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots-${{ matrix.account_name }}   # 名称按账号区分，避免冲突
+          path: /tmp/screenshots/
+          retention-days: 3
+          if-no-files-found: ignore
 
+# ================== 统一清理（在并行结束后跑一次，避免两个 Job 互相抢删除） ==================
+  cleanup:
+    name: 清理工作流记录
+    needs: checkin
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
       - name: 清理工作流记录（保留最近3次）
         uses: Mattraks/delete-workflow-runs@v2
         with:
