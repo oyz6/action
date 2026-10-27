@@ -52,15 +52,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: 导出账号配置
-        run: |
-          echo "NODE_LINK=${{ env.F1_NODE_LINK }}" >> "$GITHUB_ENV"
-          {
-            echo 'NL_ACCOUNT<<NODELOC_EOF'
-            echo "${{ env.F1_NL_ACCOUNT }}"
-            echo 'NODELOC_EOF'
-          } >> "$GITHUB_ENV"
-
       - name: 错峰等待
         run: sleep ${{ env.F1_STAGGER }}
 
@@ -100,6 +91,8 @@ jobs:
         run: mkdir -p /tmp/screenshots
 
       - name: 设置代理
+        env:
+          NODE_LINK: ${{ env.F1_NODE_LINK }}          # ← 通过 env 传，不内插
         run: |
           chmod +x scripts/setup_proxy.sh
           if ! bash scripts/setup_proxy.sh; then
@@ -113,6 +106,8 @@ jobs:
 
       - name: 执行签到
         env:
+          NODE_LINK:   ${{ env.F1_NODE_LINK }}          # ← 同样通过 env
+          NL_ACCOUNT:  ${{ env.F1_NL_ACCOUNT }}         # ← 多行 secret 也安全
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           DEBUG: ${{ github.event.inputs.debug == 'true' && '1' || '0' }}
         run: |
@@ -138,15 +133,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: 导出账号配置
-        run: |
-          echo "NODE_LINK=${{ env.F2_NODE_LINK }}" >> "$GITHUB_ENV"
-          {
-            echo 'NL_ACCOUNT<<NODELOC_EOF'
-            echo "${{ env.F2_NL_ACCOUNT }}"
-            echo 'NODELOC_EOF'
-          } >> "$GITHUB_ENV"
-
       - name: 错峰等待
         run: sleep ${{ env.F2_STAGGER }}
 
@@ -186,6 +172,8 @@ jobs:
         run: mkdir -p /tmp/screenshots
 
       - name: 设置代理
+        env:
+          NODE_LINK: ${{ env.F2_NODE_LINK }}
         run: |
           chmod +x scripts/setup_proxy.sh
           if ! bash scripts/setup_proxy.sh; then
@@ -199,6 +187,8 @@ jobs:
 
       - name: 执行签到
         env:
+          NODE_LINK:   ${{ env.F2_NODE_LINK }}
+          NL_ACCOUNT:  ${{ env.F2_NL_ACCOUNT }}
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           DEBUG: ${{ github.event.inputs.debug == 'true' && '1' || '0' }}
         run: |
