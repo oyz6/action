@@ -1,20 +1,55 @@
-name: X10hosting 保活 X15
+name: X10hosting 保活（并行）
 
 on:
-  workflow_dispatch:
   schedule:
-     - cron: '0 4 1 * *'
+    - cron: '0 4 1 * *'            # 每月 1 号北京时间 12:00
+  workflow_dispatch:
+    inputs:
+      enable_f1:
+        description: '启用 F1 保活'
+        required: false
+        default: true
+        type: boolean
+      enable_f2:
+        description: '启用 F2 保活'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   actions: write
   contents: read
 
+# ================== 账号配置区（只改这里） ==================
+env:
+  PYTHON_VERSION: '3.11'
+
+  # ---------- F1 账号 ----------
+  F1_NODE_LINK:   ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 美国一年 - 双ISP - US
+  F1_X10HOSTING:  ${{ secrets.X10HOSTING_0 }}       # 账号格式见脚本说明
+  F1_STAGGER:     "0"                                # 错峰等待秒数
+
+  # ---------- F2 账号 ----------
+  F2_NODE_LINK:   ${{ secrets.PROXY_NODE }}         # 大金 双ISP - US
+  F2_X10HOSTING:  ${{ secrets.X10HOSTING }}
+  F2_STAGGER:     "20"
+
+  # ---------- 公共配置 ----------
+  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+  TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
+  NOPECHA_KEY:  ${{ secrets.NOPECHA_KEY }}
+
 jobs:
-  keepalive:
+  # ========================= F1 =========================
+  keepalive-f1:
+    name: F1 保活
+    if: ${{ github.event_name == 'schedule' || inputs.enable_f1 }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
-
     steps:
+      - name: 错峰等待
+        run: sleep ${{ env.F1_STAGGER }}
+
       - name: 检出私有仓库
         uses: actions/checkout@v4
         with:
@@ -24,7 +59,7 @@ jobs:
       - name: 配置 Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: 安装系统依赖
         run: |
@@ -40,58 +75,143 @@ jobs:
 
       - name: 下载并解压 NopeCHA 扩展
         run: |
-          mkdir -p scripts/extensions/nopecha
+          mkdir -p scripts/extensions/nopecha/unpacked
           wget -q -O /tmp/nopecha.zip \
             https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
           7z x -y /tmp/nopecha.zip -o/tmp/nopecha_extracted
-          # 确保 manifest.json 位于 unpacked 根目录
           if [ -f /tmp/nopecha_extracted/manifest.json ]; then
-            mv /tmp/nopecha_extracted scripts/extensions/nopecha/unpacked
+            mv /tmp/nopecha_extracted/* scripts/extensions/nopecha/unpacked/
           else
-            # 通常解压后有一个子目录，移动其内容
-            mv /tmp/nopecha_extracted/* scripts/extensions/nopecha/unpacked
+            mv /tmp/nopecha_extracted/* scripts/extensions/nopecha/unpacked/
           fi
-          echo "NOPECHA_PATH=$(pwd)/scripts/extensions/nopecha/unpacked" >> $GITHUB_ENV
+          echo "NOPECHA_PATH=$(pwd)/scripts/extensions/nopecha/unpacked" >> "$GITHUB_ENV"
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ secrets.PROXY_NODE }}  # 改为对应节点变量名 （大金）双ISP - US
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          NODE_LINK: ${{ env.F1_NODE_LINK }}
         run: |
           chmod +x scripts/setup_proxy.sh
           if ! bash scripts/setup_proxy.sh; then
             curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TG_CHAT_ID}" \
               -d parse_mode="HTML" \
-              -d text="❌ <b>X10hosting 保活失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              -d text="❌ <b>F1 X10hosting 保活失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               --max-time 10 || true
             exit 1
           fi
 
       - name: 执行保活脚本
         env:
-          X10HOSTING: ${{ secrets.X10HOSTING }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}   # 由 setup_proxy.sh 导出
+          X10HOSTING:   ${{ env.F1_X10HOSTING }}   # 通过 env 传，多行 secret 安全
+          TG_BOT_TOKEN: ${{ env.TG_BOT_TOKEN }}
+          TG_CHAT_ID:   ${{ env.TG_CHAT_ID }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}    # 由 setup_proxy.sh 导出
           NOPECHA_PATH: ${{ env.NOPECHA_PATH }}
-          NOPECHA_KEY: ${{ secrets.NOPECHA_KEY }}
+          NOPECHA_KEY:  ${{ env.NOPECHA_KEY }}
         run: |
           mkdir -p screenshots
-          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/x10hosting/x10hosting_keepalive.py
+          xvfb-run -a --server-args="-screen 0 1280x720x24" \
+            python -u scripts/x10hosting/x10hosting_keepalive.py
 
-      - name: 上传截图
-        if: always()
-        uses: actions/upload-artifact@v4
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: x10-screenshots-f1-${{ github.run_number }}
+#          path: screenshots/*.png
+#          retention-days: 7
+#          if-no-files-found: ignore
+
+  # ========================= F2 =========================
+  keepalive-f2:
+    name: F2 保活
+    if: ${{ github.event_name == 'schedule' || inputs.enable_f2 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: 错峰等待
+        run: sleep ${{ env.F2_STAGGER }}
+
+      - name: 检出私有仓库
+        uses: actions/checkout@v4
         with:
-          name: x10-screenshots-${{ github.run_number }}
-          path: screenshots/*.png
-          retention-days: 7
-          if-no-files-found: ignore
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
 
-      - name: 清理历史运行记录
-        if: always()
+      - name: 配置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb fonts-noto-cjk fonts-wqy-zenhei p7zip-full
+
+      - name: 安装 Python 库
+        run: |
+          pip install -q seleniumbase requests
+
+      - name: 安装 ChromeDriver
+        run: seleniumbase install chromedriver
+
+      - name: 下载并解压 NopeCHA 扩展
+        run: |
+          mkdir -p scripts/extensions/nopecha/unpacked
+          wget -q -O /tmp/nopecha.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip
+          7z x -y /tmp/nopecha.zip -o/tmp/nopecha_extracted
+          if [ -f /tmp/nopecha_extracted/manifest.json ]; then
+            mv /tmp/nopecha_extracted/* scripts/extensions/nopecha/unpacked/
+          else
+            mv /tmp/nopecha_extracted/* scripts/extensions/nopecha/unpacked/
+          fi
+          echo "NOPECHA_PATH=$(pwd)/scripts/extensions/nopecha/unpacked" >> "$GITHUB_ENV"
+
+      - name: 设置代理
+        env:
+          NODE_LINK: ${{ env.F2_NODE_LINK }}
+        run: |
+          chmod +x scripts/setup_proxy.sh
+          if ! bash scripts/setup_proxy.sh; then
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d parse_mode="HTML" \
+              -d text="❌ <b>F2 X10hosting 保活失败</b>%0A%0A原因: 代理不可用%0A仓库: ${{ github.repository }}%0A查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --max-time 10 || true
+            exit 1
+          fi
+
+      - name: 执行保活脚本
+        env:
+          X10HOSTING:   ${{ env.F2_X10HOSTING }}
+          TG_BOT_TOKEN: ${{ env.TG_BOT_TOKEN }}
+          TG_CHAT_ID:   ${{ env.TG_CHAT_ID }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          NOPECHA_PATH: ${{ env.NOPECHA_PATH }}
+          NOPECHA_KEY:  ${{ env.NOPECHA_KEY }}
+        run: |
+          mkdir -p screenshots
+          xvfb-run -a --server-args="-screen 0 1280x720x24" \
+            python -u scripts/x10hosting/x10hosting_keepalive.py
+
+#      - name: 上传截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: x10-screenshots-f2-${{ github.run_number }}
+#          path: screenshots/*.png
+#          retention-days: 7
+#          if-no-files-found: ignore
+
+  # ========================= 统一清理 =========================
+  cleanup:
+    name: 清理历史运行记录
+    runs-on: ubuntu-22.04
+    needs: [keepalive-f1, keepalive-f2]
+    if: always()
+    steps:
+      - name: 清理历史运行记录（保留最近2次）
         uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ github.token }}
