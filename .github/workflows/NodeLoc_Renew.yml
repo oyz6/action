@@ -122,14 +122,14 @@ jobs:
           fi
           python nodeloc/main-test.py
 
-      - name: 上传调试截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots-f1-${{ github.run_number }}
-          path: /tmp/screenshots/
-          retention-days: 3
-          if-no-files-found: ignore
+#      - name: 上传调试截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-f1-${{ github.run_number }}
+#          path: /tmp/screenshots/
+#          retention-days: 3
+#          if-no-files-found: ignore
 
   # ========================= F2 =========================
   sign-f2:
@@ -208,21 +208,20 @@ jobs:
           fi
           python nodeloc/main-test.py
 
-      - name: 上传调试截图
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots-f2-${{ github.run_number }}
-          path: /tmp/screenshots/
-          retention-days: 3
-          if-no-files-found: ignore
-
+#      - name: 上传调试截图
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: screenshots-f2-${{ github.run_number }}
+#          path: /tmp/screenshots/
+#          retention-days: 3
+#          if-no-files-found: ignore
 
   # ========================= 统一清理 =========================
   cleanup:
     name: 清理历史运行记录
     runs-on: ubuntu-latest
-    needs: [sign-f1, sign-f2, sign-f3]
+    needs: [sign-f1, sign-f2]
     if: always()
     steps:
       - name: 清理历史运行记录（保留最近1次）
