@@ -26,8 +26,8 @@ permissions:
 # 账号配置区
 env:
   # ---------- F1 账号 ----------
-#  F1_NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}   # 美国 洛杉矶 — 搬瓦工
-  F1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}    # 360t7 美国一年 - 双ISP
+  F1_NODE_LINK: ${{ secrets.PROXY_NODE_US_IT7 }}   # 美国 洛杉矶 — 搬瓦工
+#  F1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}    # 360t7 美国一年 - 双ISP
   F1_VPS8:      ${{ secrets.VPS8 }}                # 账号格式: 邮箱-----密码
   F1_STAGGER:   "0"                                # 错峰等待秒数
 
