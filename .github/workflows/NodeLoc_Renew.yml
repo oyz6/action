@@ -36,7 +36,8 @@ env:
   F1_STAGGER:    "0"                                   # 错峰等待秒数
 
   # ---------- F2 账号 ----------
-  F2_NODE_LINK:  ${{ secrets.PROXY_NODE_360t7 }}      # 360t7 美国一年 - 双ISP - US
+#  F2_NODE_LINK:  ${{ secrets.PROXY_NODE_360t7 }}      # 360t7 美国一年 - 双ISP - US
+  F2_NODE_LINK: ${{ secrets.PROXY_NODE_US_ISP }}      # 美国 洛杉矶 ISP
   F2_NL_ACCOUNT: ${{ secrets.NL_ACCOUNT_TEST }}
   F2_STAGGER:    "20"
 
