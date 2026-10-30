@@ -127,10 +127,11 @@ jobs:
 
     steps:
       - name: 启用 WARP 代理（dual）
-        uses: fscarmen/warp-on-actions@v1.3
+        uses: fscarmen/warp-on-actions@v1.4
+        timeout-minutes: 3  # 防止挂起导致整个 Job 超时
         with:
           stack: dual
-          mode: client
+          mode: wireguard   # 替换 client 为 wireguard 模式，更稳定
 
       - name: 修复 DNS
         run: |
