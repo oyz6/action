@@ -163,32 +163,38 @@ jobs:
             if [ "$i" -gt 1 ]; then
               echo "[$(date +'%H:%M:%S')] → 重连 WARP 轮换出口 IP"
               sudo warp-cli --accept-tos disconnect 2>/dev/null || true
-              sleep 2
+              sleep 3
               sudo warp-cli --accept-tos connect   2>/dev/null || true
               
               echo "[$(date +'%H:%M:%S')] 等待 WARP 重连就绪..."
               for j in {1..5}; do
                 if curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+                  sleep 3 # 额外等待，确保网络完全通畅
                   break
                 fi
                 echo "[$(date +'%H:%M:%S')] WARP 尚未完全就绪，等待 3 秒..."
                 sleep 3
               done
-              
-              echo "[$(date +'%H:%M:%S')] 当前出口："
-              curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
-                | grep -E "^(ip|warp|loc)=" || true
             fi
 
             echo "[$(date +'%H:%M:%S')] 正在发起 curl 请求..."
+            # 这里使用了更完整的手机端 Headers
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
               -w "%{http_code}" --max-time 20 \
-              -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
-              -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
-              -H "Accept-Language: zh-CN,zh;q=0.9" \
+              -H "User-Agent: Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
+              -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" \
+              -H "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8" \
               -H "Cache-Control: no-cache" \
               -H "Pragma: no-cache" \
               -H "Upgrade-Insecure-Requests: 1" \
+              -H "Sec-CH-UA: \"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"" \
+              -H "Sec-CH-UA-Mobile: ?1" \
+              -H "Sec-CH-UA-Platform: \"Android\"" \
+              -H "Sec-Fetch-Dest: document" \
+              -H "Sec-Fetch-Mode: navigate" \
+              -H "Sec-Fetch-Site: cross-site" \
+              -H "Sec-Fetch-User: ?1" \
+              -H "Priority: u=0, i" \
               --compressed "$URL") || HTTP_CODE="000"
 
             echo "[$(date +'%H:%M:%S')] 请求完成，HTTP 状态码: $HTTP_CODE"
@@ -202,8 +208,7 @@ jobs:
 
             echo "[$(date +'%H:%M:%S')] ❌ 第 $i 次失败"
             
-            # 【核心优化】不要直接 cat 整个 headers，如果被风控拦截返回大段 HTML，会导致日志卡死
-            # 改为只打印前 10 行，既能排错，又保证网页流畅
+            # 打印拦截信息以便观察
             if [ -f /tmp/promo_headers.txt ]; then
               echo "--- Headers 前 10 行 ---"
               head -n 10 /tmp/promo_headers.txt
