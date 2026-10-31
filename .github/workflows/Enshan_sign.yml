@@ -135,53 +135,70 @@ jobs:
     name: 访问推广
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: ${{ github.event_name == 'schedule' || inputs.enable_f2 }}
 
     steps:
-      - name: 启用 WARP 代理（IPv6 Wireguard 模式）
+      - name: 启用 WARP 代理（client 模式）
         uses: fscarmen/warp-on-actions@v1.4
         timeout-minutes: 3
         with:
-          stack: ipv6
-          mode: wireguard   # 必须使用 wireguard，client 模式在 GH Actions 无法正常接管 IPv6 路由
+          stack: ipv4   # 建议先用 ipv4 保证连通性，避免 IPv6 路由黑洞导致 000
+          mode: client
 
-      - name: 修复 DNS 并等待 IPv6 就绪
+      - name: 修复 DNS（不要锁死）
         run: |
           sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 2606:4700:4700::1111" \
-            | sudo tee /etc/resolv.conf
-          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
-          
-          echo "验证 IPv6 连通性..."
-          for attempt in {1..6}; do
-            if curl -6 -fsS -m 10 https://api64.ipify.org >/dev/null 2>&1; then
-              echo "✅ IPv6 出口已就绪。"
-              break
-            fi
-            echo "⏳ IPv6 尚未就绪 (第 $attempt 次尝试)，等待 5 秒..."
-            sleep 5
-            if [ "$attempt" -eq 6 ]; then
-              echo "::error::IPv6 出口配置失败，WARP 未能提供正常的 IPv6 网络。"
-              exit 1
-            fi
-          done
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+          # 删除了 chattr +i 锁定，否则 WARP 无法自行管理 DNS
+          sleep 2
 
-      - name: 访问恩山推广链接（IPv6 多次请求重试）
+      - name: 确认 WARP 出口
+        run: |
+          echo "[$(date +'%H:%M:%S')] ===== WARP 初始出口 ====="
+          timeout 10 curl -4 -s https://www.cloudflare.com/cdn-cgi/trace \
+            | grep -E "^(ip|warp|loc)=" || echo "WARP 出口检测失败"
+          echo ""
+
+      - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
         timeout-minutes: 5
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
-          MAX_ATTEMPTS=5
 
-          for i in $(seq 1 $MAX_ATTEMPTS); do
-            echo "[$(date +'%H:%M:%S')] ===== 第 $i/$MAX_ATTEMPTS 次请求 ====="
+          for i in 1 2 3 4 5; do
+            echo "[$(date +'%H:%M:%S')] ===== 第 $i 次尝试 ====="
+
+            if [ "$i" -gt 1 ]; then
+              echo "[$(date +'%H:%M:%S')] → 重连 WARP 轮换出口 IP"
+              # 加入 timeout 防止卡死
+              sudo timeout 10 warp-cli --accept-tos disconnect 2>/dev/null || true
+              sleep 3
+              sudo timeout 15 warp-cli --accept-tos connect 2>/dev/null || true
+              
+              echo "[$(date +'%H:%M:%S')] 等待 WARP 重连就绪..."
+              WARP_READY=0
+              for j in {1..5}; do
+                if timeout 5 curl -4 -s https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+                  WARP_READY=1
+                  sleep 2
+                  break
+                fi
+                echo "[$(date +'%H:%M:%S')] WARP 尚未完全就绪，等待 3 秒..."
+                sleep 3
+              done
+              
+              if [ "$WARP_READY" = "0" ]; then
+                echo "[$(date +'%H:%M:%S')] ⚠️ WARP 重连超时，跳过本次请求。"
+                continue
+              fi
+            fi
 
             echo "[$(date +'%H:%M:%S')] 正在发起 curl 请求..."
-            HTTP_CODE=$(curl -6 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --max-time 12 \
+            # 强制使用 IPv4 (-4)，并补齐完美伪装手机 Headers
+            HTTP_CODE=$(curl -4 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+              -w "%{http_code}" --max-time 15 \
               -H "User-Agent: Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" \
               -H "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8" \
@@ -210,8 +227,8 @@ jobs:
             echo "[$(date +'%H:%M:%S')] ❌ 第 $i 次失败"
             
             if [ -f /tmp/promo_headers.txt ]; then
-              echo "--- Headers 前 5 行 ---"
-              head -n 5 /tmp/promo_headers.txt
+              echo "--- Headers 前 10 行 ---"
+              head -n 10 /tmp/promo_headers.txt
               echo "-------------------------"
             fi
             
