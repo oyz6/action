@@ -152,12 +152,13 @@ jobs:
       - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
 
-          for i in 1 2 3 4 5; do
+          # 增加重试次数到 8 次，以应对 WARP 的“抽奖”网络
+          for i in {1..8}; do
             echo "[$(date +'%H:%M:%S')] ===== 第 $i 次尝试 ====="
 
             if [ "$i" -gt 1 ]; then
@@ -168,8 +169,9 @@ jobs:
               
               echo "[$(date +'%H:%M:%S')] 等待 WARP 重连就绪..."
               for j in {1..5}; do
-                if curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
-                  sleep 3 # 额外等待，确保网络完全通畅
+                if curl -4 -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+                  echo "[$(date +'%H:%M:%S')] WARP 已就绪，额外等待 5 秒确保链路稳定..."
+                  sleep 5 # 隧道刚连上时网络可能不通，多等一会
                   break
                 fi
                 echo "[$(date +'%H:%M:%S')] WARP 尚未完全就绪，等待 3 秒..."
@@ -178,9 +180,9 @@ jobs:
             fi
 
             echo "[$(date +'%H:%M:%S')] 正在发起 curl 请求..."
-            # 这里使用了更完整的手机端 Headers
-            HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --max-time 20 \
+            # 增加 -4 强制走 IPv4，避免 WARP 的 IPv6 路由导致 520 回源失败
+            HTTP_CODE=$(curl -4 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+              -w "%{http_code}" --connect-timeout 10 --max-time 20 \
               -H "User-Agent: Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" \
               -H "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8" \
@@ -208,15 +210,10 @@ jobs:
 
             echo "[$(date +'%H:%M:%S')] ❌ 第 $i 次失败"
             
-            # 打印拦截信息以便观察
-            if [ -f /tmp/promo_headers.txt ]; then
-              echo "--- Headers 前 10 行 ---"
-              head -n 10 /tmp/promo_headers.txt
-              echo "-------------------------"
-            fi
-            
-            echo "[$(date +'%H:%M:%S')] 等待 5 秒后重试..."
-            sleep 5
+            # 动态退避等待：失败次数越多，等得越久 (5s, 10s, 15s...)
+            WAIT_TIME=$((i * 5))
+            echo "[$(date +'%H:%M:%S')] 等待 ${WAIT_TIME} 秒后重试..."
+            sleep $WAIT_TIME
           done
 
           if [ "$SUCCESS" = "1" ]; then
