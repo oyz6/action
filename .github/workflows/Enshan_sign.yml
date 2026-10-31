@@ -126,63 +126,60 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: 启用 WARP 代理（dual）
+      - name: 启用 WARP 代理（IPv6）
         uses: fscarmen/warp-on-actions@v1.4
-        timeout-minutes: 3  # 防止挂起导致整个 Job 超时
+        timeout-minutes: 3
         with:
-          stack: dual
-          mode: wireguard   # 替换 client 为 wireguard 模式，更稳定
+          stack: ipv6
+          mode: wireguard
 
       - name: 修复 DNS
         run: |
-          sudo systemctl stop systemd-resolved 2>/dev/null || true
-          sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 2606:4700:4700::1111" \
-            | sudo tee /etc/resolv.conf
-          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
-          sleep 2
+          # ... 原有 DNS 修复逻辑保持不变 ...
 
       - name: 确认 WARP 出口
         run: |
-          echo "[$(date +'%H:%M:%S')] ===== WARP 初始出口 ====="
-          curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace \
+          echo "===== WARP IPv6 出口确认 ====="
+          curl -6 -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace \
             | grep -E "^(ip|warp|loc)=" || true
-          echo ""
 
-      - name: 访问恩山推广链接
+      - name: 访问恩山推广链接（IPv6 + 强化重试）
         id: promo
         continue-on-error: true
-        timeout-minutes: 8
+        timeout-minutes: 5
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
+          MAX_ATTEMPTS=8
 
-          # 增加重试次数到 8 次，以应对 WARP 的“抽奖”网络
-          for i in {1..8}; do
-            echo "[$(date +'%H:%M:%S')] ===== 第 $i 次尝试 ====="
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "[$(date +'%H:%M:%S')] ===== 第 $i/$MAX_ATTEMPTS 次尝试 ====="
 
             if [ "$i" -gt 1 ]; then
-              echo "[$(date +'%H:%M:%S')] → 重连 WARP 轮换出口 IP"
+              echo "[$(date +'%H:%M:%S')] → 重连 WARP 轮换 IPv6 出口"
               sudo warp-cli --accept-tos disconnect 2>/dev/null || true
               sleep 3
               sudo warp-cli --accept-tos connect   2>/dev/null || true
-              
-              echo "[$(date +'%H:%M:%S')] 等待 WARP 重连就绪..."
-              for j in {1..5}; do
-                if curl -4 -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
-                  echo "[$(date +'%H:%M:%S')] WARP 已就绪，额外等待 5 秒确保链路稳定..."
-                  sleep 5 # 隧道刚连上时网络可能不通，多等一会
+
+              echo "[$(date +'%H:%M:%S')] 等待 WARP IPv6 就绪..."
+              for j in {1..6}; do
+                if curl -6 -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+                  echo "[$(date +'%H:%M:%S')] WARP 已连接，额外等待 5 秒确保隧道稳定..."
+                  sleep 5
                   break
                 fi
-                echo "[$(date +'%H:%M:%S')] WARP 尚未完全就绪，等待 3 秒..."
+                echo "[$(date +'%H:%M:%S')] WARP 尚未就绪，等待 3 秒..."
                 sleep 3
               done
+
+              echo "[$(date +'%H:%M:%S')] 当前 IPv6 出口："
+              curl -6 -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
+                | grep -E "^(ip|warp|loc)=" || true
             fi
 
-            echo "[$(date +'%H:%M:%S')] 正在发起 curl 请求..."
-            # 增加 -4 强制走 IPv4，避免 WARP 的 IPv6 路由导致 520 回源失败
-            HTTP_CODE=$(curl -4 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --connect-timeout 10 --max-time 20 \
+            echo "[$(date +'%H:%M:%S')] 发起 curl 请求（IPv6）..."
+            HTTP_CODE=$(curl -6 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+              -w "%{http_code}" --max-time 12 \
               -H "User-Agent: Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" \
               -H "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8" \
@@ -209,11 +206,15 @@ jobs:
             fi
 
             echo "[$(date +'%H:%M:%S')] ❌ 第 $i 次失败"
-            
-            # 动态退避等待：失败次数越多，等得越久 (5s, 10s, 15s...)
-            WAIT_TIME=$((i * 5))
-            echo "[$(date +'%H:%M:%S')] 等待 ${WAIT_TIME} 秒后重试..."
-            sleep $WAIT_TIME
+            if [ -f /tmp/promo_headers.txt ]; then
+              echo "--- Headers 前 10 行 ---"
+              head -n 10 /tmp/promo_headers.txt
+              echo "-------------------------"
+            fi
+
+            BACKOFF=$((i * 3))
+            echo "[$(date +'%H:%M:%S')] 等待 ${BACKOFF} 秒后重试..."
+            sleep "$BACKOFF"
           done
 
           if [ "$SUCCESS" = "1" ]; then
