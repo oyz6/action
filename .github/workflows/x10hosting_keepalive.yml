@@ -26,7 +26,7 @@ env:
 
   # ---------- F1 账号 ----------
 # F1_NODE_LINK:   ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 美国一年 - 双ISP - US
-  F1_NODE_LINK:   ${{ secrets.PROXY_NODE_US_ISP }}  # 美国 洛杉矶 ISP
+  F1_NODE_LINK:   ${{ secrets.PROXY_NODE_US }}      # 煤山 一年美区 - 双ISP - US
   F1_X10HOSTING:  ${{ secrets.X10HOSTING_0 }}       # 账号格式见脚本说明
   F1_STAGGER:     "0"                               # 错峰等待秒数
 
