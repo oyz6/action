@@ -27,7 +27,8 @@ permissions:
 # =========================================================
 env:
   # ---------- 账号 1 ----------
-  K1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 美国一年 - 双ISP - US
+# K1_NODE_LINK: ${{ secrets.PROXY_NODE_360t7 }}   # 360t7 美国一年 - 双ISP - US
+  K1_NODE_LINK: ${{ secrets.PROXY_NODE_US_ISP }}  # 美国 洛杉矶 ISP
   K1_LUNES:     ${{ secrets.LUNES_1 }}
 
   # ---------- 账号 2 ----------
