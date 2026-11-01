@@ -164,25 +164,31 @@ jobs:
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
+          START=$(date +%s)
+          MAX_TOTAL=600   # 整个循环最多跑 10 分钟，防止 Actions 白耗额度
 
           for i in 1 2 3 4 5; do
-            echo "===== 第 $i 次尝试 ====="
+            NOW=$(date +%s)
+            if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
+              echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
+              break
+            fi
 
-            # 第 1 次直接用初始 WARP 出口；从第 2 次起换 IP
+            echo "===== 第 $i 次尝试（已耗时 $((NOW - START))s）====="
+
             if [ "$i" -gt 1 ]; then
               echo "→ 重连 WARP 轮换出口 IP"
               sudo warp-cli --accept-tos disconnect 2>/dev/null || true
-              sleep 2
+              sleep 3
               sudo warp-cli --accept-tos connect   2>/dev/null || true
-              sleep 6
+              sleep 8
               echo "当前出口："
               curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
                 | grep -E "^(ip|warp|loc)=" || true
             fi
 
-            # 不强制 -4/-6，dual 下让系统按隧道走
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --max-time 30 \
+              -w "%{http_code}" --max-time 25 \
               -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
               -H "Accept-Language: zh-CN,zh;q=0.9" \
@@ -201,10 +207,27 @@ jobs:
             fi
 
             echo "❌ 第 $i 次失败"
-            if [ -f /tmp/promo_headers.txt ]; then
-              cat /tmp/promo_headers.txt
-            fi
-            sleep 10
+            [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
+
+            # ★ 按错误码分流等待
+            case "$HTTP_CODE" in
+              520|521|522|523|524|525)
+                echo "→ 5xx 源站/回源错误，源站抖动；换 IP 意义不大，等 40s 再试"
+                sleep 40
+                ;;
+              403|429)
+                echo "→ WAF/限流拦截，换 IP 才有效，等 10s"
+                sleep 10
+                ;;
+              000)
+                echo "→ 连接失败（隧道可能未就绪），等 15s"
+                sleep 15
+                ;;
+              *)
+                echo "→ 其它错误码，等 10s"
+                sleep 10
+                ;;
+            esac
           done
 
           if [ "$SUCCESS" = "1" ]; then
