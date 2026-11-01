@@ -134,106 +134,77 @@ jobs:
   promo:
     name: 访问推广
     runs-on: ubuntu-latest
-    timeout-minutes: 15
 
     steps:
-      - name: 启用 WARP 代理（client 模式）
-        uses: fscarmen/warp-on-actions@v1.4
-        timeout-minutes: 3
+      - name: 启用 WARP 代理（dual）
+        uses: fscarmen/warp-on-actions@v1.3
         with:
-          stack: ipv4   # 建议先用 ipv4 保证连通性，避免 IPv6 路由黑洞导致 000
+          stack: dual
           mode: client
 
-      - name: 修复 DNS（不要锁死）
+      - name: 修复 DNS
         run: |
           sudo systemctl stop systemd-resolved 2>/dev/null || true
           sudo rm -f /etc/resolv.conf
-          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /etc/resolv.conf
-          # 删除了 chattr +i 锁定，否则 WARP 无法自行管理 DNS
+          echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 2606:4700:4700::1111" \
+            | sudo tee /etc/resolv.conf
+          sudo chattr +i /etc/resolv.conf 2>/dev/null || true
           sleep 2
 
       - name: 确认 WARP 出口
         run: |
-          echo "[$(date +'%H:%M:%S')] ===== WARP 初始出口 ====="
-          timeout 10 curl -4 -s https://www.cloudflare.com/cdn-cgi/trace \
-            | grep -E "^(ip|warp|loc)=" || echo "WARP 出口检测失败"
+          echo "===== WARP 初始出口 ====="
+          curl -s --max-time 15 https://www.cloudflare.com/cdn-cgi/trace \
+            | grep -E "^(ip|warp|loc)=" || true
           echo ""
 
       - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
-        timeout-minutes: 5
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
 
           for i in 1 2 3 4 5; do
-            echo "[$(date +'%H:%M:%S')] ===== 第 $i 次尝试 ====="
+            echo "===== 第 $i 次尝试 ====="
 
+            # 第 1 次直接用初始 WARP 出口；从第 2 次起换 IP
             if [ "$i" -gt 1 ]; then
-              echo "[$(date +'%H:%M:%S')] → 重连 WARP 轮换出口 IP"
-              # 加入 timeout 防止卡死
-              sudo timeout 10 warp-cli --accept-tos disconnect 2>/dev/null || true
-              sleep 3
-              sudo timeout 15 warp-cli --accept-tos connect 2>/dev/null || true
-              
-              echo "[$(date +'%H:%M:%S')] 等待 WARP 重连就绪..."
-              WARP_READY=0
-              for j in {1..5}; do
-                if timeout 5 curl -4 -s https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
-                  WARP_READY=1
-                  sleep 2
-                  break
-                fi
-                echo "[$(date +'%H:%M:%S')] WARP 尚未完全就绪，等待 3 秒..."
-                sleep 3
-              done
-              
-              if [ "$WARP_READY" = "0" ]; then
-                echo "[$(date +'%H:%M:%S')] ⚠️ WARP 重连超时，跳过本次请求。"
-                continue
-              fi
+              echo "→ 重连 WARP 轮换出口 IP"
+              sudo warp-cli --accept-tos disconnect 2>/dev/null || true
+              sleep 2
+              sudo warp-cli --accept-tos connect   2>/dev/null || true
+              sleep 6
+              echo "当前出口："
+              curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
+                | grep -E "^(ip|warp|loc)=" || true
             fi
 
-            echo "[$(date +'%H:%M:%S')] 正在发起 curl 请求..."
-            # 强制使用 IPv4 (-4)，并补齐完美伪装手机 Headers
-            HTTP_CODE=$(curl -4 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --max-time 15 \
-              -H "User-Agent: Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
-              -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" \
-              -H "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8" \
+            # 不强制 -4/-6，dual 下让系统按隧道走
+            HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+              -w "%{http_code}" --max-time 30 \
+              -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
+              -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
+              -H "Accept-Language: zh-CN,zh;q=0.9" \
               -H "Cache-Control: no-cache" \
               -H "Pragma: no-cache" \
               -H "Upgrade-Insecure-Requests: 1" \
-              -H "Sec-CH-UA: \"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"" \
-              -H "Sec-CH-UA-Mobile: ?1" \
-              -H "Sec-CH-UA-Platform: \"Android\"" \
-              -H "Sec-Fetch-Dest: document" \
-              -H "Sec-Fetch-Mode: navigate" \
-              -H "Sec-Fetch-Site: cross-site" \
-              -H "Sec-Fetch-User: ?1" \
-              -H "Priority: u=0, i" \
               --compressed "$URL") || HTTP_CODE="000"
 
-            echo "[$(date +'%H:%M:%S')] 请求完成，HTTP 状态码: $HTTP_CODE"
+            echo "HTTP: $HTTP_CODE"
 
             if [ "$HTTP_CODE" = "200" ] && grep -qi "rHEX_2132_promotion" /tmp/promo_headers.txt; then
-              echo "[$(date +'%H:%M:%S')] ✅ 第 $i 次成功：拿到 rHEX_2132_promotion"
+              echo "✅ 第 $i 次成功：拿到 rHEX_2132_promotion"
               grep -i "rHEX_2132_promotion" /tmp/promo_headers.txt
               SUCCESS=1
               break
             fi
 
-            echo "[$(date +'%H:%M:%S')] ❌ 第 $i 次失败"
-            
+            echo "❌ 第 $i 次失败"
             if [ -f /tmp/promo_headers.txt ]; then
-              echo "--- Headers 前 10 行 ---"
-              head -n 10 /tmp/promo_headers.txt
-              echo "-------------------------"
+              cat /tmp/promo_headers.txt
             fi
-            
-            echo "[$(date +'%H:%M:%S')] 等待 5 秒后重试..."
-            sleep 5
+            sleep 10
           done
 
           if [ "$SUCCESS" = "1" ]; then
