@@ -25,8 +25,8 @@ env:
   PYTHON_VERSION: '3.11'
 
   # ---------- F1 账号 ----------
-  F1_NODE_LINK:   ${{ secrets.PROXY_NODE_US2 }}     # 美国 得克萨斯州 休斯敦
-# F1_NODE_LINK:   ${{ secrets.PROXY_NODE_US }}      # 煤山 一年美区 - 双ISP - US
+#  F1_NODE_LINK:   ${{ secrets.PROXY_NODE_US2 }}     # 美国 得克萨斯州 休斯敦
+  F1_NODE_LINK:   ${{ secrets.PROXY_NODE_US }}      # 煤山 一年美区 - 双ISP - US
   F1_X10HOSTING:  ${{ secrets.X10HOSTING_0 }}       # 账号格式见脚本说明
   F1_STAGGER:     "0"                               # 错峰等待秒数
 
