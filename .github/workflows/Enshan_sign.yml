@@ -161,11 +161,12 @@ jobs:
       - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
+        timeout-minutes: 10      # ★ 新增：步骤级硬超时，不管卡在哪，10分钟后 GitHub 强制结束
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
           START=$(date +%s)
-          MAX_TOTAL=600   # 整个循环最多跑 10 分钟，防止 Actions 白耗额度
+          MAX_TOTAL=540   # 内部循环限制 9 分钟，留点时间发 TG 通知
 
           for i in 1 2 3 4 5; do
             NOW=$(date +%s)
@@ -178,17 +179,20 @@ jobs:
 
             if [ "$i" -gt 1 ]; then
               echo "→ 重连 WARP 轮换出口 IP"
-              sudo warp-cli --accept-tos disconnect 2>/dev/null || true
+              # ★ 修复卡死核心：强制给 warp-cli 加 timeout，超过 15-20 秒直接杀掉
+              timeout 15s sudo warp-cli --accept-tos disconnect 2>/dev/null || true
               sleep 3
-              sudo warp-cli --accept-tos connect   2>/dev/null || true
+              timeout 20s sudo warp-cli --accept-tos connect   2>/dev/null || true
               sleep 8
+              
               echo "当前出口："
               curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
                 | grep -E "^(ip|warp|loc)=" || true
             fi
 
+            # ★ 新增 --connect-timeout 10，防止 TCP 握手卡住
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --max-time 25 \
+              -w "%{http_code}" --connect-timeout 10 --max-time 25 \
               -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
               -H "Accept-Language: zh-CN,zh;q=0.9" \
@@ -209,14 +213,18 @@ jobs:
             echo "❌ 第 $i 次失败"
             [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
 
-            # ★ 按错误码分流等待
+            # 按错误码分流等待
             case "$HTTP_CODE" in
               520|521|522|523|524|525)
-                echo "→ 5xx 源站/回源错误，源站抖动；换 IP 意义不大，等 40s 再试"
+                echo "→ 5xx 源站/回源错误，等 40s 再试"
                 sleep 40
                 ;;
               403|429)
-                echo "→ WAF/限流拦截，换 IP 才有效，等 10s"
+                echo "→ WAF/限流拦截，等 10s"
+                sleep 10
+                ;;
+              200)
+                echo "→ 伪200（被 WAF 拦截），等 10s"
                 sleep 10
                 ;;
               000)
