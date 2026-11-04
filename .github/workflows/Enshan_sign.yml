@@ -161,12 +161,12 @@ jobs:
       - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
-        timeout-minutes: 10      # ★ 新增：步骤级硬超时，不管卡在哪，10分钟后 GitHub 强制结束
+        timeout-minutes: 10      # ★ 极其重要：步骤级超时，10分钟强制杀
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
           START=$(date +%s)
-          MAX_TOTAL=540   # 内部循环限制 9 分钟，留点时间发 TG 通知
+          MAX_TOTAL=540   # 内部循环最多 9 分钟
 
           for i in 1 2 3 4 5; do
             NOW=$(date +%s)
@@ -179,7 +179,7 @@ jobs:
 
             if [ "$i" -gt 1 ]; then
               echo "→ 重连 WARP 轮换出口 IP"
-              # ★ 修复卡死核心：强制给 warp-cli 加 timeout，超过 15-20 秒直接杀掉
+              # ★ 修复卡死核心：timeout 强杀挂起的 warp-cli
               timeout 15s sudo warp-cli --accept-tos disconnect 2>/dev/null || true
               sleep 3
               timeout 20s sudo warp-cli --accept-tos connect   2>/dev/null || true
@@ -190,7 +190,7 @@ jobs:
                 | grep -E "^(ip|warp|loc)=" || true
             fi
 
-            # ★ 新增 --connect-timeout 10，防止 TCP 握手卡住
+            # ★ 加 --connect-timeout 10 防止请求卡死
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
               -w "%{http_code}" --connect-timeout 10 --max-time 25 \
               -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
@@ -219,12 +219,8 @@ jobs:
                 echo "→ 5xx 源站/回源错误，等 40s 再试"
                 sleep 40
                 ;;
-              403|429)
+              403|429|200)
                 echo "→ WAF/限流拦截，等 10s"
-                sleep 10
-                ;;
-              200)
-                echo "→ 伪200（被 WAF 拦截），等 10s"
                 sleep 10
                 ;;
               000)
