@@ -141,6 +141,8 @@ jobs:
         id: promo
         continue-on-error: true
         timeout-minutes: 10
+        env:
+          PROXY_POOL_URL: ${{ secrets.PROXY_POOL_URL }}  # 从 Secrets 获取代理池链接
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
@@ -148,8 +150,14 @@ jobs:
           MAX_TOTAL=480
 
           # 1. 下载并解析代理池（处理空格分隔的格式）
-          echo "===== 下载代理池 alive.txt ====="
-          curl -sL --max-time 20 "https://raw.githubusercontent.com/vipmc838/cf_best_ip/main/s5/alive.txt" -o /tmp/alive.txt || true
+          echo "===== 下载代理池 ====="
+          if [ -z "$PROXY_POOL_URL" ]; then
+            echo "❌ 未配置 PROXY_POOL_URL 变量"
+            echo "PROMO_OK=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          
+          curl -sL --max-time 20 "$PROXY_POOL_URL" -o /tmp/alive.txt || true
           
           # 将文件中的空格替换为换行，过滤出 http 或 socks5 的链接
           mapfile -t PROXIES < <(tr ' ' '\n' < /tmp/alive.txt | grep -E '^(http|socks5)://' | grep -v '^$')
@@ -171,8 +179,11 @@ jobs:
             fi
 
             PROXY="${PROXIES[$i]}"
+
+            MASKED_PROXY=$(echo "$PROXY" | sed -E 's/([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/\1.*.*.\4/g')
+
             echo "===== 第 $((i+1)) 次尝试（已耗时 $((NOW - START))s）====="
-            echo "当前代理: $PROXY"
+            echo "当前代理: $MASKED_PROXY"
 
             # 通过代理发起请求
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
@@ -199,7 +210,7 @@ jobs:
             echo "❌ 第 $((i+1)) 次失败"
             [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
 
-            # 错误码分流等待（因为是代理池，快速切换为主）
+            # 错误码分流等待（快速切换）
             case "$HTTP_CODE" in
               520|521|522|523|524|525)
                 echo "→ 5xx 源站错误，等 10s 换下一个代理"
