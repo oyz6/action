@@ -129,42 +129,55 @@ jobs:
           rm -f sing-box sing-box-config.json sing-box.log 2>/dev/null || true
 
   # ============================================================
-  # Job 2：WARP 访问推广（极简纯 curl 版，1秒搞定）
+  # Job 2：访问推广
   # ============================================================
   promo:
     name: 访问推广
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     if: ${{ github.event_name == 'schedule' || inputs.enable_f2 }}
 
     steps:
-      - name: 启用 WARP 网络
-        uses: fscarmen/warp-on-actions@v1.3
-        with:
-          stack: dual
-          mode: client
-
-      - name: 验证 WARP 网络
-        run: |
-          echo "=== 验证 WARP 网络状态 ==="
-          curl -s https://cloudflare.com/cdn-cgi/trace | grep -E "ip|warp" || true
-          echo "当前出口IP:"
-          curl -s https://api.ipify.org || true
-          echo ""
-
       - name: 访问恩山推广链接
         id: promo
         continue-on-error: true
+        timeout-minutes: 10
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           SUCCESS=0
+          START=$(date +%s)
+          MAX_TOTAL=480
+
+          # 1. 下载并解析代理池（处理空格分隔的格式）
+          echo "===== 下载代理池 alive.txt ====="
+          curl -sL --max-time 20 "https://raw.githubusercontent.com/vipmc838/cf_best_ip/main/s5/alive.txt" -o /tmp/alive.txt || true
           
-          # 最多重试 3 次
-          for i in 1 2 3; do
-            echo "===== 第 $i 次尝试 ====="
-            
-            HTTP_CODE=$(curl -s -o /dev/null -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --connect-timeout 10 --max-time 20 \
+          # 将文件中的空格替换为换行，过滤出 http 或 socks5 的链接
+          mapfile -t PROXIES < <(tr ' ' '\n' < /tmp/alive.txt | grep -E '^(http|socks5)://' | grep -v '^$')
+          TOTAL_PROXIES=${#PROXIES[@]}
+          
+          echo "成功加载 $TOTAL_PROXIES 个代理"
+          if [ "$TOTAL_PROXIES" -eq 0 ]; then
+            echo "❌ 代理池为空，直接退出"
+            echo "PROMO_OK=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # 2. 轮询代理发起请求（最多尝试前 20 个，避免耗时过长）
+          for ((i=0; i<TOTAL_PROXIES && i<20; i++)); do
+            NOW=$(date +%s)
+            if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
+              echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
+              break
+            fi
+
+            PROXY="${PROXIES[$i]}"
+            echo "===== 第 $((i+1)) 次尝试（已耗时 $((NOW - START))s）====="
+            echo "当前代理: $PROXY"
+
+            # 通过代理发起请求
+            HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+              -w "%{http_code}" --connect-timeout 8 --max-time 20 \
+              -x "$PROXY" \
               -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
               -H "Accept-Language: zh-CN,zh;q=0.9" \
@@ -173,33 +186,41 @@ jobs:
               -H "Upgrade-Insecure-Requests: 1" \
               --compressed "$URL") || HTTP_CODE="000"
 
-            echo "HTTP 状态码: $HTTP_CODE"
+            echo "HTTP: $HTTP_CODE"
 
-            # 检查是否拿到了 Cookie
+            # 校验是否成功拿到推广 Cookie
             if [ "$HTTP_CODE" = "200" ] && grep -qi "rHEX_2132_promotion" /tmp/promo_headers.txt; then
-              echo "✅ 推广成功！已获取 Cookie："
+              echo "✅ 第 $((i+1)) 次成功：拿到 rHEX_2132_promotion"
               grep -i "rHEX_2132_promotion" /tmp/promo_headers.txt
               SUCCESS=1
               break
             fi
 
-            echo "❌ 第 $i 次失败，未拿到推广 Cookie"
-            
-            # 如果失败了，尝试重连 WARP 换 IP
-            if [ "$i" -lt 3 ]; then
-              echo "→ 尝试重连 WARP 轮换出口 IP..."
-              (sudo warp-cli --accept-tos disconnect >/dev/null 2>&1 &)
-              sleep 3
-              (sudo warp-cli --accept-tos connect >/dev/null 2>&1 &)
-              sleep 5
-            fi
+            echo "❌ 第 $((i+1)) 次失败"
+            [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
+
+            # 错误码分流等待（因为是代理池，快速切换为主）
+            case "$HTTP_CODE" in
+              520|521|522|523|524|525)
+                echo "→ 5xx 源站错误，等 10s 换下一个代理"
+                sleep 10
+                ;;
+              403|429|200)
+                echo "→ WAF/限流拦截，等 3s 换下一个代理"
+                sleep 3
+                ;;
+              *)
+                echo "→ 连接失败或超时，等 3s 换下一个代理"
+                sleep 3
+                ;;
+            esac
           done
 
+          # 3. 输出最终结果
           if [ "$SUCCESS" = "1" ]; then
             echo "PROMO_OK=1" >> "$GITHUB_ENV"
           else
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
-            exit 1
           fi
 
       - name: 推送推广 TG 通知
@@ -209,9 +230,9 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
           if [ "$PROMO_OK" = "1" ]; then
-            ICON="✅"; TEXT="成功（拿到 Cookie）"
+            ICON="✅"; TEXT="成功"
           else
-            ICON="❌"; TEXT="失败（可能被 WAF 拦截）"
+            ICON="❌"; TEXT="失败或超时"
           fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
@@ -219,7 +240,7 @@ jobs:
             -d parse_mode="HTML" \
             -d text="${ICON} <b>恩山访问推广</b>%0A%0A结果：${TEXT}%0A时间：${TIME_CN}%0A%0AEnshan Daily Sign-in" \
             --max-time 10 || true
-            
+
   # ============================================================
   # Job 3：清理工作流记录
   # ============================================================
