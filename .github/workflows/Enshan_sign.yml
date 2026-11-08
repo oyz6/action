@@ -129,13 +129,22 @@ jobs:
           rm -f sing-box sing-box-config.json sing-box.log 2>/dev/null || true
 
   # ============================================================
-  # Job 2：WARP 访问推广（IPv6 Wireguard 模式 + 纯 HTTP 重试）
+  # Job 2：WARP 访问推广（复用 Selenium 过 WAF）
   # ============================================================
   promo:
     name: 访问推广
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ github.event_name == 'schedule' || inputs.enable_f2 }}
 
     steps:
+      - name: 拉取私有仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/scripts
+          token: ${{ secrets.REPO_TOKEN }}
+          path: .
+
       - name: 启用 WARP 代理（dual）
         uses: fscarmen/warp-on-actions@v1.3
         with:
@@ -158,6 +167,45 @@ jobs:
             | grep -E "^(ip|warp|loc)=" || true
           echo ""
 
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装 Chrome 浏览器
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: ${{ env.CHROME_VERSION }}
+          install-chromedriver: false
+
+      - name: 安装中文字体与 Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk fonts-wqy-zenhei xvfb
+          fc-cache -fv
+
+      - name: 启动 Xvfb
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
+          sleep 2
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install --upgrade pip
+          pip install requests "requests[socks]" selenium undetected-chromedriver
+          if [ -f enshan/requirements.txt ]; then
+            pip install -r enshan/requirements.txt
+          fi
+
+      - name: 创建截图目录
+        run: mkdir -p /tmp/screenshots
+
+      - name: 清理 undetected-chromedriver 缓存
+        run: |
+          rm -rf "$HOME/.local/share/undetected_chromedriver" || true
+
       - name: 执行推广脚本
         id: promo
         continue-on-error: true
@@ -165,7 +213,6 @@ jobs:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           CHROME_VERSION: ${{ env.CHROME_VERSION }}
           DISPLAY: ':99'
-          # 传入 TG 环境变量，供 promo.py 内部调用
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
