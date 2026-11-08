@@ -158,100 +158,18 @@ jobs:
             | grep -E "^(ip|warp|loc)=" || true
           echo ""
 
-      - name: 访问恩山推广链接
+      - name: 执行推广脚本
         id: promo
         continue-on-error: true
-        timeout-minutes: 10      # 必须和 run 平级
-        run: |
-          URL="https://www.right.com.cn/forum/?fromuid=919756"
-          SUCCESS=0
-          START=$(date +%s)
-          MAX_TOTAL=480   # 内部循环最多 8 分钟
-
-          for i in 1 2 3 4 5; do
-            NOW=$(date +%s)
-            if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
-              echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
-              break
-            fi
-
-            echo "===== 第 $i 次尝试（已耗时 $((NOW - START))s）====="
-
-            if [ "$i" -gt 1 ]; then
-              echo "→ 重连 WARP 轮换出口 IP"
-              
-              # ★ 核心修改：加上 & 扔到后台，并且强制 kill，绝对不阻塞主进程
-              (sudo warp-cli --accept-tos disconnect >/dev/null 2>&1 &) 
-              sleep 3
-              (sudo warp-cli --accept-tos connect >/dev/null 2>&1 &) 
-              sleep 8
-              
-              echo "当前出口："
-              curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
-                | grep -E "^(ip|warp|loc)=" || true
-            fi
-
-            HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --connect-timeout 10 --max-time 25 \
-              -H "User-Agent: Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36" \
-              -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
-              -H "Accept-Language: zh-CN,zh;q=0.9" \
-              -H "Cache-Control: no-cache" \
-              -H "Pragma: no-cache" \
-              -H "Upgrade-Insecure-Requests: 1" \
-              --compressed "$URL") || HTTP_CODE="000"
-
-            echo "HTTP: $HTTP_CODE"
-
-            if [ "$HTTP_CODE" = "200" ] && grep -qi "rHEX_2132_promotion" /tmp/promo_headers.txt; then
-              echo "✅ 第 $i 次成功：拿到 rHEX_2132_promotion"
-              grep -i "rHEX_2132_promotion" /tmp/promo_headers.txt
-              SUCCESS=1
-              break
-            fi
-
-            echo "❌ 第 $i 次失败"
-            [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
-
-            case "$HTTP_CODE" in
-              520|521|522|523|524|525)
-                echo "→ 5xx 源站/回源错误，等 20s 再试"
-                sleep 20
-                ;;
-              403|429|200)
-                echo "→ WAF/限流拦截，等 10s"
-                sleep 10
-                ;;
-              *)
-                echo "→ 其它错误码，等 10s"
-                sleep 10
-                ;;
-            esac
-          done
-
-          if [ "$SUCCESS" = "1" ]; then
-            echo "PROMO_OK=1" >> "$GITHUB_ENV"
-          else
-            echo "PROMO_OK=0" >> "$GITHUB_ENV"
-          fi
-
-      - name: 推送推广 TG 通知
-        if: always()
         env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROME_VERSION: ${{ env.CHROME_VERSION }}
+          DISPLAY: ':99'
+          # 传入 TG 环境变量，供 promo.py 内部调用
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          if [ "$PROMO_OK" = "1" ]; then
-            ICON="✅"; TEXT="成功"
-          else
-            ICON="❌"; TEXT="失败或超时"
-          fi
-          TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TG_CHAT_ID}" \
-            -d parse_mode="HTML" \
-            -d text="${ICON} <b>恩山访问推广</b>%0A%0A结果：${TEXT}%0A时间：${TIME_CN}%0A%0AEnshan Daily Sign-in" \
-            --max-time 10 || true
+          python enshan/promo.py
 
   # ============================================================
   # Job 3：清理工作流记录
