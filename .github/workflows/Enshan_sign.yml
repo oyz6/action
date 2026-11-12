@@ -232,7 +232,7 @@ jobs:
             --max-time 10 || true
 
   # ============================================================
-  # Job 3：访问推广 (吾爱破解)
+  # Job 3：访问推广 (吾爱破解 - 移动端指纹伪装)
   # ============================================================
   promo_52pojie:
     name: 访问推广 (吾爱破解)
@@ -271,17 +271,17 @@ jobs:
             exit 0
           fi
 
-          # 完整的浏览器伪装头
-          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36'
+          # 全套 Android 移动端浏览器指纹伪装
+          UA='Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
           HEADERS=(
             -H "User-Agent: $UA"
-            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7'
+            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7'
             -H 'Accept-Language: zh-CN,zh;q=0.9'
             -H 'Cache-Control: no-cache'
             -H 'Pragma: no-cache'
-            -H 'sec-ch-ua: "Not-A.Brand";v="99", "Google Chrome";v="157", "Chromium";v="157"'
-            -H 'sec-ch-ua-mobile: ?0'
-            -H 'sec-ch-ua-platform: "Windows"'
+            -H 'sec-ch-ua: "Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"'
+            -H 'sec-ch-ua-mobile: ?1'
+            -H 'sec-ch-ua-platform: "Android"'
             -H 'sec-fetch-dest: document'
             -H 'sec-fetch-mode: navigate'
             -H 'sec-fetch-user: ?1'
@@ -302,7 +302,6 @@ jobs:
             echo "当前代理: $MASKED_PROXY"
 
             # 步骤1：先访问首页，获取基础 Cookie（模拟真实用户）
-            # 注意：这里如果连接超时，直接跳过当前代理，节省时间
             if ! curl -s -o /dev/null -c /tmp/52pojie_cookies.txt \
               --connect-timeout 6 --max-time 10 \
               -x "$PROXY" \
@@ -354,7 +353,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败 (代理IP被WAF封禁)"; fi
+          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败 (WAF拦截/代理失效)"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
