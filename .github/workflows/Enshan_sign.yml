@@ -271,6 +271,23 @@ jobs:
             exit 0
           fi
 
+          # 完整的浏览器伪装头
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36'
+          HEADERS=(
+            -H "User-Agent: $UA"
+            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7'
+            -H 'Accept-Language: zh-CN,zh;q=0.9'
+            -H 'Cache-Control: no-cache'
+            -H 'Pragma: no-cache'
+            -H 'sec-ch-ua: "Not-A.Brand";v="99", "Google Chrome";v="157", "Chromium";v="157"'
+            -H 'sec-ch-ua-mobile: ?0'
+            -H 'sec-ch-ua-platform: "Windows"'
+            -H 'sec-fetch-dest: document'
+            -H 'sec-fetch-mode: navigate'
+            -H 'sec-fetch-user: ?1'
+            -H 'Upgrade-Insecure-Requests: 1'
+          )
+
           for ((i=0; i<TOTAL_PROXIES && i<20; i++)); do
             NOW=$(date +%s)
             if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
@@ -284,23 +301,26 @@ jobs:
             echo "===== 第 $((i+1)) 次尝试（已耗时 $((NOW - START))s）====="
             echo "当前代理: $MASKED_PROXY"
 
-            # 此处使用了从你抓包文件中提取的完整浏览器指纹 Headers
+            # 步骤1：先访问首页，获取基础 Cookie（模拟真实用户）
+            # 注意：这里如果连接超时，直接跳过当前代理，节省时间
+            if ! curl -s -o /dev/null -c /tmp/52pojie_cookies.txt \
+              --connect-timeout 6 --max-time 10 \
+              -x "$PROXY" \
+              "${HEADERS[@]}" \
+              "https://www.52pojie.cn/" ; then
+              echo "❌ 第 $((i+1)) 次失败：访问首页超时或不可用"
+              sleep 3
+              continue
+            fi
+
+            # 步骤2：带上 Cookie 和 Referer 请求推广链接
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
               -w "%{http_code}" --connect-timeout 8 --max-time 20 \
               -x "$PROXY" \
-              -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36' \
-              -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7' \
-              -H 'Accept-Language: zh-CN,zh;q=0.9' \
-              -H 'Cache-Control: no-cache' \
-              -H 'Pragma: no-cache' \
-              -H 'sec-ch-ua: "Not-A.Brand";v="99", "Google Chrome";v="157", "Chromium";v="157"' \
-              -H 'sec-ch-ua-mobile: ?0' \
-              -H 'sec-ch-ua-platform: "Windows"' \
-              -H 'sec-fetch-dest: document' \
-              -H 'sec-fetch-mode: navigate' \
-              -H 'sec-fetch-site: none' \
-              -H 'sec-fetch-user: ?1' \
-              -H 'Upgrade-Insecure-Requests: 1' \
+              -b /tmp/52pojie_cookies.txt \
+              -H "Referer: https://www.52pojie.cn/" \
+              -H 'sec-fetch-site: same-origin' \
+              "${HEADERS[@]}" \
               --compressed "$URL") || HTTP_CODE="000"
 
             echo "HTTP: $HTTP_CODE"
@@ -313,7 +333,6 @@ jobs:
             fi
 
             echo "❌ 第 $((i+1)) 次失败"
-            # 如果失败了，打印返回头方便排查
             [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
 
             case "$HTTP_CODE" in
@@ -335,7 +354,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败或超时 (WAF拦截)"; fi
+          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败 (代理IP被WAF封禁)"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
