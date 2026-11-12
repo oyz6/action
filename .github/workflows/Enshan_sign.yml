@@ -257,14 +257,17 @@ jobs:
           wget -q https://github.com/lwthiker/curl-impersonate/releases/download/v0.6.1/curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
           tar -zxf curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
           
-          # 将解压出来的所有文件（二进制、依赖库、壳脚本）全部复制到 /usr/local/bin
-          sudo cp -r curl-impersonate-v0.6.1.x86_64-linux-gnu/* /usr/local/bin/
+          # 动态获取解压后的文件夹名称
+          DIR_NAME=$(tar -tzf curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz | head -1 | cut -d'/' -f1)
+          echo "解压目录: $DIR_NAME"
           
-          # 赋予执行权限
-          sudo chmod +x /usr/local/bin/curl*
+          # 将解压出来的目录绝对路径加入环境变量 GITHUB_PATH
+          echo "$(pwd)/$DIR_NAME" >> $GITHUB_PATH
           
-          echo "curl-impersonate 安装完成，版本信息如下："
-          curl_chrome116 -V
+          # 赋予所有 curl 相关文件执行权限
+          chmod +x $(pwd)/$DIR_NAME/curl*
+          
+          echo "curl-impersonate 配置完成"
 
       - name: 访问吾爱破解推广链接
         id: promo
@@ -277,8 +280,10 @@ jobs:
           
           echo "===== 通过 WARP + curl_chrome116 发起请求 ====="
           
+          # 验证是否能在 PATH 中找到 curl_chrome116
+          which curl_chrome116
+          
           # 使用 curl_chrome116 自动带齐底层的 Chrome TLS 指纹
-          # 走 WARP 的本地 SOCKS5 端口
           HTTP_CODE=$(curl_chrome116 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
             -w "%{http_code}" --connect-timeout 10 --max-time 20 \
             -x "socks5://127.0.0.1:40000" \
@@ -313,7 +318,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败 (WAF深层拦截或网络问题)"; fi
+          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
