@@ -232,7 +232,7 @@ jobs:
             --max-time 10 || true
 
   # ============================================================
-  # Job 3：访问推广 (吾爱破解 - 终极 TLS 指纹伪装版)
+  # Job 3：访问推广 (吾爱破解 - WARP + 终极指纹伪装修复版)
   # ============================================================
   promo_52pojie:
     name: 访问推广 (吾爱破解)
@@ -253,13 +253,18 @@ jobs:
 
       - name: 下载并配置 curl-impersonate
         run: |
-          # 下载支持模拟 Chrome 116 的 curl 版本
+          # 下载并解压
           wget -q https://github.com/lwthiker/curl-impersonate/releases/download/v0.6.1/curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
           tar -zxf curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
-          # 将 curl_chrome116 移动到 /usr/local/bin 并赋予执行权限
-          sudo cp curl_chrome116 /usr/local/bin/curl_chrome116
-          sudo chmod +x /usr/local/bin/curl_chrome116
-          echo "curl-impersonate 安装完成"
+          
+          # 将解压出来的所有文件（二进制、依赖库、壳脚本）全部复制到 /usr/local/bin
+          sudo cp -r curl-impersonate-v0.6.1.x86_64-linux-gnu/* /usr/local/bin/
+          
+          # 赋予执行权限
+          sudo chmod +x /usr/local/bin/curl*
+          
+          echo "curl-impersonate 安装完成，版本信息如下："
+          curl_chrome116 -V
 
       - name: 访问吾爱破解推广链接
         id: promo
@@ -270,10 +275,10 @@ jobs:
           COOKIE_PATTERN="htVC_2132_promotion"
           SUCCESS=0
           
-          echo "===== 通过 WARP + curl-impersonate 发起请求 ====="
+          echo "===== 通过 WARP + curl_chrome116 发起请求 ====="
           
-          # 使用 curl_chrome116，它会自动带齐所有 Chrome 的底层指纹
-          # 注意：因为 curl-impersonate 本身已经包含了全套头，我们不再手动添加 Headers
+          # 使用 curl_chrome116 自动带齐底层的 Chrome TLS 指纹
+          # 走 WARP 的本地 SOCKS5 端口
           HTTP_CODE=$(curl_chrome116 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
             -w "%{http_code}" --connect-timeout 10 --max-time 20 \
             -x "socks5://127.0.0.1:40000" \
@@ -308,7 +313,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败"; fi
+          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败 (WAF深层拦截或网络问题)"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
