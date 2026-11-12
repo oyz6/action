@@ -232,7 +232,7 @@ jobs:
             --max-time 10 || true
 
   # ============================================================
-  # Job 3：访问推广 (吾爱破解 - 直接白嫖 CF WARP 节点)
+  # Job 3：访问推广 (吾爱破解 - 终极 TLS 指纹伪装版)
   # ============================================================
   promo_52pojie:
     name: 访问推广 (吾爱破解)
@@ -240,20 +240,26 @@ jobs:
     if: ${{ github.event_name == 'schedule' || inputs.enable_f2 }}
 
     steps:
-      - name: 一键开启 Cloudflare WARP
+      - name: 安装 Cloudflare WARP
         run: |
-          # 下载 WARP 客户端并启动
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           sudo apt-get update && sudo apt-get install -y cloudflare-warp
-          
-          # 注册并设置为 SOCKS5 代理模式
           warp-cli --accept-tos registration new
           warp-cli --accept-tos mode proxy
           warp-cli --accept-tos connect
-          echo "等待 WARP 启动..."
           sleep 5
           warp-cli --accept-tos status
+
+      - name: 下载并配置 curl-impersonate
+        run: |
+          # 下载支持模拟 Chrome 116 的 curl 版本
+          wget -q https://github.com/lwthiker/curl-impersonate/releases/download/v0.6.1/curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
+          tar -zxf curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
+          # 将 curl_chrome116 移动到 /usr/local/bin 并赋予执行权限
+          sudo cp curl_chrome116 /usr/local/bin/curl_chrome116
+          sudo chmod +x /usr/local/bin/curl_chrome116
+          echo "curl-impersonate 安装完成"
 
       - name: 访问吾爱破解推广链接
         id: promo
@@ -264,32 +270,14 @@ jobs:
           COOKIE_PATTERN="htVC_2132_promotion"
           SUCCESS=0
           
-          # 完全复刻你提供的抓包指纹 (Chrome 157 Windows)
-          HEADERS=(
-            -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36'
-            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7'
-            -H 'Accept-Language: zh-CN,zh;q=0.9'
-            -H 'Cache-Control: no-cache'
-            -H 'Pragma: no-cache'
-            -H 'Priority: u=0, i'
-            -H 'sec-ch-ua: "Not-A.Brand";v="99", "Google Chrome";v="157", "Chromium";v="157"'
-            -H 'sec-ch-ua-mobile: ?0'
-            -H 'sec-ch-ua-platform: "Windows"'
-            -H 'sec-fetch-dest: document'
-            -H 'sec-fetch-mode: navigate'
-            -H 'sec-fetch-site: none'
-            -H 'sec-fetch-user: ?1'
-            -H 'Upgrade-Insecure-Requests: 1'
-          )
-
-          echo "===== 通过 WARP 节点发起请求 ====="
+          echo "===== 通过 WARP + curl-impersonate 发起请求 ====="
           
-          # WARP 的本地 SOCKS5 端口是 40000
-          HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+          # 使用 curl_chrome116，它会自动带齐所有 Chrome 的底层指纹
+          # 注意：因为 curl-impersonate 本身已经包含了全套头，我们不再手动添加 Headers
+          HTTP_CODE=$(curl_chrome116 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
             -w "%{http_code}" --connect-timeout 10 --max-time 20 \
             -x "socks5://127.0.0.1:40000" \
-            "${HEADERS[@]}" \
-            --compressed "$URL") || HTTP_CODE="000"
+            "$URL") || HTTP_CODE="000"
 
           echo "HTTP: $HTTP_CODE"
 
@@ -320,7 +308,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败 (WARP节点被墙或网络超时)"; fi
+          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
