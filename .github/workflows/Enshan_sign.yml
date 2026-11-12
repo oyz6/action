@@ -129,7 +129,7 @@ jobs:
           rm -f sing-box sing-box-config.json sing-box.log 2>/dev/null || true
 
   # ============================================================
-  # Job 2：访问推广 (恩山)
+  # Job 2：访问推广 (恩山 - 普通 Curl 抽卡)
   # ============================================================
   promo_enshan:
     name: 访问推广 (恩山)
@@ -165,14 +165,13 @@ jobs:
             exit 0
           fi
           
-          # 使用 jq 解析 JSON，筛选 Http/Socks5，随机抽取 80 个尝试
-          mapfile -t PROXIES < <(jq -r '.data[] | select(.protocol | ascii_downcase | test("http|socks5")) | "\(.protocol | ascii_downcase)://\(.ip):\(.port)"' /tmp/proxies.json | shuf -n 80)
+          # 过滤 Elite 高匿代理，随机抽取 150 个
+          mapfile -t PROXIES < <(jq -r '.data[] | select(.protocol | ascii_downcase | test("http|socks5")) | select(.anonymity == "Elite") | "\(.protocol | ascii_downcase)://\(.ip):\(.port)"' /tmp/proxies.json | shuf -n 150)
           
           TOTAL_PROXIES=${#PROXIES[@]}
-          
-          echo "成功加载并随机抽取 $TOTAL_PROXIES 个代理"
+          echo "成功加载 $TOTAL_PROXIES 个高匿代理"
           if [ "$TOTAL_PROXIES" -eq 0 ]; then
-            echo "❌ 代理池为空或 JSON 解析失败"
+            echo "❌ 代理池为空"
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -180,7 +179,7 @@ jobs:
           for ((i=0; i<TOTAL_PROXIES; i++)); do
             NOW=$(date +%s)
             if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
-              echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
+              echo "⏱ 已耗时 $((NOW - START))s，停止重试"
               break
             fi
 
@@ -205,19 +204,11 @@ jobs:
 
             if [ "$HTTP_CODE" = "200" ] && grep -qi "$COOKIE_PATTERN" /tmp/promo_headers.txt; then
               echo "✅ 第 $((i+1)) 次成功：拿到 $COOKIE_PATTERN"
-              grep -i "$COOKIE_PATTERN" /tmp/promo_headers.txt
               SUCCESS=1
               break
             fi
-
             echo "❌ 第 $((i+1)) 次失败"
-            [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
-
-            case "$HTTP_CODE" in
-              520|521|522|523|524|525) echo "→ 5xx 源站错误，等 5s"; sleep 5 ;;
-              403|429|200) echo "→ WAF/限流拦截，等 2s"; sleep 2 ;;
-              *) echo "→ 连接失败或超时，直接换下一个"; sleep 1 ;;
-            esac
+            sleep 1
           done
 
           if [ "$SUCCESS" = "1" ]; then
@@ -232,7 +223,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败或超时"; fi
+          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
@@ -241,7 +232,7 @@ jobs:
             --max-time 10 || true
 
   # ============================================================
-  # Job 3：访问推广 (吾爱破解)
+  # Job 3：访问推广 (吾爱破解 - curl-impersonate 降维打击)
   # ============================================================
   promo_52pojie:
     name: 访问推广 (吾爱破解)
@@ -249,6 +240,16 @@ jobs:
     if: ${{ github.event_name == 'schedule' || inputs.enable_f2 }}
 
     steps:
+      - name: 下载并配置 curl-impersonate
+        run: |
+          wget -q https://github.com/lwthiker/curl-impersonate/releases/download/v0.6.1/curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
+          tar -zxf curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
+          chmod +x curl_* curl-impersonate-* 2>/dev/null || true
+          sudo cp curl_* curl-impersonate-* /usr/local/bin/
+          sudo cp *.so* /usr/local/lib/ 2>/dev/null || true
+          sudo ldconfig
+          echo "curl-impersonate 配置完成"
+
       - name: 访问吾爱破解推广链接
         id: promo
         continue-on-error: true
@@ -277,14 +278,13 @@ jobs:
             exit 0
           fi
           
-          # 使用 jq 解析 JSON，筛选 Http/Socks5，随机抽取 80 个尝试
-          mapfile -t PROXIES < <(jq -r '.data[] | select(.protocol | ascii_downcase | test("http|socks5")) | "\(.protocol | ascii_downcase)://\(.ip):\(.port)"' /tmp/proxies.json | shuf -n 80)
+          # 过滤 Elite 高匿代理，随机抽取 200 个（吾爱比较难，抽多点）
+          mapfile -t PROXIES < <(jq -r '.data[] | select(.protocol | ascii_downcase | test("http|socks5")) | select(.anonymity == "Elite") | "\(.protocol | ascii_downcase)://\(.ip):\(.port)"' /tmp/proxies.json | shuf -n 200)
           
           TOTAL_PROXIES=${#PROXIES[@]}
-          
-          echo "成功加载并随机抽取 $TOTAL_PROXIES 个代理"
+          echo "成功加载 $TOTAL_PROXIES 个高匿代理"
           if [ "$TOTAL_PROXIES" -eq 0 ]; then
-            echo "❌ 代理池为空或 JSON 解析失败"
+            echo "❌ 代理池为空"
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -292,7 +292,7 @@ jobs:
           for ((i=0; i<TOTAL_PROXIES; i++)); do
             NOW=$(date +%s)
             if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
-              echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
+              echo "⏱ 已耗时 $((NOW - START))s，停止重试"
               break
             fi
 
@@ -302,34 +302,27 @@ jobs:
             echo "===== 第 $((i+1)) 次尝试（已耗时 $((NOW - START))s）====="
             echo "当前代理: $MASKED_PROXY"
 
-            HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
-              -w "%{http_code}" --connect-timeout 5 --max-time 10 \
+            # 使用 curl_chrome116 替代普通 curl，带齐底层指纹
+            HTTP_CODE=$(curl_chrome116 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
+              -w "%{http_code}" --connect-timeout 4 --max-time 8 \
               -x "$PROXY" \
-              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
-              -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
-              -H "Accept-Language: zh-CN,zh;q=0.9" \
-              -H "Cache-Control: no-cache" \
-              -H "Pragma: no-cache" \
-              -H "Upgrade-Insecure-Requests: 1" \
               --compressed "$URL") || HTTP_CODE="000"
 
             echo "HTTP: $HTTP_CODE"
 
             if [ "$HTTP_CODE" = "200" ] && grep -qi "$COOKIE_PATTERN" /tmp/promo_headers.txt; then
               echo "✅ 第 $((i+1)) 次成功：拿到 $COOKIE_PATTERN"
-              grep -i "$COOKIE_PATTERN" /tmp/promo_headers.txt
               SUCCESS=1
               break
             fi
-
-            echo "❌ 第 $((i+1)) 次失败"
-            [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
-
-            case "$HTTP_CODE" in
-              520|521|522|523|524|525) echo "→ 5xx 源站错误，等 5s"; sleep 5 ;;
-              403|429|200) echo "→ WAF/限流拦截，等 2s"; sleep 2 ;;
-              *) echo "→ 连接失败或超时，直接换下一个"; sleep 1 ;;
-            esac
+            
+            # 如果被 WAF 拦截，直接提示
+            if grep -qi "wzws-ray" /tmp/promo_headers.txt 2>/dev/null; then
+                echo "🛑 第 $((i+1)) 次被 WAF 拦截"
+            else
+                echo "❌ 第 $((i+1)) 次失败"
+            fi
+            sleep 1
           done
 
           if [ "$SUCCESS" = "1" ]; then
@@ -344,7 +337,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败或超时"; fi
+          if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败 (200个代理全被WAF拦截)"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
