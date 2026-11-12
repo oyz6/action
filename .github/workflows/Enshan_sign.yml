@@ -232,7 +232,7 @@ jobs:
             --max-time 10 || true
 
   # ============================================================
-  # Job 3：访问推广 (吾爱破解 - WARP + 终极指纹伪装修复版)
+  # Job 3：访问推广 (吾爱破解 - WARP + 终极指纹伪装最终版)
   # ============================================================
   promo_52pojie:
     name: 访问推广 (吾爱破解)
@@ -257,17 +257,16 @@ jobs:
           wget -q https://github.com/lwthiker/curl-impersonate/releases/download/v0.6.1/curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
           tar -zxf curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz
           
-          # 动态获取解压后的文件夹名称
-          DIR_NAME=$(tar -tzf curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz | head -1 | cut -d'/' -f1)
-          echo "解压目录: $DIR_NAME"
+          # 赋予权限并将所有二进制文件和库文件复制到系统目录
+          chmod +x curl_* curl-impersonate-* 2>/dev/null || true
+          sudo cp curl_* curl-impersonate-* /usr/local/bin/
+          sudo cp *.so* /usr/local/lib/ 2>/dev/null || true
           
-          # 将解压出来的目录绝对路径加入环境变量 GITHUB_PATH
-          echo "$(pwd)/$DIR_NAME" >> $GITHUB_PATH
+          # 刷新动态链接库缓存，确保能找到核心依赖
+          sudo ldconfig
           
-          # 赋予所有 curl 相关文件执行权限
-          chmod +x $(pwd)/$DIR_NAME/curl*
-          
-          echo "curl-impersonate 配置完成"
+          echo "配置完成，版本信息："
+          curl_chrome116 -V
 
       - name: 访问吾爱破解推广链接
         id: promo
@@ -280,10 +279,8 @@ jobs:
           
           echo "===== 通过 WARP + curl_chrome116 发起请求 ====="
           
-          # 验证是否能在 PATH 中找到 curl_chrome116
-          which curl_chrome116
-          
           # 使用 curl_chrome116 自动带齐底层的 Chrome TLS 指纹
+          # 走 WARP 的本地 SOCKS5 端口
           HTTP_CODE=$(curl_chrome116 -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
             -w "%{http_code}" --connect-timeout 10 --max-time 20 \
             -x "socks5://127.0.0.1:40000" \
