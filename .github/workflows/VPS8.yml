@@ -112,11 +112,8 @@ jobs:
 
       - name: 克隆 hcaptcha-challenger
         run: |
-          git clone --depth 1 https://github.com/aoi675145/hcaptcha.git hcaptcha-challenger
+          git clone --depth 1 https://github.com/oyz6/hcaptcha.git hcaptcha-challenger
           cd hcaptcha-challenger
-          git fetch --depth 1 origin d4da375916cde6bb85128eb8fc9859e1f06cacbc \
-            && git checkout --detach FETCH_HEAD \
-            || echo "[WARN] 固定 commit 获取失败，使用克隆时的 main HEAD"
           git rev-parse HEAD
 
       - name: 设置代理
