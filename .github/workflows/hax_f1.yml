@@ -11,10 +11,10 @@ permissions:
 
 env:
   NODE_LINK:          ${{ secrets.F1_NODE_LINK || secrets.NODE_LINK }}
-  TELEGRAM_PHONE:     ${{ secrets.F1_TELEGRAM_PHONE || secrets.TELEGRAM_PHONE }}
-  TG_STRING_SESSION:  ${{ secrets.F1_TG_STRING_SESSION || secrets.TG_STRING_SESSION }}
-  TG_BOT_TOKEN:       ${{ secrets.TG_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
-  TG_CHAT_ID:         ${{ secrets.TG_CHAT_ID || secrets.MY_CHAT_ID }}
+  TELEGRAM_PHONE:     ${{ secrets.F1_TELEGRAM_PHONE }}
+  TG_STRING_SESSION:  ${{ secrets.F1_TG_STRING_SESSION }}
+  TG_BOT_TOKEN:       ${{ secrets.TG_BOT_TOKEN }}
+  TG_CHAT_ID:         ${{ secrets.TG_CHAT_ID }}
   TELEGRAM_API_ID:    ${{ secrets.TELEGRAM_API_ID || '2040' }}
   TELEGRAM_API_HASH:  ${{ secrets.TELEGRAM_API_HASH || 'b18441a1ff607e10a989891a5462e627' }}
   NOPECHA_KEY:        ${{ secrets.NOPECHA_KEY }}
