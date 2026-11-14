@@ -2,7 +2,7 @@ name: Hax F3 自动续期
 
 on:
   schedule:
-    - cron: '15 4 16 11 *'   # 脚本根据到期时间自动更新
+    - cron: '45 4 21 11 *'   # 脚本根据到期时间自动更新
   workflow_dispatch:
 
 permissions:
