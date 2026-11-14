@@ -126,14 +126,14 @@ jobs:
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Hax/hax_renw.py 2>&1 | tee output.log
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-      - name: 上传截图 (成功或失败均保留)
-        if: always() && steps.check_acc.outputs.has_acc == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: hax-screenshots-f3
-          path: screenshots/
-          if-no-files-found: ignore
-          retention-days: 7
+#      - name: 上传截图 (成功或失败均保留)
+#        if: always() && steps.check_acc.outputs.has_acc == 'true'
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: hax-screenshots-f3
+#          path: screenshots/
+#          if-no-files-found: ignore
+#          retention-days: 7
 
       - name: 更新 Cron
         if: always() && steps.check_acc.outputs.has_acc == 'true'
