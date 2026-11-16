@@ -17,7 +17,6 @@ env:
   TG_CHAT_ID:         ${{ secrets.TG_CHAT_ID }}
   TELEGRAM_API_ID:    ${{ secrets.TELEGRAM_API_ID || '2040' }}
   TELEGRAM_API_HASH:  ${{ secrets.TELEGRAM_API_HASH || 'b18441a1ff607e10a989891a5462e627' }}
-  NOPECHA_KEY:        ${{ secrets.NOPECHA_KEY }}
   OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
   OPENAI_BASE_URL:    ${{ secrets.OPENAI_BASE_URL }}
   OPENAI_MODEL:       ${{ secrets.OPENAI_MODEL }}
@@ -79,19 +78,6 @@ jobs:
           pip install -r scripts/Hax/requirements.txt
           sbase install chromedriver
 
-      - name: 安装 NopeCHA Chromium 扩展
-        if: steps.check_acc.outputs.has_acc == 'true'
-        run: |
-          EXT_DIR="scripts/extensions/nopecha"
-          UNPACKED_DIR="$EXT_DIR/unpacked"
-          mkdir -p "$EXT_DIR" "$UNPACKED_DIR"
-          curl -fsSL --retry 3 --retry-delay 2 \
-            -o "$EXT_DIR/chromium.zip" \
-            "https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip"
-          unzip -q -o "$EXT_DIR/chromium.zip" -d "$UNPACKED_DIR"
-          [ -f "$UNPACKED_DIR/manifest.json" ] || { echo "❌ 解压失败"; ls -laR "$UNPACKED_DIR"; exit 1; }
-          echo "✅ NopeCHA 扩展已就绪"
-
       - name: 设置代理
         if: steps.check_acc.outputs.has_acc == 'true'
         env:
@@ -124,7 +110,6 @@ jobs:
           TELEGRAM_API_HASH: ${{ env.TELEGRAM_API_HASH }}
           TG_BOT_TOKEN: ${{ env.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ env.TG_CHAT_ID }}
-          NOPECHA_KEY: ${{ env.NOPECHA_KEY }}
           IS_PROXY: ${{ env.IS_PROXY }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
@@ -142,6 +127,7 @@ jobs:
 #          path: screenshots/
 #          if-no-files-found: ignore
 #          retention-days: 7
+
 
       - name: 更新 Cron
         if: always() && steps.check_acc.outputs.has_acc == 'true'
