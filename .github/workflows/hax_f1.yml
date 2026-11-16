@@ -18,6 +18,9 @@ env:
   TELEGRAM_API_ID:    ${{ secrets.TELEGRAM_API_ID || '2040' }}
   TELEGRAM_API_HASH:  ${{ secrets.TELEGRAM_API_HASH || 'b18441a1ff607e10a989891a5462e627' }}
   NOPECHA_KEY:        ${{ secrets.NOPECHA_KEY }}
+  OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_BASE_URL:    ${{ secrets.OPENAI_BASE_URL }}
+  OPENAI_MODEL:       ${{ secrets.OPENAI_MODEL }}
 
 jobs:
   renew-f1:
@@ -124,6 +127,9 @@ jobs:
           NOPECHA_KEY: ${{ env.NOPECHA_KEY }}
           IS_PROXY: ${{ env.IS_PROXY }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
         run: |
           set -o pipefail
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Hax/hax_renw.py 2>&1 | tee output.log
