@@ -10,7 +10,7 @@ permissions:
   actions: write
 
 env:
-  NODE_LINK:          ${{ secrets.F1_NODE_LINK || secrets.NODE_LINK }}
+  NODE_LINK:          ${{ secrets.H1_NODE_LINK || secrets.NODE_LINK }}
   TELEGRAM_PHONE:     ${{ secrets.F1_TELEGRAM_PHONE }}
   TG_STRING_SESSION:  ${{ secrets.F1_TG_STRING_SESSION }}
   TG_BOT_TOKEN:       ${{ secrets.TG_BOT_TOKEN }}
@@ -21,7 +21,7 @@ env:
 
 jobs:
   renew-f1:
-    name: F1 续期
+    name: Hax F1 续期
     runs-on: ubuntu-22.04
     timeout-minutes: 60
 
@@ -45,7 +45,7 @@ jobs:
         run: |
           if [ -z "${{ env.TELEGRAM_PHONE }}" ] || [ -z "${{ env.TG_STRING_SESSION }}" ]; then
             echo "has_acc=false" >> $GITHUB_OUTPUT
-            echo "⚠️ [跳过] F3 账号未配置 (F3_TELEGRAM_PHONE 或 F3_TG_STRING_SESSION 缺失)"
+            echo "⚠️ [跳过] Hax F1 账号未配置 (F1_TELEGRAM_PHONE 或 F1_TG_STRING_SESSION 缺失)"
           else
             echo "has_acc=true" >> $GITHUB_OUTPUT
           fi
@@ -58,31 +58,36 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'scripts/Hax/requirements.txt'
 
-      - name: 安装基础系统与 Python 依赖
+      - name: 安装基础依赖
         if: steps.check_acc.outputs.has_acc == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb
-          pip install --upgrade pip
+          sudo apt-get install -y --no-install-recommends \
+            xvfb \
+            curl \
+            libglib2.0-0 \
+            libnss3 \
+            libgconf-2-4 \
+            libfontconfig1 \
+            python3-tk \
+            python3-dev \
+            jq
+          python -m pip install --upgrade pip wheel setuptools
           pip install -r scripts/Hax/requirements.txt
+          sbase install chromedriver
 
-      - name: 安装 SeleniumBase 浏览器与驱动
-        if: steps.check_acc.outputs.has_acc == 'true'
-        run: |
-          seleniumbase install chromedriver
-          seleniumbase install chrome
-
-      - name: 解压 NopeCHA 扩展
+      - name: 安装 NopeCHA Chromium 扩展
         if: steps.check_acc.outputs.has_acc == 'true'
         run: |
           EXT_DIR="scripts/extensions/nopecha"
-          ZIP_FILE="$EXT_DIR/nopecha.zip"
           UNPACKED_DIR="$EXT_DIR/unpacked"
-          if [ -f "$ZIP_FILE" ]; then
-            mkdir -p "$UNPACKED_DIR"
-            unzip -q -o "$ZIP_FILE" -d "$UNPACKED_DIR"
-            echo "✅ NopeCHA 扩展解压成功"
-          fi
+          mkdir -p "$EXT_DIR" "$UNPACKED_DIR"
+          curl -fsSL --retry 3 --retry-delay 2 \
+            -o "$EXT_DIR/chromium.zip" \
+            "https://github.com/NopeCHALLC/nopecha-extension/releases/download/0.6.1/chromium.zip"
+          unzip -q -o "$EXT_DIR/chromium.zip" -d "$UNPACKED_DIR"
+          [ -f "$UNPACKED_DIR/manifest.json" ] || { echo "❌ 解压失败"; ls -laR "$UNPACKED_DIR"; exit 1; }
+          echo "✅ NopeCHA 扩展已就绪"
 
       - name: 设置代理
         if: steps.check_acc.outputs.has_acc == 'true'
@@ -105,13 +110,11 @@ jobs:
             cat proxy.env >> $GITHUB_ENV
           fi
 
-      - name: 执行续期
+      - name: 启动虚拟显示屏并运行续期脚本
         if: steps.check_acc.outputs.has_acc == 'true'
-        id: renew
         env:
           ACCOUNT_NAME: "F1"
           ACCOUNT_INDEX: "1"
-          NODE_LINK: ${{ env.NODE_LINK }}
           TELEGRAM_PHONE: ${{ env.TELEGRAM_PHONE }}
           TG_STRING_SESSION: ${{ env.TG_STRING_SESSION }}
           TELEGRAM_API_ID: ${{ env.TELEGRAM_API_ID }}
@@ -124,7 +127,6 @@ jobs:
         run: |
           set -o pipefail
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Hax/hax_renw.py 2>&1 | tee output.log
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
       - name: 上传截图 (成功或失败均保留)
         if: always() && steps.check_acc.outputs.has_acc == 'true'
@@ -138,9 +140,8 @@ jobs:
       - name: 更新 Cron
         if: always() && steps.check_acc.outputs.has_acc == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
           WORKFLOW_FILE: ".github/workflows/hax_f1.yml"
-          ACCOUNT_TAG: "F1"
+          ACCOUNT_TAG: "Hax-F1"
         run: |
           if [ ! -f output.log ]; then
             echo "未找到 output.log，跳过 cron 更新"
