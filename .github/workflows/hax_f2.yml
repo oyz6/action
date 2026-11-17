@@ -10,7 +10,7 @@ permissions:
   actions: write
 
 env:
-  NODE_LINK:          ${{ secrets.F2_NODE_LINK || secrets.NODE_LINK }}
+  NODE_LINK:          ${{ secrets.H2_NODE_LINK || secrets.NODE_LINK }}
   TELEGRAM_PHONE:     ${{ secrets.F2_TELEGRAM_PHONE }}
   TG_STRING_SESSION:  ${{ secrets.F2_TG_STRING_SESSION }}
   TG_BOT_TOKEN:       ${{ secrets.TG_BOT_TOKEN }}
@@ -23,7 +23,7 @@ env:
 
 jobs:
   renew-f2:
-    name: F2 续期
+    name: Hax F2 续期
     runs-on: ubuntu-22.04
     timeout-minutes: 60
 
@@ -38,7 +38,7 @@ jobs:
       - name: 检出主仓库（用于更新 cron）
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.REPO_TOKEN }}
+          token: ${{ secrets.REPO_TOKEN || secrets.GITHUB_TOKEN }}
           path: main-repo
           persist-credentials: true
 
@@ -47,7 +47,7 @@ jobs:
         run: |
           if [ -z "${{ env.TELEGRAM_PHONE }}" ] || [ -z "${{ env.TG_STRING_SESSION }}" ]; then
             echo "has_acc=false" >> $GITHUB_OUTPUT
-            echo "⚠️ [跳过] F3 账号未配置 (F3_TELEGRAM_PHONE 或 F3_TG_STRING_SESSION 缺失)"
+            echo "⚠️ [跳过] Hax F2 账号未配置 (F2_TELEGRAM_PHONE 或 F2_TG_STRING_SESSION 缺失)"
           else
             echo "has_acc=true" >> $GITHUB_OUTPUT
           fi
