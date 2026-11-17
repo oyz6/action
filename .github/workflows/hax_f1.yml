@@ -139,29 +139,50 @@ jobs:
             exit 0
           fi
           NEXT_RUN_UTC=$(grep -oP 'NEXT_RUN_UTC=\K.*' output.log | tail -1)
-          if [ -n "$NEXT_RUN_UTC" ]; then
-            echo "下次运行时间 (UTC): $NEXT_RUN_UTC"
-            CRON=$(date -u -d "$NEXT_RUN_UTC" +"%-M %-H %-d %-m *")
-            echo "新 cron: $CRON"
+          if [ -z "$NEXT_RUN_UTC" ]; then
+            echo "未检测到 NEXT_RUN_UTC，跳过 cron 更新"
+            exit 0
+          fi
+          echo "下次运行时间 (UTC): $NEXT_RUN_UTC"
+          CRON=$(date -u -d "$NEXT_RUN_UTC" +"%-M %-H %-d %-m *")
+          echo "新 cron: $CRON"
 
             cd main-repo
-            if [ ! -f "$WORKFLOW_FILE" ]; then
-              echo "❌ 未找到工作流文件 $WORKFLOW_FILE，跳过 cron 更新"
+          if [ ! -f "$WORKFLOW_FILE" ]; then
+            echo "❌ 未找到工作流文件 $WORKFLOW_FILE，跳过 cron 更新"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          COMMIT_MSG="[$ACCOUNT_TAG] 下次执行时间：$(date -u -d "$NEXT_RUN_UTC" '+%Y年%m月%d日 %H:%M UTC')"
+
+          for i in 1 2 3; do
+            echo "--- 第 $i 次尝试更新 cron ---"
+            git fetch origin main
+            git reset --hard origin/main
+
+            sed -i "0,/cron: '.*'/s//cron: '$CRON'/" "$WORKFLOW_FILE"
+            git add "$WORKFLOW_FILE"
+
+            if git diff --cached --quiet; then
+              echo "cron 无变化，跳过提交"
               exit 0
             fi
 
-            sed -i "0,/cron: '.*'/s//cron: '$CRON'/" "$WORKFLOW_FILE"
+            git commit -m "$COMMIT_MSG"
+            if git push origin main; then
+              echo "✅ cron 更新已推送"
+              exit 0
+            fi
 
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add "$WORKFLOW_FILE"
-            COMMIT_MSG="[$ACCOUNT_TAG] 下次执行时间：$(date -u -d "$NEXT_RUN_UTC" '+%Y年%m月%d日 %H:%M UTC')"
-            git commit -m "$COMMIT_MSG" || echo "没有变更"
-            git pull --rebase origin main
-            git push origin main
-          else
-            echo "未检测到 NEXT_RUN_UTC，跳过 cron 更新"
-          fi
+            echo "⚠️ 推送失败，5 秒后重试..."
+            sleep 5
+          done
+
+          echo "❌ cron 更新推送失败（已重试 3 次）"
+          exit 1
 
       - name: 清理旧的工作流运行记录
         if: always()
