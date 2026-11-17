@@ -17,9 +17,9 @@ env:
   TG_CHAT_ID:         ${{ secrets.TG_CHAT_ID }}
   TELEGRAM_API_ID:    ${{ secrets.TELEGRAM_API_ID || '2040' }}
   TELEGRAM_API_HASH:  ${{ secrets.TELEGRAM_API_HASH || 'b18441a1ff607e10a989891a5462e627' }}
-  OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
-  OPENAI_BASE_URL:    ${{ secrets.OPENAI_BASE_URL }}
-  OPENAI_MODEL:       ${{ secrets.OPENAI_MODEL }}
+  OPENAI_API_KEY:     ${{ secrets.HAX_OPENAI_API_KEY }}
+  OPENAI_BASE_URL:    ${{ secrets.HAX_OPENAI_BASE_URL }}
+  OPENAI_MODEL:       ${{ secrets.HAX_OPENAI_MODEL }}
 
 jobs:
   renew-f1:
