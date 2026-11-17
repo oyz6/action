@@ -10,18 +10,20 @@ permissions:
   actions: write
 
 env:
-  NODE_LINK:          ${{ secrets.F3_NODE_LINK }}
+  NODE_LINK:          ${{ secrets.H3_NODE_LINK || secrets.NODE_LINK }}
   TELEGRAM_PHONE:     ${{ secrets.F3_TELEGRAM_PHONE }}
   TG_STRING_SESSION:  ${{ secrets.F3_TG_STRING_SESSION }}
   TG_BOT_TOKEN:       ${{ secrets.TG_BOT_TOKEN }}
   TG_CHAT_ID:         ${{ secrets.TG_CHAT_ID }}
   TELEGRAM_API_ID:    ${{ secrets.TELEGRAM_API_ID || '2040' }}
   TELEGRAM_API_HASH:  ${{ secrets.TELEGRAM_API_HASH || 'b18441a1ff607e10a989891a5462e627' }}
-  NOPECHA_KEY:        ${{ secrets.NOPECHA_KEY }}
+  OPENAI_API_KEY:     ${{ secrets.HAX_OPENAI_API_KEY }}
+  OPENAI_BASE_URL:    ${{ secrets.HAX_OPENAI_BASE_URL }}
+  OPENAI_MODEL:       ${{ secrets.HAX_OPENAI_MODEL }}
 
 jobs:
   renew-f3:
-    name: F3 续期
+    name: Hax F3 续期
     runs-on: ubuntu-22.04
     timeout-minutes: 60
 
@@ -36,7 +38,7 @@ jobs:
       - name: 检出主仓库（用于更新 cron）
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.REPO_TOKEN }}
+          token: ${{ secrets.REPO_TOKEN || secrets.GITHUB_TOKEN }}
           path: main-repo
           persist-credentials: true
 
@@ -45,7 +47,7 @@ jobs:
         run: |
           if [ -z "${{ env.TELEGRAM_PHONE }}" ] || [ -z "${{ env.TG_STRING_SESSION }}" ]; then
             echo "has_acc=false" >> $GITHUB_OUTPUT
-            echo "⚠️ [跳过] F3 账号未配置 (F3_TELEGRAM_PHONE 或 F3_TG_STRING_SESSION 缺失)"
+            echo "⚠️ [跳过] Hax F3 账号未配置 (F3_TELEGRAM_PHONE 或 F3_TG_STRING_SESSION 缺失)"
           else
             echo "has_acc=true" >> $GITHUB_OUTPUT
           fi
@@ -58,31 +60,23 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'scripts/Hax/requirements.txt'
 
-      - name: 安装基础系统与 Python 依赖
+      - name: 安装基础依赖
         if: steps.check_acc.outputs.has_acc == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb
-          pip install --upgrade pip
+          sudo apt-get install -y --no-install-recommends \
+            xvfb \
+            curl \
+            libglib2.0-0 \
+            libnss3 \
+            libgconf-2-4 \
+            libfontconfig1 \
+            python3-tk \
+            python3-dev \
+            jq
+          python -m pip install --upgrade pip wheel setuptools
           pip install -r scripts/Hax/requirements.txt
-
-      - name: 安装 SeleniumBase 浏览器与驱动
-        if: steps.check_acc.outputs.has_acc == 'true'
-        run: |
-          seleniumbase install chromedriver
-          seleniumbase install chrome
-
-      - name: 解压 NopeCHA 扩展
-        if: steps.check_acc.outputs.has_acc == 'true'
-        run: |
-          EXT_DIR="scripts/extensions/nopecha"
-          ZIP_FILE="$EXT_DIR/nopecha.zip"
-          UNPACKED_DIR="$EXT_DIR/unpacked"
-          if [ -f "$ZIP_FILE" ]; then
-            mkdir -p "$UNPACKED_DIR"
-            unzip -q -o "$ZIP_FILE" -d "$UNPACKED_DIR"
-            echo "✅ NopeCHA 扩展解压成功"
-          fi
+          sbase install chromedriver
 
       - name: 设置代理
         if: steps.check_acc.outputs.has_acc == 'true'
@@ -105,26 +99,25 @@ jobs:
             cat proxy.env >> $GITHUB_ENV
           fi
 
-      - name: 执行续期
+      - name: 启动虚拟显示屏并运行续期脚本
         if: steps.check_acc.outputs.has_acc == 'true'
-        id: renew
         env:
           ACCOUNT_NAME: "F3"
           ACCOUNT_INDEX: "3"
-          NODE_LINK: ${{ env.NODE_LINK }}
           TELEGRAM_PHONE: ${{ env.TELEGRAM_PHONE }}
           TG_STRING_SESSION: ${{ env.TG_STRING_SESSION }}
           TELEGRAM_API_ID: ${{ env.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ env.TELEGRAM_API_HASH }}
           TG_BOT_TOKEN: ${{ env.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ env.TG_CHAT_ID }}
-          NOPECHA_KEY: ${{ env.NOPECHA_KEY }}
           IS_PROXY: ${{ env.IS_PROXY }}
           PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
         run: |
           set -o pipefail
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Hax/hax_renw.py 2>&1 | tee output.log
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
 #      - name: 上传截图 (成功或失败均保留)
 #        if: always() && steps.check_acc.outputs.has_acc == 'true'
@@ -138,9 +131,8 @@ jobs:
       - name: 更新 Cron
         if: always() && steps.check_acc.outputs.has_acc == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
           WORKFLOW_FILE: ".github/workflows/hax_f3.yml"
-          ACCOUNT_TAG: "F3"
+          ACCOUNT_TAG: "Hax-F3"
         run: |
           if [ ! -f output.log ]; then
             echo "未找到 output.log，跳过 cron 更新"
@@ -157,6 +149,7 @@ jobs:
               echo "❌ 未找到工作流文件 $WORKFLOW_FILE，跳过 cron 更新"
               exit 0
             fi
+
             sed -i "0,/cron: '.*'/s//cron: '$CRON'/" "$WORKFLOW_FILE"
 
             git config user.name "github-actions[bot]"
