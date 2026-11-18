@@ -156,11 +156,11 @@ jobs:
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
             exit 0
           fi
-          
+
           curl -sL --max-time 20 "$PROXY_POOL_URL" -o /tmp/alive.txt || true
-          mapfile -t PROXIES < <(tr ' ' '\n' < /tmp/alive.txt | grep -E '^(http|socks5)://' | grep -v '^$')
+          mapfile -t PROXIES < <(tr -d '\r' < /tmp/alive.txt | tr ' ' '\n' | grep -E '^(http|socks5)://' | grep -v '^$')
           TOTAL_PROXIES=${#PROXIES[@]}
-          
+
           echo "成功加载 $TOTAL_PROXIES 个代理"
           if [ "$TOTAL_PROXIES" -eq 0 ]; then
             echo "❌ 代理池为空，直接退出"
@@ -168,7 +168,7 @@ jobs:
             exit 0
           fi
 
-          for ((i=0; i<TOTAL_PROXIES && i<20; i++)); do
+          for ((i=0; i<TOTAL_PROXIES && i<30; i++)); do
             NOW=$(date +%s)
             if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
               echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
@@ -247,8 +247,7 @@ jobs:
         env:
           PROXY_POOL_URL: ${{ secrets.PROXY_POOL_URL }}
         run: |
-          URL="https://www.52pojie.cn/?fromuid=2548567"
-          COOKIE_PATTERN="htVC_2132_promotion"
+          BASE_URL="https://www.52pojie.cn/forum.php?fromuid=2548567"
           SUCCESS=0
           START=$(date +%s)
           MAX_TOTAL=480
@@ -259,11 +258,11 @@ jobs:
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
             exit 0
           fi
-          
+
           curl -sL --max-time 20 "$PROXY_POOL_URL" -o /tmp/alive.txt || true
-          mapfile -t PROXIES < <(tr ' ' '\n' < /tmp/alive.txt | grep -E '^(http|socks5)://' | grep -v '^$')
+          mapfile -t PROXIES < <(tr -d '\r' < /tmp/alive.txt | tr ' ' '\n' | grep -E '^(http|socks5)://' | grep -v '^$')
           TOTAL_PROXIES=${#PROXIES[@]}
-          
+
           echo "成功加载 $TOTAL_PROXIES 个代理"
           if [ "$TOTAL_PROXIES" -eq 0 ]; then
             echo "❌ 代理池为空，直接退出"
@@ -271,7 +270,7 @@ jobs:
             exit 0
           fi
 
-          for ((i=0; i<TOTAL_PROXIES && i<20; i++)); do
+          for ((i=0; i<TOTAL_PROXIES && i<30; i++)); do
             NOW=$(date +%s)
             if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
               echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
@@ -280,10 +279,12 @@ jobs:
 
             PROXY="${PROXIES[$i]}"
             MASKED_PROXY=$(echo "$PROXY" | sed -E 's/([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/\1.*.*.\4/g')
+            REQ_URL="${BASE_URL}&_t=${NOW}${RANDOM}"
 
             echo "===== 第 $((i+1)) 次尝试（已耗时 $((NOW - START))s）====="
             echo "当前代理: $MASKED_PROXY"
 
+            rm -f /tmp/promo_body.html /tmp/promo_headers.txt
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
               -w "%{http_code}" --connect-timeout 8 --max-time 20 \
               -x "$PROXY" \
@@ -293,23 +294,50 @@ jobs:
               -H "Cache-Control: no-cache" \
               -H "Pragma: no-cache" \
               -H "Upgrade-Insecure-Requests: 1" \
-              --compressed "$URL") || HTTP_CODE="000"
+              --compressed "$REQ_URL") || HTTP_CODE="000"
 
             echo "HTTP: $HTTP_CODE"
 
-            if [ "$HTTP_CODE" = "200" ] && grep -qi "$COOKIE_PATTERN" /tmp/promo_headers.txt; then
-              echo "✅ 第 $((i+1)) 次成功：拿到 $COOKIE_PATTERN"
-              grep -i "$COOKIE_PATTERN" /tmp/promo_headers.txt
+            BODY_SIZE=0
+            [ -f /tmp/promo_body.html ] && BODY_SIZE=$(wc -c < /tmp/promo_body.html)
+
+            LASTACT_TS=""
+            ABS_DIFF=999999
+            if [ -f /tmp/promo_headers.txt ]; then
+              LASTACT_TS=$(grep -i 'htVC_2132_lastact=' /tmp/promo_headers.txt | sed -E 's/.*htVC_2132_lastact=([0-9]+).*/\1/' | head -n 1 || true)
+              if [[ "$LASTACT_TS" =~ ^[0-9]+$ ]]; then
+                AFTER_TS=$(date +%s)
+                DIFF=$((AFTER_TS - LASTACT_TS))
+                ABS_DIFF=${DIFF#-}
+              fi
+            fi
+
+            if [ "$HTTP_CODE" = "200" ] \
+              && [ -f /tmp/promo_headers.txt ] \
+              && grep -qi "htVC_2132_saltkey=" /tmp/promo_headers.txt \
+              && [ "$ABS_DIFF" -le 180 ] \
+              && [ "$BODY_SIZE" -ge 5000 ] \
+              && grep -qi "52pojie" /tmp/promo_body.html; then
+              echo "✅ 第 $((i+1)) 次成功：已穿透缓存回源访问吾爱破解（lastact=${LASTACT_TS}，偏差=${ABS_DIFF}s，页面=${BODY_SIZE}B）"
+              grep -iE 'set-cookie:.*htVC_2132_(saltkey|lastact|promotion)' /tmp/promo_headers.txt || true
               SUCCESS=1
               break
             fi
 
-            echo "❌ 第 $((i+1)) 次失败"
+            echo "❌ 第 $((i+1)) 次失败（body=${BODY_SIZE}B, lastact=${LASTACT_TS:-none}, diff=${ABS_DIFF}s）"
             [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
 
             case "$HTTP_CODE" in
               520|521|522|523|524|525) echo "→ 5xx 源站错误，等 10s"; sleep 10 ;;
-              403|429|200) echo "→ WAF/限流拦截，等 3s"; sleep 3 ;;
+              403|429) echo "→ WAF/限流拦截，等 3s"; sleep 3 ;;
+              200)
+                if [ -n "$LASTACT_TS" ] && [ "$ABS_DIFF" -gt 180 ]; then
+                  echo "→ 命中 CDN 静态缓存（lastact 偏差 ${ABS_DIFF}s），未回源，等 3s"
+                else
+                  echo "→ 疑似 WAF 挑战或代理劫持，等 3s"
+                fi
+                sleep 3
+                ;;
               *) echo "→ 连接失败或超时，等 3s"; sleep 3 ;;
             esac
           done
