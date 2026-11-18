@@ -16,6 +16,11 @@ on:
         required: false
         default: true
         type: boolean
+      debug:
+        description: '开启调试日志'
+        required: false
+        default: false
+        type: boolean
 
 env:
   PYTHON_VERSION: '3.11'
@@ -66,7 +71,7 @@ jobs:
           Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
           sleep 2
           echo "DISPLAY=:99" >> "$GITHUB_ENV"
-          echo "启动 Xvfb 完成"
+          echo "✅ 启动 Xvfb 完成"
 
       - name: 安装 Python 依赖
         run: |
@@ -110,8 +115,12 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           DISPLAY: ':99'
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
         run: |
-          python enshan/main.py
+          if [ "$DEBUG" == "1" ]; then
+            echo "🔍 已开启 DEBUG 日志模式"
+          fi
+          python -u enshan/main.py
 
 #      - name: 上传截图
 #        if: always()
@@ -143,6 +152,7 @@ jobs:
         timeout-minutes: 10
         env:
           PROXY_POOL_URL: ${{ secrets.PROXY_POOL_URL }}
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
         run: |
           URL="https://www.right.com.cn/forum/?fromuid=919756"
           COOKIE_PATTERN="rHEX_2132_promotion"
@@ -150,9 +160,10 @@ jobs:
           START=$(date +%s)
           MAX_TOTAL=480
 
-          echo "===== 下载代理池 ====="
+          log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] $*"; }
+
           if [ -z "$PROXY_POOL_URL" ]; then
-            echo "❌ 未配置 PROXY_POOL_URL 变量"
+            log "❌ 未配置 PROXY_POOL_URL 变量"
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -161,26 +172,26 @@ jobs:
           mapfile -t PROXIES < <(tr -d '\r' < /tmp/alive.txt | tr ' ' '\n' | grep -E '^(http|socks5)://' | grep -v '^$')
           TOTAL_PROXIES=${#PROXIES[@]}
 
-          echo "成功加载 $TOTAL_PROXIES 个代理"
+          log "🌐 代理池加载完成，共 $TOTAL_PROXIES 个代理"
           if [ "$TOTAL_PROXIES" -eq 0 ]; then
-            echo "❌ 代理池为空，直接退出"
+            log "❌ 代理池为空，直接退出"
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
             exit 0
           fi
 
+          TRIED=0
           for ((i=0; i<TOTAL_PROXIES && i<30; i++)); do
             NOW=$(date +%s)
             if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
-              echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
+              log "⏱️ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
               break
             fi
 
+            TRIED=$((i + 1))
             PROXY="${PROXIES[$i]}"
             MASKED_PROXY=$(echo "$PROXY" | sed -E 's/([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/\1.*.*.\4/g')
 
-            echo "===== 第 $((i+1)) 次尝试（已耗时 $((NOW - START))s）====="
-            echo "当前代理: $MASKED_PROXY"
-
+            rm -f /tmp/promo_body.html /tmp/promo_headers.txt
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
               -w "%{http_code}" --connect-timeout 8 --max-time 20 \
               -x "$PROXY" \
@@ -192,29 +203,38 @@ jobs:
               -H "Upgrade-Insecure-Requests: 1" \
               --compressed "$URL") || HTTP_CODE="000"
 
-            echo "HTTP: $HTTP_CODE"
-
             if [ "$HTTP_CODE" = "200" ] && grep -qi "$COOKIE_PATTERN" /tmp/promo_headers.txt; then
-              echo "✅ 第 $((i+1)) 次成功：拿到 $COOKIE_PATTERN"
-              grep -i "$COOKIE_PATTERN" /tmp/promo_headers.txt
+              log "✅ 第 ${TRIED} 次成功（代理: ${MASKED_PROXY}）拿到 ${COOKIE_PATTERN}"
               SUCCESS=1
               break
             fi
 
-            echo "❌ 第 $((i+1)) 次失败"
-            [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
-
             case "$HTTP_CODE" in
-              520|521|522|523|524|525) echo "→ 5xx 源站错误，等 10s"; sleep 10 ;;
-              403|429|200) echo "→ WAF/限流拦截，等 3s"; sleep 3 ;;
-              *) echo "→ 连接失败或超时，等 3s"; sleep 3 ;;
+              520|521|522|523|524|525)
+                log "⚠️ 第 ${TRIED} 次失败（代理: ${MASKED_PROXY} | HTTP ${HTTP_CODE} 源站异常），等 10s"
+                [ "$DEBUG" = "1" ] && [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
+                sleep 10
+                ;;
+              403|429|200)
+                log "⚠️ 第 ${TRIED} 次失败（代理: ${MASKED_PROXY} | HTTP ${HTTP_CODE} WAF/未拿到 Cookie），等 3s"
+                [ "$DEBUG" = "1" ] && [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
+                sleep 3
+                ;;
+              *)
+                log "⚠️ 第 ${TRIED} 次失败（代理: ${MASKED_PROXY} | HTTP ${HTTP_CODE} 连接超时），等 3s"
+                sleep 3
+                ;;
             esac
           done
 
+          ELAPSED=$(($(date +%s) - START))
+          echo ""
           if [ "$SUCCESS" = "1" ]; then
             echo "PROMO_OK=1" >> "$GITHUB_ENV"
+            echo "📊 恩山访问推广: ✅ 成功（第 ${TRIED} 次命中，耗时 ${ELAPSED}s）"
           else
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
+            echo "📊 恩山访问推广: ❌ 失败（共尝试 ${TRIED} 次，耗时 ${ELAPSED}s）"
           fi
 
       - name: 推送推广 TG 通知
@@ -225,11 +245,15 @@ jobs:
         run: |
           if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败或超时"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+          if curl -sf -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
             -d parse_mode="HTML" \
             -d text="${ICON} <b>恩山访问推广</b>%0A%0A结果：${TEXT}%0A时间：${TIME_CN}" \
-            --max-time 10 || true
+            --max-time 10 >/dev/null; then
+            echo "✅ TG通知发送成功"
+          else
+            echo "⚠️ TG通知发送失败"
+          fi
 
   # ============================================================
   # Job 3：访问推广 (吾爱破解)
@@ -246,15 +270,17 @@ jobs:
         timeout-minutes: 10
         env:
           PROXY_POOL_URL: ${{ secrets.PROXY_POOL_URL }}
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
         run: |
           BASE_URL="https://www.52pojie.cn/forum.php?fromuid=2548567"
           SUCCESS=0
           START=$(date +%s)
           MAX_TOTAL=480
 
-          echo "===== 下载代理池 ====="
+          log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] $*"; }
+
           if [ -z "$PROXY_POOL_URL" ]; then
-            echo "❌ 未配置 PROXY_POOL_URL 变量"
+            log "❌ 未配置 PROXY_POOL_URL 变量"
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -263,26 +289,25 @@ jobs:
           mapfile -t PROXIES < <(tr -d '\r' < /tmp/alive.txt | tr ' ' '\n' | grep -E '^(http|socks5)://' | grep -v '^$')
           TOTAL_PROXIES=${#PROXIES[@]}
 
-          echo "成功加载 $TOTAL_PROXIES 个代理"
+          log "🌐 代理池加载完成，共 $TOTAL_PROXIES 个代理"
           if [ "$TOTAL_PROXIES" -eq 0 ]; then
-            echo "❌ 代理池为空，直接退出"
+            log "❌ 代理池为空，直接退出"
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
             exit 0
           fi
 
+          TRIED=0
           for ((i=0; i<TOTAL_PROXIES && i<30; i++)); do
             NOW=$(date +%s)
             if [ $((NOW - START)) -gt $MAX_TOTAL ]; then
-              echo "⏱ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
+              log "⏱️ 已耗时 $((NOW - START))s，超过 ${MAX_TOTAL}s，停止重试"
               break
             fi
 
+            TRIED=$((i + 1))
             PROXY="${PROXIES[$i]}"
             MASKED_PROXY=$(echo "$PROXY" | sed -E 's/([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/\1.*.*.\4/g')
             REQ_URL="${BASE_URL}&_t=${NOW}${RANDOM}"
-
-            echo "===== 第 $((i+1)) 次尝试（已耗时 $((NOW - START))s）====="
-            echo "当前代理: $MASKED_PROXY"
 
             rm -f /tmp/promo_body.html /tmp/promo_headers.txt
             HTTP_CODE=$(curl -s -o /tmp/promo_body.html -D /tmp/promo_headers.txt \
@@ -295,8 +320,6 @@ jobs:
               -H "Pragma: no-cache" \
               -H "Upgrade-Insecure-Requests: 1" \
               --compressed "$REQ_URL") || HTTP_CODE="000"
-
-            echo "HTTP: $HTTP_CODE"
 
             BODY_SIZE=0
             [ -f /tmp/promo_body.html ] && BODY_SIZE=$(wc -c < /tmp/promo_body.html)
@@ -318,34 +341,46 @@ jobs:
               && [ "$ABS_DIFF" -le 180 ] \
               && [ "$BODY_SIZE" -ge 5000 ] \
               && grep -qi "52pojie" /tmp/promo_body.html; then
-              echo "✅ 第 $((i+1)) 次成功：已穿透缓存回源访问吾爱破解（lastact=${LASTACT_TS}，偏差=${ABS_DIFF}s，页面=${BODY_SIZE}B）"
-              grep -iE 'set-cookie:.*htVC_2132_(saltkey|lastact|promotion)' /tmp/promo_headers.txt || true
+              log "✅ 第 ${TRIED} 次成功（代理: ${MASKED_PROXY}）已回源访问（偏差 ${ABS_DIFF}s，页面 ${BODY_SIZE}B）"
               SUCCESS=1
               break
             fi
 
-            echo "❌ 第 $((i+1)) 次失败（body=${BODY_SIZE}B, lastact=${LASTACT_TS:-none}, diff=${ABS_DIFF}s）"
-            [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
-
             case "$HTTP_CODE" in
-              520|521|522|523|524|525) echo "→ 5xx 源站错误，等 10s"; sleep 10 ;;
-              403|429) echo "→ WAF/限流拦截，等 3s"; sleep 3 ;;
-              200)
-                if [ -n "$LASTACT_TS" ] && [ "$ABS_DIFF" -gt 180 ]; then
-                  echo "→ 命中 CDN 静态缓存（lastact 偏差 ${ABS_DIFF}s），未回源，等 3s"
-                else
-                  echo "→ 疑似 WAF 挑战或代理劫持，等 3s"
-                fi
+              520|521|522|523|524|525)
+                log "⚠️ 第 ${TRIED} 次失败（代理: ${MASKED_PROXY} | HTTP ${HTTP_CODE} 源站异常），等 10s"
+                [ "$DEBUG" = "1" ] && [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
+                sleep 10
+                ;;
+              403|429)
+                log "⚠️ 第 ${TRIED} 次失败（代理: ${MASKED_PROXY} | HTTP ${HTTP_CODE} WAF/限流），等 3s"
+                [ "$DEBUG" = "1" ] && [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
                 sleep 3
                 ;;
-              *) echo "→ 连接失败或超时，等 3s"; sleep 3 ;;
+              200)
+                if [ -n "$LASTACT_TS" ] && [ "$ABS_DIFF" -gt 180 ]; then
+                  log "⚠️ 第 ${TRIED} 次失败（代理: ${MASKED_PROXY} | 命中 CDN 缓存，偏差 ${ABS_DIFF}s），等 3s"
+                else
+                  log "⚠️ 第 ${TRIED} 次失败（代理: ${MASKED_PROXY} | 疑似 WAF/代理劫持，body=${BODY_SIZE}B），等 3s"
+                fi
+                [ "$DEBUG" = "1" ] && [ -f /tmp/promo_headers.txt ] && cat /tmp/promo_headers.txt
+                sleep 3
+                ;;
+              *)
+                log "⚠️ 第 ${TRIED} 次失败（代理: ${MASKED_PROXY} | HTTP ${HTTP_CODE} 连接超时），等 3s"
+                sleep 3
+                ;;
             esac
           done
 
+          ELAPSED=$(($(date +%s) - START))
+          echo ""
           if [ "$SUCCESS" = "1" ]; then
             echo "PROMO_OK=1" >> "$GITHUB_ENV"
+            echo "📊 吾爱破解访问推广: ✅ 成功（第 ${TRIED} 次命中，耗时 ${ELAPSED}s）"
           else
             echo "PROMO_OK=0" >> "$GITHUB_ENV"
+            echo "📊 吾爱破解访问推广: ❌ 失败（共尝试 ${TRIED} 次，耗时 ${ELAPSED}s）"
           fi
 
       - name: 推送推广 TG 通知
@@ -356,11 +391,15 @@ jobs:
         run: |
           if [ "$PROMO_OK" = "1" ]; then ICON="✅"; TEXT="成功"; else ICON="❌"; TEXT="失败或超时"; fi
           TIME_CN=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+          if curl -sf -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
             -d parse_mode="HTML" \
             -d text="${ICON} <b>吾爱破解访问推广</b>%0A%0A结果：${TEXT}%0A时间：${TIME_CN}" \
-            --max-time 10 || true
+            --max-time 10 >/dev/null; then
+            echo "✅ TG通知发送成功"
+          else
+            echo "⚠️ TG通知发送失败"
+          fi
 
   # ============================================================
   # Job 4：清理工作流记录
