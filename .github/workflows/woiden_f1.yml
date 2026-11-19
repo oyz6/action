@@ -189,7 +189,7 @@ jobs:
           CRON=$(date -u -d "$NEXT_RUN_UTC" +"%-M %-H %-d %-m *")
           echo "新 cron: $CRON"
 
-            cd main-repo
+          cd main-repo
           if [ ! -f "$WORKFLOW_FILE" ]; then
             echo "❌ 未找到工作流文件 $WORKFLOW_FILE，跳过 cron 更新"
             exit 0
