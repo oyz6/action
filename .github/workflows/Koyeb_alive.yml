@@ -88,39 +88,38 @@ jobs:
 
             if [ $EXIT_CODE -eq 0 ]; then
               # 增强 JSON 解析容错，出错时默认为 "Unknown"
-              ORG_NAME=$(echo "$OUTPUT" | jq -r '[.. | objects | select(has("plan")) | .name] | first // "Unknown"' 2>/dev/null || echo "Unknown")
-              ORG_STATUS_RAW=$(echo "$OUTPUT" | jq -r '[.. | objects | select(has("plan")) | .status] | first // "Unknown"' 2>/dev/null || echo "Unknown")
-              EMAIL=$(echo "$OUTPUT" | jq -r '[.. | objects | select(has("email")) | .email] | first // "Unknown"' 2>/dev/null || echo "Unknown")
+  ORG_NAME=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("plan")) | .name] | first // "Unknown"')
+  ORG_STATUS_RAW=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("plan")) | .status] | first // "Unknown"')
+  EMAIL=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("email")) | .email] | first // "Unknown"')
 
-              case "$ORG_STATUS_RAW" in
-                ACTIVE)    STATUS_CN="活跃" ;;
-                SUSPENDED) STATUS_CN="已暂停" ;;
-                DELETED)   STATUS_CN="已删除" ;;
-                *)         STATUS_CN="$ORG_STATUS_RAW" ;;
-              esac
+  case "$ORG_STATUS_RAW" in
+    ACTIVE)    STATUS_CN="活跃" ;;
+    SUSPENDED) STATUS_CN="已暂停" ;;
+    DELETED)   STATUS_CN="已删除" ;;
+    *)         STATUS_CN="$ORG_STATUS_RAW" ;;
+  esac
 
-              LOCAL="${EMAIL%%@*}"
-              DOMAIN="${EMAIL##*@}"
-              MASKED="${LOCAL:0:3}***@${DOMAIN:0:2}***"
-              echo "✅ #${ACCOUNT_INDEX} | ${MASKED} | ${ORG_NAME} | ${STATUS_CN}"
+  LOCAL="${EMAIL%%@*}"
+  DOMAIN="${EMAIL##*@}"
+  MASKED="${LOCAL:0:3}***@${DOMAIN:0:2}***"
+  echo "✅ #${ACCOUNT_INDEX} | ${MASKED} | ${ORG_NAME} | ${STATUS_CN}"
 
-              MSG=$(printf '%s\n\n%s\n%s\n%s\n%s\n\n%s' \
-                "✅ 保活成功" \
-                "账号：${EMAIL}" \
-                "组织：${ORG_NAME}" \
-                "状态：${STATUS_CN}" \
-                "时间：${DATE}" \
-                "$SIGN")
-            else
-              echo "❌ #${ACCOUNT_INDEX} | 失败"
-
-              MSG=$(printf '%s\n\n%s\n%s\n%s\n\n%s' \
-                "❌ 保活失败" \
-                "账号：#${ACCOUNT_INDEX}" \
-                "原因：Token 无效或已过期" \
-                "时间：${DATE}" \
-                "$SIGN")
-            fi
+  MSG=$(printf '%s\n\n%s\n%s\n%s\n%s\n\n%s' \
+    "✅ 保活成功" \
+    "账号：${EMAIL}" \
+    "组织：${ORG_NAME}" \
+    "状态：${STATUS_CN}" \
+    "时间：${DATE}" \
+    "$SIGN")
+else
+  echo "❌ #${ACCOUNT_INDEX} | 失败（CLI 返回码：$EXIT_CODE，或输出非 JSON）"
+  MSG=$(printf '%s\n\n%s\n%s\n%s\n\n%s' \
+    "❌ 保活失败" \
+    "账号：#${ACCOUNT_INDEX}" \
+    "原因：Token 无效、已过期，或 CLI 输出异常" \
+    "时间：${DATE}" \
+    "$SIGN")
+fi
 
             if [ "$TG_ENABLE" == "true" ]; then
               curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
