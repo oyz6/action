@@ -67,6 +67,8 @@ jobs:
           # 4. 逐个保活并发送通知
           # ==========================================
           ACCOUNT_INDEX=0
+          SUCCESS_COUNT=0
+          FAIL_COUNT=0
 
           while IFS= read -r token || [ -n "$token" ]; do
             if [ -z "$token" ]; then continue; fi
@@ -86,40 +88,69 @@ jobs:
             EXIT_CODE=$?
             set -e
 
-            if [ $EXIT_CODE -eq 0 ]; then
-              # 增强 JSON 解析容错，出错时默认为 "Unknown"
-  ORG_NAME=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("plan")) | .name] | first // "Unknown"')
-  ORG_STATUS_RAW=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("plan")) | .status] | first // "Unknown"')
-  EMAIL=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("email")) | .email] | first // "Unknown"')
+            # 判断：CLI 成功 + 输出为有效非空 JSON
+            JSON_VALID="false"
+            if [ $EXIT_CODE -eq 0 ] && [ -n "$OUTPUT" ] && echo "$OUTPUT" | jq empty >/dev/null 2>&1; then
+              JSON_VALID="true"
+            fi
 
-  case "$ORG_STATUS_RAW" in
-    ACTIVE)    STATUS_CN="活跃" ;;
-    SUSPENDED) STATUS_CN="已暂停" ;;
-    DELETED)   STATUS_CN="已删除" ;;
-    *)         STATUS_CN="$ORG_STATUS_RAW" ;;
-  esac
+            if [ "$JSON_VALID" == "true" ]; then
+              # 使用 ..? 安全迭代，避免 null 错误
+              ORG_NAME=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("plan")) | .name] | first // "Unknown"' 2>/dev/null || echo "Unknown")
+              ORG_STATUS_RAW=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("plan")) | .status] | first // "Unknown"' 2>/dev/null || echo "Unknown")
+              EMAIL=$(echo "$OUTPUT" | jq -r '[..? | objects | select(has("email")) | .email] | first // "Unknown"' 2>/dev/null || echo "Unknown")
 
-  LOCAL="${EMAIL%%@*}"
-  DOMAIN="${EMAIL##*@}"
-  MASKED="${LOCAL:0:3}***@${DOMAIN:0:2}***"
-  echo "✅ #${ACCOUNT_INDEX} | ${MASKED} | ${ORG_NAME} | ${STATUS_CN}"
+              # 补充：如果 plan 字段取不到，再尝试直接取数组元素的 name/status
+              if [ "$ORG_NAME" == "Unknown" ]; then
+                ORG_NAME=$(echo "$OUTPUT" | jq -r 'if type == "array" then (.[0].name // "Unknown") elif type == "object" then (.name // "Unknown") else "Unknown" end' 2>/dev/null || echo "Unknown")
+              fi
+              if [ "$ORG_STATUS_RAW" == "Unknown" ]; then
+                ORG_STATUS_RAW=$(echo "$OUTPUT" | jq -r 'if type == "array" then (.[0].status // "Unknown") elif type == "object" then (.status // "Unknown") else "Unknown" end' 2>/dev/null || echo "Unknown")
+              fi
+              if [ "$EMAIL" == "Unknown" ]; then
+                EMAIL=$(echo "$OUTPUT" | jq -r 'if type == "array" then (.[0].email // "Unknown") elif type == "object" then (.email // "Unknown") else "Unknown" end' 2>/dev/null || echo "Unknown")
+              fi
 
-  MSG=$(printf '%s\n\n%s\n%s\n%s\n%s\n\n%s' \
-    "✅ 保活成功" \
-    "账号：${EMAIL}" \
-    "组织：${ORG_NAME}" \
-    "状态：${STATUS_CN}" \
-    "时间：${DATE}" \
-    "$SIGN")
-else
-  echo "❌ #${ACCOUNT_INDEX} | 失败（CLI 返回码：$EXIT_CODE，或输出非 JSON）"
-  MSG=$(printf '%s\n\n%s\n%s\n%s\n\n%s' \
-    "❌ 保活失败" \
-    "账号：#${ACCOUNT_INDEX}" \
-    "原因：Token 无效、已过期，或 CLI 输出异常" \
-    "时间：${DATE}" \
-    "$SIGN")
-fi
+              case "$ORG_STATUS_RAW" in
+                ACTIVE)    STATUS_CN="活跃" ;;
+                SUSPENDED) STATUS_CN="已暂停" ;;
+                DELETED)   STATUS_CN="已删除" ;;
+                *)         STATUS_CN="$ORG_STATUS_RAW" ;;
+              esac
+
+              LOCAL="${EMAIL%%@*}"
+              DOMAIN="${EMAIL##*@}"
+              if [ "$EMAIL" != "Unknown" ] && [ "$LOCAL" != "$EMAIL" ]; then
+                MASKED="${LOCAL:0:3}***@${DOMAIN:0:2}***"
+              else
+                MASKED="Unknown"
+              fi
+
+              echo "✅ #${ACCOUNT_INDEX} | ${MASKED} | ${ORG_NAME} | ${STATUS_CN}"
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+
+              MSG=$(printf '%s\n\n%s\n%s\n%s\n%s\n\n%s' \
+                "✅ 保活成功" \
+                "账号：${EMAIL}" \
+                "组织：${ORG_NAME}" \
+                "状态：${STATUS_CN}" \
+                "时间：${DATE}" \
+                "$SIGN")
+            else
+              # 打印原始输出片段以便排障
+              echo "❌ #${ACCOUNT_INDEX} | 失败（CLI 返回码：$EXIT_CODE，或输出非有效 JSON）"
+              echo "----- 原始输出（前 10 行）-----"
+              echo "$OUTPUT" | head -n 10
+              echo "-----------------------------"
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+
+              MSG=$(printf '%s\n\n%s\n%s\n%s\n\n%s' \
+                "❌ 保活失败" \
+                "账号：#${ACCOUNT_INDEX}" \
+                "原因：Token 无效/已过期，或 CLI 输出异常" \
+                "时间：${DATE}" \
+                "$SIGN")
+            fi
 
             if [ "$TG_ENABLE" == "true" ]; then
               curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
@@ -131,6 +162,19 @@ fi
             unset KOYEB_TOKEN
             sleep 2
           done <<< "$TOKENS_LIST"
+
+          # ==========================================
+          # 5. 汇总
+          # ==========================================
+          echo "========================================"
+          echo "📊 保活汇总：总计 ${ACCOUNT_INDEX} 个账号，成功 ${SUCCESS_COUNT}，失败 ${FAIL_COUNT}"
+          echo "========================================"
+
+          # 全部失败时以非零退出码结束，便于 GitHub 标记为失败
+          if [ "$ACCOUNT_INDEX" -gt 0 ] && [ "$SUCCESS_COUNT" -eq 0 ]; then
+            echo "❌ 所有账号均保活失败"
+            exit 1
+          fi
 
       - name: 清理工作流记录
         if: always()
