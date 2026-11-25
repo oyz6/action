@@ -32,7 +32,7 @@ env:
   F1_STAGGER:   "0"                                # 错峰等待秒数
 
   # ---------- F2 账号 ----------
-  F2_NODE_LINK: ${{ secrets.PROXY_NODE }}          # 煤山 一年美区 - 双ISP - US
+  F2_NODE_LINK: ${{ secrets.PROXY_NODE }}          美国 加利福尼亚州 洛杉矶 — 搬瓦工
   F2_VPS8:      ${{ secrets.VPS82 }}
   F2_STAGGER:   "20"
 
