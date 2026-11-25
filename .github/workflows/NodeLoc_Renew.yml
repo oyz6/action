@@ -40,7 +40,7 @@ env:
   # ---------- F2 账号 ----------
   F2_NODE_LINK: ${{ secrets.PROXY_NODE_US_ISP }}      # 美国 洛杉矶 ISP
   F2_NL_ACCOUNT: ${{ secrets.F2_NL_ACCOUNT }}
-  F2_STAGGER:    "20"
+  F2_STAGGER:    "30"
 
   # ---------- 公共配置 ----------
   TG_BOT_TOKEN:   ${{ secrets.TG_BOT_TOKEN }}
