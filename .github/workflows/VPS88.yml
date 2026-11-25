@@ -48,9 +48,9 @@ env:
   TG_CHAT_ID:      ${{ secrets.TG_CHAT_ID }}
 
   # OpenAI 视觉模型（hCaptcha AI 破解用）
-  OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}
-  OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-  OPENAI_MODEL:    ${{ secrets.OPENAI_MODEL }}
+  OPENAI_API_KEY:  ${{ secrets.HAX_OPENAI_API_KEY }}
+  OPENAI_BASE_URL: ${{ secrets.HAX_OPENAI_BASE_URL }}
+  OPENAI_MODEL:    ${{ secrets.HAX_OPENAI_MODEL }}     # agnes-3.0-flash
 
   # NopeCHA Key（多个换行分隔）
   NOPECHA_KEY:     ${{ secrets.NOPECHA_KEY }}
