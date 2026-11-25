@@ -46,9 +46,9 @@ env:
   TG_BOT_TOKEN:   ${{ secrets.TG_BOT_TOKEN }}
   TG_CHAT_ID:     ${{ secrets.TG_CHAT_ID }}
   REPO_TOKEN:     ${{ secrets.REPO_TOKEN }}
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-  OPENAI_MODEL:   ${{ secrets.OPENAI_MODEL }}
+  OPENAI_API_KEY: ${{ secrets.HAX_OPENAI_API_KEY }}
+  OPENAI_BASE_URL: ${{ secrets.HAX_OPENAI_BASE_URL }}
+  OPENAI_MODEL:   ${{ secrets.HAX_OPENAI_MODEL }}
 
 jobs:
   # ========================= F1 =========================
