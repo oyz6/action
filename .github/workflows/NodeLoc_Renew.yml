@@ -31,19 +31,22 @@ env:
   CHROME_VERSION: '131'
 
   # ---------- F1 账号 ----------
-  F1_NODE_LINK:  ${{ secrets.PROXY_NODE }}            # 大金 双ISP - US
-  F1_NL_ACCOUNT: ${{ secrets.NL_ACCOUNT }}            # 格式: 用户名----密码（多账号换行）
-  F1_STAGGER:    "0"                                   # 错峰等待秒数
+  F1_NODE_LINK:  ${{ secrets.PROXY_NODE }}
+  F1_NL_ACCOUNT: ${{ secrets.F1_NL_ACCOUNT }}        # 格式: 用户名----密码 (支持带Cookie)
+  F1_STAGGER:    "0"                                                       # 错峰等待秒数
 
   # ---------- F2 账号 ----------
-#  F2_NODE_LINK:  ${{ secrets.PROXY_NODE_360t7 }}      # 360t7 美国一年 - 双ISP - US
   F2_NODE_LINK: ${{ secrets.PROXY_NODE_US_ISP }}      # 美国 洛杉矶 ISP
-  F2_NL_ACCOUNT: ${{ secrets.NL_ACCOUNT_TEST }}
+  F2_NL_ACCOUNT: ${{ secrets.F2_NL_ACCOUNT }}
   F2_STAGGER:    "20"
 
   # ---------- 公共配置 ----------
-  TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-  TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
+  TG_BOT_TOKEN:   ${{ secrets.TG_BOT_TOKEN }}
+  TG_CHAT_ID:     ${{ secrets.TG_CHAT_ID }}
+  REPO_TOKEN:     ${{ secrets.REPO_TOKEN }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+  OPENAI_MODEL:   ${{ secrets.OPENAI_MODEL }}
 
 jobs:
   # ========================= F1 =========================
@@ -77,19 +80,29 @@ jobs:
           chrome-version: ${{ env.CHROME_VERSION }}
           install-chromedriver: false
 
-      - name: 安装中文字体
+      - name: 安装系统依赖与字体
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-wqy-zenhei
-          fc-cache -fv
+          sudo apt-get install -y -qq --no-install-recommends xvfb fonts-noto-cjk fonts-wqy-zenhei git jq curl
+          fc-cache -f > /dev/null 2>&1
 
       - name: 安装 Python 依赖
         run: |
-          pip install --upgrade pip
-          pip install -r nodeloc/requirements.txt
+          pip install -q --upgrade pip
+          pip install -q -r nodeloc/requirements.txt
+          playwright install chromium > /dev/null 2>&1
+
+      - name: 安装 ChromeDriver
+        run: seleniumbase install chromedriver
+
+      - name: 克隆人机验证组件
+        run: |
+          if [ ! -d "hcaptcha-challenger" ]; then
+            git clone --depth 1 -q https://github.com/oyz6/hcaptcha.git hcaptcha-challenger
+          fi
 
       - name: 创建截图目录
-        run: mkdir -p /tmp/screenshots
+        run: mkdir -p /tmp/screenshots screenshots
 
       - name: 设置代理
         env:
@@ -105,26 +118,29 @@ jobs:
             exit 1
           fi
 
-      - name: 执行签到
+      - name: 执行签到与日常互动
         env:
-          NODE_LINK:   ${{ env.F1_NODE_LINK }}          # ← 同样通过 env
-          NL_ACCOUNT:  ${{ env.F1_NL_ACCOUNT }}         # ← 多行 secret 也安全
-          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
-          DEBUG: ${{ github.event.inputs.debug == 'true' && '1' || '0' }}
+          NODE_LINK:          ${{ env.F1_NODE_LINK }}
+          NL_ACCOUNT:         ${{ env.F1_NL_ACCOUNT }}
+          TARGET_SECRET_NAME: 'F1_NL_ACCOUNT'
+          REPO_TOKEN:         ${{ env.REPO_TOKEN }}
+          OPENAI_API_KEY:     ${{ env.OPENAI_API_KEY }}
+          OPENAI_BASE_URL:    ${{ env.OPENAI_BASE_URL }}
+          OPENAI_MODEL:       ${{ env.OPENAI_MODEL }}
+          TG_BOT_TOKEN:       ${{ env.TG_BOT_TOKEN }}
+          TG_CHAT_ID:         ${{ env.TG_CHAT_ID }}
+          CHROME_PATH:        ${{ steps.setup-chrome.outputs.chrome-path }}
+          DEBUG:              ${{ github.event.inputs.debug == 'true' && '1' || '0' }}
         run: |
-          if [ "$DEBUG" == "1" ]; then
-            echo "🔍 调试模式开启（F1）"
-            python -c "import undetected_chromedriver as uc; print('undetected_chromedriver 版本:', uc.__version__)"
-          fi
-          python nodeloc/main-test.py
+          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u nodeloc/main.py
 
-#      - name: 上传调试截图
-#        if: always()
+#      - name: 上传异常排查截图
+#        if: failure() && github.event.inputs.debug == 'true'
 #        uses: actions/upload-artifact@v4
 #        with:
 #          name: screenshots-f1-${{ github.run_number }}
-#          path: /tmp/screenshots/
-#          retention-days: 3
+#          path: /tmp/screenshots/*.png
+#          retention-days: 1
 #          if-no-files-found: ignore
 
   # ========================= F2 =========================
@@ -158,19 +174,29 @@ jobs:
           chrome-version: ${{ env.CHROME_VERSION }}
           install-chromedriver: false
 
-      - name: 安装中文字体
+      - name: 安装系统依赖与字体
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-wqy-zenhei
-          fc-cache -fv
+          sudo apt-get install -y -qq --no-install-recommends xvfb fonts-noto-cjk fonts-wqy-zenhei git jq curl
+          fc-cache -f > /dev/null 2>&1
 
       - name: 安装 Python 依赖
         run: |
-          pip install --upgrade pip
-          pip install -r nodeloc/requirements.txt
+          pip install -q --upgrade pip
+          pip install -q -r nodeloc/requirements.txt
+          playwright install chromium > /dev/null 2>&1
+
+      - name: 安装 ChromeDriver
+        run: seleniumbase install chromedriver
+
+      - name: 克隆人机验证组件
+        run: |
+          if [ ! -d "hcaptcha-challenger" ]; then
+            git clone --depth 1 -q https://github.com/oyz6/hcaptcha.git hcaptcha-challenger
+          fi
 
       - name: 创建截图目录
-        run: mkdir -p /tmp/screenshots
+        run: mkdir -p /tmp/screenshots screenshots
 
       - name: 设置代理
         env:
@@ -186,26 +212,29 @@ jobs:
             exit 1
           fi
 
-      - name: 执行签到
+      - name: 执行签到与日常互动
         env:
-          NODE_LINK:   ${{ env.F2_NODE_LINK }}
-          NL_ACCOUNT:  ${{ env.F2_NL_ACCOUNT }}
-          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
-          DEBUG: ${{ github.event.inputs.debug == 'true' && '1' || '0' }}
+          NODE_LINK:          ${{ env.F2_NODE_LINK }}
+          NL_ACCOUNT:         ${{ env.F2_NL_ACCOUNT }}
+          TARGET_SECRET_NAME: 'F2_NL_ACCOUNT'
+          REPO_TOKEN:         ${{ env.REPO_TOKEN }}
+          OPENAI_API_KEY:     ${{ env.OPENAI_API_KEY }}
+          OPENAI_BASE_URL:    ${{ env.OPENAI_BASE_URL }}
+          OPENAI_MODEL:       ${{ env.OPENAI_MODEL }}
+          TG_BOT_TOKEN:       ${{ env.TG_BOT_TOKEN }}
+          TG_CHAT_ID:         ${{ env.TG_CHAT_ID }}
+          CHROME_PATH:        ${{ steps.setup-chrome.outputs.chrome-path }}
+          DEBUG:              ${{ github.event.inputs.debug == 'true' && '1' || '0' }}
         run: |
-          if [ "$DEBUG" == "1" ]; then
-            echo "🔍 调试模式开启（F2）"
-            python -c "import undetected_chromedriver as uc; print('undetected_chromedriver 版本:', uc.__version__)"
-          fi
-          python nodeloc/main-test.py
+          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u nodeloc/main.py
 
-#      - name: 上传调试截图
-#        if: always()
+#      - name: 上传异常排查截图
+#        if: failure() && github.event.inputs.debug == 'true'
 #        uses: actions/upload-artifact@v4
 #        with:
 #          name: screenshots-f2-${{ github.run_number }}
-#          path: /tmp/screenshots/
-#          retention-days: 3
+#          path: /tmp/screenshots/*.png
+#          retention-days: 1
 #          if-no-files-found: ignore
 
   # ========================= 统一清理 =========================
