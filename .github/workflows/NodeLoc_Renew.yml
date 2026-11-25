@@ -29,6 +29,8 @@ permissions:
 env:
   PYTHON_VERSION: '3.11'
   CHROME_VERSION: '131'
+  LANG: 'en_US.UTF-8'
+  LC_ALL: 'en_US.UTF-8'
 
   # ---------- F1 账号 ----------
   F1_NODE_LINK:  ${{ secrets.PROXY_NODE }}
@@ -106,7 +108,7 @@ jobs:
 
       - name: 设置代理
         env:
-          NODE_LINK: ${{ env.F1_NODE_LINK }}          # ← 通过 env 传，不内插
+          NODE_LINK: ${{ env.F1_NODE_LINK }}
         run: |
           chmod +x scripts/setup_proxy.sh
           if ! bash scripts/setup_proxy.sh; then
