@@ -60,7 +60,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: pojie/requirements.txt
+          cache-dependency-path: 52pojie/requirements.txt
 
       - name: 安装 Chrome 浏览器
         id: setup-chrome
