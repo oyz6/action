@@ -114,13 +114,15 @@ jobs:
         run: |
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u 52pojie/main.py
 
-      # 安全策略：严禁上传 Cookie 产物；仅在失败且开启调试时保存排查截图
-#      - name: 上传异常排查截图
-#        if: failure() && github.event.inputs.debug == 'true'
+      # 安全策略：仅上传脱敏的 WAF 图形诊断，不上传 Cookie、请求头或账号截图
+#      - name: 上传 WAF 图形诊断
+#        if: always() && github.event.inputs.debug == 'true'
 #        uses: actions/upload-artifact@v4
 #        with:
-#          name: screenshots-${{ github.run_number }}
-#          path: /tmp/screenshots/*.png
+#          name: waf-diagnostics-${{ github.run_number }}
+#          path: |
+#            /tmp/screenshots/waf_*.png
+#            /tmp/screenshots/waf_*.json
 #          retention-days: 1
 #          if-no-files-found: ignore
 
