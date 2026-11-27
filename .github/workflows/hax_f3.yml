@@ -15,11 +15,13 @@ env:
   TG_STRING_SESSION:  ${{ secrets.F3_TG_STRING_SESSION }}
   TG_BOT_TOKEN:       ${{ secrets.TG_BOT_TOKEN }}
   TG_CHAT_ID:         ${{ secrets.TG_CHAT_ID }}
-  TELEGRAM_API_ID:    ${{ secrets.TELEGRAM_API_ID || '2040' }}
-  TELEGRAM_API_HASH:  ${{ secrets.TELEGRAM_API_HASH || 'b18441a1ff607e10a989891a5462e627' }}
+  TELEGRAM_API_ID:    ${{ secrets.F3_TELEGRAM_API_ID || '2040' }}
+  TELEGRAM_API_HASH:  ${{ secrets.F3_TELEGRAM_API_HASH || 'b18441a1ff607e10a989891a5462e627' }}
   OPENAI_API_KEY:     ${{ secrets.HAX_OPENAI_API_KEY }}
   OPENAI_BASE_URL:    ${{ secrets.HAX_OPENAI_BASE_URL }}
   OPENAI_MODEL:       ${{ secrets.HAX_OPENAI_MODEL }}
+  REPO_TOKEN:         ${{ secrets.REPO_TOKEN }}
+  HAX_COOKIE:         ${{ secrets.F3_HAX_COOKIE }}
 
 jobs:
   renew-f3:
@@ -38,7 +40,7 @@ jobs:
       - name: 检出主仓库（用于更新 cron）
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.REPO_TOKEN }}
           path: main-repo
           persist-credentials: true
 
@@ -99,7 +101,9 @@ jobs:
             cat proxy.env >> $GITHUB_ENV
           fi
 
-      - name: 启动虚拟显示屏并运行续期脚本
+      - name: 执行续期（第 1 次）
+        id: attempt1
+        continue-on-error: true
         if: steps.check_acc.outputs.has_acc == 'true'
         env:
           ACCOUNT_NAME: "F3"
@@ -110,11 +114,47 @@ jobs:
           TELEGRAM_API_HASH: ${{ env.TELEGRAM_API_HASH }}
           TG_BOT_TOKEN: ${{ env.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ env.TG_CHAT_ID }}
-          IS_PROXY: ${{ env.IS_PROXY }}
-          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          REPO_TOKEN: ${{ env.REPO_TOKEN }}
+          HAX_COOKIE: ${{ env.HAX_COOKIE }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
+          IS_PROXY: ${{ env.IS_PROXY }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+                  run: |
+          set -o pipefail
+          xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Hax/hax_renw.py 2>&1 | tee output.log
+
+      - name: 备份第一次截图并等待
+        if: steps.check_acc.outputs.has_acc == 'true' && steps.attempt1.outcome == 'failure'
+        run: |
+          if [ -d screenshots ]; then
+            mkdir -p screenshots-attempt1
+            find screenshots -maxdepth 1 -type f -name "*.png" -exec cp {} screenshots-attempt1/ \;
+            rm -f screenshots/*.png
+            echo "已备份第一次截图"
+          fi
+          echo "等待 30 秒后重试..."
+          sleep 30
+
+      - name: 执行续期（第 2 次）
+        if: steps.check_acc.outputs.has_acc == 'true' && steps.attempt1.outcome == 'failure'
+        env:
+          ACCOUNT_NAME: "F3"
+          ACCOUNT_INDEX: "3"
+          TELEGRAM_PHONE: ${{ env.TELEGRAM_PHONE }}
+          TG_STRING_SESSION: ${{ env.TG_STRING_SESSION }}
+          TELEGRAM_API_ID: ${{ env.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ env.TELEGRAM_API_HASH }}
+          TG_BOT_TOKEN: ${{ env.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ env.TG_CHAT_ID }}
+          REPO_TOKEN: ${{ env.REPO_TOKEN }}
+          HAX_COOKIE: ${{ env.HAX_COOKIE }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
+          IS_PROXY: ${{ env.IS_PROXY }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
         run: |
           set -o pipefail
           xvfb-run -a --server-args="-screen 0 1280x720x24" python -u scripts/Hax/hax_renw.py 2>&1 | tee output.log
@@ -123,8 +163,10 @@ jobs:
 #        if: always() && steps.check_acc.outputs.has_acc == 'true'
 #        uses: actions/upload-artifact@v4
 #        with:
-#          name: hax-screenshots-f3
-#          path: screenshots/
+#          name: hax-screenshots-f2
+#          path: |
+#            screenshots-attempt1/
+#            screenshots/
 #          if-no-files-found: ignore
 #          retention-days: 7
 
