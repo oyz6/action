@@ -33,7 +33,7 @@ env:
 
   # 变量配置
   POJIE:        ${{ secrets.POJIE }}         # 格式: 用户名-----密码 (支持带Cookie自动回写)
-  NODE_LINK:    ${{ secrets.NODE_LINK }}     # 节点代理
+  NODE_LINK:    ${{ secrets.PROXY_NODE }}     # 节点代理
   TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}  # TG 通知
   TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
   REPO_TOKEN:   ${{ secrets.REPO_TOKEN || secrets.GITHUB_TOKEN }}
